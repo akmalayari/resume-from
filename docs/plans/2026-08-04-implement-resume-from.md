@@ -142,11 +142,11 @@
 - [x] run this module's full test set — all green before the task is complete
 
 ### Task 14 [Wave 0]: Implement src/host/cli/ (leaf)
-- [ ] read `src/host/cli/module.md` in full — it is the complete and only spec for this task
-- [ ] write the tests named in its Test Specification (T-CLI-*): Unit Tests and Boundary Tests (TDD — failing first is expected)
-- [ ] write the tests named in its Test Specification (T-CLI-*): Integration Contract Tests and Behavior Tests
-- [ ] implement the module per its Functional Responsibilities, Public Contract, and Constraints and Invariants, inside `src/host/cli/`, until all its tests pass
-- [ ] run this module's full test set — all green before the task is complete
+- [x] read `src/host/cli/module.md` in full — it is the complete and only spec for this task
+- [x] write the tests named in its Test Specification (T-CLI-*): Unit Tests and Boundary Tests (TDD — failing first is expected)
+- [x] write the tests named in its Test Specification (T-CLI-*): Integration Contract Tests and Behavior Tests
+- [x] implement the module per its Functional Responsibilities, Public Contract, and Constraints and Invariants, inside `src/host/cli/`, until all its tests pass
+- [x] run this module's full test set — all green before the task is complete
 
 ### Task 15 [Wave 0]: Implement src/host/pi-extension/ (leaf)
 - [ ] read `src/host/pi-extension/module.md` in full — it is the complete and only spec for this task

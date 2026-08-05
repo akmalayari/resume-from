@@ -70,8 +70,13 @@ describe("T-CLI-2 a row shows every field FR-11 requires", () => {
 
 describe("T-CLI-3 rows are numbered from 1, newest first", () => {
   it("numbers ten rows 1 to 10 in the order the pipeline returned them", async () => {
+    // The timestamps rise down the list, so any ordering of its own would move a
+    // row: the pipeline ordered these, and the printed order is the one returned.
     const rows = Array.from({ length: 10 }, (_, index) =>
-      descriptor({ title: `Session ${index + 1}`, updatedAt: `2026-08-0${1}T0${1}:00:00Z` }),
+      descriptor({
+        title: `Session ${index + 1}`,
+        updatedAt: new Date(Date.UTC(2026, 7, 1, index)).toISOString(),
+      }),
     );
     const { pipeline } = stubPipeline({ listing: listing({ rows }) });
 
