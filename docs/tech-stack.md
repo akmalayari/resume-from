@@ -90,6 +90,24 @@ orchestrator's to run, at the end.
 
 Tests live beside the code they test, inside the module's folder, named `*.test.ts`.
 
+**How live tests are gated.** A test a `module.md` marks **live** needs an installed agent and a
+throwaway home. Write it in full, then gate it so it does not run by default:
+
+```ts
+const live = process.env.RESUME_FROM_LIVE === "1";
+describe.skipIf(!live)("live: Pi resume", () => { /* ... */ });
+```
+
+Gated is not skipped: the test exists, is type-checked, and runs under
+`RESUME_FROM_LIVE=1 pnpm vitest run src/<module-path>`. Default-off exists because parallel tasks
+must never touch an agent home concurrently, and because C-3 states a bad write can damage the user's
+real sessions.
+
+**A live test builds its own throwaway home and never touches a real one.** Create a temporary
+directory, point the agent at it (`CLAUDE_CONFIG_DIR` for Claude Code, the equivalent home argument
+for Pi and Codex), and remove it afterwards. A live test that reads or writes `~/.claude`, `~/.codex`
+or the user's Pi home is a defect, not a stronger test.
+
 ## Boundary enforcement
 
 Several tests are static checks of the import graph rather than behaviour: T-PLA-1, T-PLA-2, T-PLA-7,
