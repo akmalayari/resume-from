@@ -68,13 +68,13 @@ describe("T-COD-1 capabilities", () => {
   });
 
   it("stays absolute even when CODEX_HOME is relative (FR-2)", () => {
-    const previous = process.env["CODEX_HOME"];
-    process.env["CODEX_HOME"] = "./codex-home";
+    const previous = process.env.CODEX_HOME;
+    process.env.CODEX_HOME = "./codex-home";
     try {
       expect(adapter.capabilities().defaultHome.startsWith("/")).toBe(true);
     } finally {
-      if (previous === undefined) delete process.env["CODEX_HOME"];
-      else process.env["CODEX_HOME"] = previous;
+      if (previous === undefined) delete process.env.CODEX_HOME;
+      else process.env.CODEX_HOME = previous;
     }
   });
 });
@@ -86,8 +86,8 @@ describe("T-COD-4 event_msg entries", () => {
     const messages = entries.filter(
       (entry) =>
         entry.type === CODEX_ENTRY_EVENT_MSG &&
-        (entry.payload["type"] === CODEX_EVENT_USER_MESSAGE ||
-          entry.payload["type"] === CODEX_EVENT_AGENT_MESSAGE),
+        (entry.payload.type === CODEX_EVENT_USER_MESSAGE ||
+          entry.payload.type === CODEX_EVENT_AGENT_MESSAGE),
     );
     // One per turn, plus the provenance marker entry.
     expect(messages).toHaveLength(REFERENCE_SESSION.turns.length + 1);
@@ -102,9 +102,9 @@ describe("T-COD-4 event_msg entries", () => {
       const entry = turnEntries[index];
       if (entry === undefined) throw new Error(`no entry for turn ${index}`);
       const expected = turn.role === "user" ? CODEX_EVENT_USER_MESSAGE : CODEX_EVENT_AGENT_MESSAGE;
-      expect(entry.payload["type"]).toBe(expected);
+      expect(entry.payload.type).toBe(expected);
       const text = turn.kind === "tool-call" ? (turn.toolCall?.outcomeLine ?? "") : turn.text;
-      expect(entry.payload["message"]).toBe(text);
+      expect(entry.payload.message).toBe(text);
     }
   });
 
@@ -112,8 +112,8 @@ describe("T-COD-4 event_msg entries", () => {
     const { entries } = serializeReference();
     const first = entries.filter((entry) => entry.type === CODEX_ENTRY_EVENT_MSG)[0];
     if (first === undefined) throw new Error("no event entry");
-    expect(first.payload["type"]).toBe(CODEX_EVENT_AGENT_MESSAGE);
-    for (const line of MARKER.lines) expect(String(first.payload["message"])).toContain(line);
+    expect(first.payload.type).toBe(CODEX_EVENT_AGENT_MESSAGE);
+    for (const line of MARKER.lines) expect(String(first.payload.message)).toContain(line);
   });
 });
 
@@ -124,25 +124,25 @@ describe("T-COD-5 picker metadata", () => {
     const meta = entries[0];
     if (meta === undefined) throw new Error("empty rollout");
     expect(meta.type).toBe(CODEX_ENTRY_SESSION_META);
-    expect(meta.payload["id"]).toBe(sessionId);
-    expect(meta.payload["session_id"]).toBe(sessionId);
-    expect(String(meta.payload["cwd"]).startsWith("/")).toBe(true);
-    expect(meta.payload["originator"]).toBeTruthy();
-    expect(meta.payload["cli_version"]).toBeTruthy();
-    expect(Number.isNaN(Date.parse(String(meta.payload["timestamp"])))).toBe(false);
+    expect(meta.payload.id).toBe(sessionId);
+    expect(meta.payload.session_id).toBe(sessionId);
+    expect(String(meta.payload.cwd).startsWith("/")).toBe(true);
+    expect(meta.payload.originator).toBeTruthy();
+    expect(meta.payload.cli_version).toBeTruthy();
+    expect(Number.isNaN(Date.parse(String(meta.payload.timestamp)))).toBe(false);
   });
 
   it("takes the preview from the first imported message", () => {
     const { entries } = serializeReference();
     const firstUser = entries.find(
       (entry) =>
-        entry.type === CODEX_ENTRY_EVENT_MSG && entry.payload["type"] === CODEX_EVENT_USER_MESSAGE,
+        entry.type === CODEX_ENTRY_EVENT_MSG && entry.payload.type === CODEX_EVENT_USER_MESSAGE,
     );
     if (firstUser === undefined)
       throw new Error("no user_message entry — the picker would hide it");
     const firstUserTurn = REFERENCE_SESSION.turns.find((turn) => turn.role === "user");
-    expect(firstUser.payload["message"]).toBe(firstUserTurn?.text);
-    expect(String(firstUser.payload["message"]).length).toBeGreaterThan(0);
+    expect(firstUser.payload.message).toBe(firstUserTurn?.text);
+    expect(String(firstUser.payload.message).length).toBeGreaterThan(0);
   });
 
   it("writes the file under the target home's sessions directory", () => {
@@ -165,8 +165,8 @@ describe("T-COD-6 no response_item entries", () => {
   it("carries no reasoning entry of any kind (C-4, NG-8)", () => {
     const { entries } = serializeReference();
     for (const entry of entries) {
-      expect(entry.payload["type"]).not.toBe("reasoning");
-      expect(entry.payload["type"]).not.toBe("agent_reasoning");
+      expect(entry.payload.type).not.toBe("reasoning");
+      expect(entry.payload.type).not.toBe("agent_reasoning");
       expect(entry.payload).not.toHaveProperty("encrypted_content");
     }
     const serialized = adapter.serialize(REFERENCE_SESSION, TARGET, MARKER);

@@ -2,10 +2,57 @@
 // Declarations only: no behaviour, no defaults. If this file and module.md disagree,
 // the document wins and this file is corrected.
 
-import type { AgentRuntime, HandoverInstruction, HomeFailure, ImportPipeline, ImportRequest, LandingResult, ListRequest, Listing, PreviewReport, PreviewWarning, SelectionError, SelectionInput, WarningKind } from "../../import/contract.js";
-export type { AgentRuntime, HandoverInstruction, HomeFailure, ImportPipeline, ImportRequest, LandingResult, ListRequest, Listing, PreviewReport, PreviewWarning, SelectionError, SelectionInput, WarningKind };
-import type { AgentId, HomePath, ProvenanceMarker, SessionDescriptor, SessionId, SessionRef, TargetProfile } from "../../session/contract.js";
-export type { AgentId, HomePath, ProvenanceMarker, SessionDescriptor, SessionId, SessionRef, TargetProfile };
+import type {
+  AgentRuntime,
+  HandoverInstruction,
+  HomeFailure,
+  ImportPipeline,
+  ImportRequest,
+  LandingResult,
+  Listing,
+  ListRequest,
+  PreviewReport,
+  PreviewWarning,
+  SelectionError,
+  SelectionInput,
+  WarningKind,
+} from "../../import/contract.js";
+
+export type {
+  AgentRuntime,
+  HandoverInstruction,
+  HomeFailure,
+  ImportPipeline,
+  ImportRequest,
+  LandingResult,
+  Listing,
+  ListRequest,
+  PreviewReport,
+  PreviewWarning,
+  SelectionError,
+  SelectionInput,
+  WarningKind,
+};
+
+import type {
+  AgentId,
+  HomePath,
+  ProvenanceMarker,
+  SessionDescriptor,
+  SessionId,
+  SessionRef,
+  TargetProfile,
+} from "../../session/contract.js";
+
+export type {
+  AgentId,
+  HomePath,
+  ProvenanceMarker,
+  SessionDescriptor,
+  SessionId,
+  SessionRef,
+  TargetProfile,
+};
 
 /** One invocation of the command binary (FR-10). */
 export interface CliInvocation {

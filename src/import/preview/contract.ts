@@ -2,12 +2,51 @@
 // Declarations only: no behaviour, no defaults. If this file and module.md disagree,
 // the document wins and this file is corrected.
 
-import type { DropReason, PinReason, TransferPlan, TurnDrop, TurnPin } from "../transfer/contract.js";
+import type {
+  DropReason,
+  PinReason,
+  TransferPlan,
+  TurnDrop,
+  TurnPin,
+} from "../transfer/contract.js";
+
 export type { DropReason, PinReason, TransferPlan, TurnDrop, TurnPin };
+
 import type { CommitDistance, RepoIdentity, RepoReader } from "../../platform/repo/contract.js";
+
 export type { CommitDistance, RepoIdentity, RepoReader };
-import type { AgentId, CanonicalSession, CanonicalTurn, HomePath, RepoSnapshot, SessionId, SessionRef, SourceProvenance, TargetProfile, ToolCallRecord, ToolEffect, TurnKind, TurnRole } from "../../session/contract.js";
-export type { AgentId, CanonicalSession, CanonicalTurn, HomePath, RepoSnapshot, SessionId, SessionRef, SourceProvenance, TargetProfile, ToolCallRecord, ToolEffect, TurnKind, TurnRole };
+
+import type {
+  AgentId,
+  CanonicalSession,
+  CanonicalTurn,
+  HomePath,
+  RepoSnapshot,
+  SessionId,
+  SessionRef,
+  SourceProvenance,
+  TargetProfile,
+  ToolCallRecord,
+  ToolEffect,
+  TurnKind,
+  TurnRole,
+} from "../../session/contract.js";
+
+export type {
+  AgentId,
+  CanonicalSession,
+  CanonicalTurn,
+  HomePath,
+  RepoSnapshot,
+  SessionId,
+  SessionRef,
+  SourceProvenance,
+  TargetProfile,
+  ToolCallRecord,
+  ToolEffect,
+  TurnKind,
+  TurnRole,
+};
 
 /** What a warning is about. Repository warnings sort first (FR-19). */
 export type WarningKind = "repo-state" | "budget" | "broken-tail" | "capability";

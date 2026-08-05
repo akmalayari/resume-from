@@ -2,24 +2,152 @@
 // Declarations only: no behaviour, no defaults. If this file and module.md disagree,
 // the document wins and this file is corrected.
 
-import type { AdapterRole, AgentAdapter, AgentCapabilities, LandingLevel, ProvenanceSupport, SelectionLevel, SerializedSession, StoredSessionFacts, SwitchOutcome, ValidationDefect } from "../adapters/contract.js";
-export type { AdapterRole, AgentAdapter, AgentCapabilities, LandingLevel, ProvenanceSupport, SelectionLevel, SerializedSession, StoredSessionFacts, SwitchOutcome, ValidationDefect };
+import type {
+  AdapterRole,
+  AgentAdapter,
+  AgentCapabilities,
+  LandingLevel,
+  ProvenanceSupport,
+  SelectionLevel,
+  SerializedSession,
+  StoredSessionFacts,
+  SwitchOutcome,
+  ValidationDefect,
+} from "../adapters/contract.js";
+
+export type {
+  AdapterRole,
+  AgentAdapter,
+  AgentCapabilities,
+  LandingLevel,
+  ProvenanceSupport,
+  SelectionLevel,
+  SerializedSession,
+  StoredSessionFacts,
+  SwitchOutcome,
+  ValidationDefect,
+};
+
 import type { CliExit, CliInvocation, CliOutcome, CliRunner } from "./cli/contract.js";
+
 export type { CliExit, CliInvocation, CliOutcome, CliRunner };
-import type { PiCommandContext, PiResumeFromCommand, PiSwitchContext, PiSwitchOptions, PiSwitchResult } from "./pi-extension/contract.js";
-export type { PiCommandContext, PiResumeFromCommand, PiSwitchContext, PiSwitchOptions, PiSwitchResult };
-import type { AgentRuntime, HandoverInstruction, HomeFailure, ImportPipeline, ImportRequest, LandingResult, ListRequest, Listing, PreviewReport, PreviewWarning, SelectionError, SelectionInput, WarningKind } from "../import/contract.js";
-export type { AgentRuntime, HandoverInstruction, HomeFailure, ImportPipeline, ImportRequest, LandingResult, ListRequest, Listing, PreviewReport, PreviewWarning, SelectionError, SelectionInput, WarningKind };
-import type { ConfigError, ConfigLoader, HomeEntry, ImportConfig, WindowOverride } from "../platform/config/contract.js";
+
+import type {
+  PiCommandContext,
+  PiResumeFromCommand,
+  PiSwitchContext,
+  PiSwitchOptions,
+  PiSwitchResult,
+} from "./pi-extension/contract.js";
+
+export type {
+  PiCommandContext,
+  PiResumeFromCommand,
+  PiSwitchContext,
+  PiSwitchOptions,
+  PiSwitchResult,
+};
+
+import type {
+  AgentRuntime,
+  HandoverInstruction,
+  HomeFailure,
+  ImportPipeline,
+  ImportRequest,
+  LandingResult,
+  Listing,
+  ListRequest,
+  PreviewReport,
+  PreviewWarning,
+  SelectionError,
+  SelectionInput,
+  WarningKind,
+} from "../import/contract.js";
+
+export type {
+  AgentRuntime,
+  HandoverInstruction,
+  HomeFailure,
+  ImportPipeline,
+  ImportRequest,
+  LandingResult,
+  Listing,
+  ListRequest,
+  PreviewReport,
+  PreviewWarning,
+  SelectionError,
+  SelectionInput,
+  WarningKind,
+};
+
+import type {
+  ConfigError,
+  ConfigLoader,
+  HomeEntry,
+  ImportConfig,
+  WindowOverride,
+} from "../platform/config/contract.js";
+
 export type { ConfigError, ConfigLoader, HomeEntry, ImportConfig, WindowOverride };
+
 import type { CommitDistance, RepoIdentity, RepoReader } from "../platform/repo/contract.js";
+
 export type { CommitDistance, RepoIdentity, RepoReader };
-import type { Bytes, CommitError, CommitHandle, CommitRefusal, FileCommitter, PendingFile } from "../platform/store/contract.js";
+
+import type {
+  Bytes,
+  CommitError,
+  CommitHandle,
+  CommitRefusal,
+  FileCommitter,
+  PendingFile,
+} from "../platform/store/contract.js";
+
 export type { Bytes, CommitError, CommitHandle, CommitRefusal, FileCommitter, PendingFile };
-import type { EstimatorFactory, EstimatorFamily, TokenEstimator } from "../platform/tokens/contract.js";
+
+import type {
+  EstimatorFactory,
+  EstimatorFamily,
+  TokenEstimator,
+} from "../platform/tokens/contract.js";
+
 export type { EstimatorFactory, EstimatorFamily, TokenEstimator };
-import type { AgentId, CanonicalSession, CanonicalTurn, HomePath, ProvenanceMarker, RepoSnapshot, SessionDescriptor, SessionId, SessionRef, SourceProvenance, TargetProfile, ToolCallRecord, ToolEffect, TurnKind, TurnRole } from "../session/contract.js";
-export type { AgentId, CanonicalSession, CanonicalTurn, HomePath, ProvenanceMarker, RepoSnapshot, SessionDescriptor, SessionId, SessionRef, SourceProvenance, TargetProfile, ToolCallRecord, ToolEffect, TurnKind, TurnRole };
+
+import type {
+  AgentId,
+  CanonicalSession,
+  CanonicalTurn,
+  HomePath,
+  ProvenanceMarker,
+  RepoSnapshot,
+  SessionDescriptor,
+  SessionId,
+  SessionRef,
+  SourceProvenance,
+  TargetProfile,
+  ToolCallRecord,
+  ToolEffect,
+  TurnKind,
+  TurnRole,
+} from "../session/contract.js";
+
+export type {
+  AgentId,
+  CanonicalSession,
+  CanonicalTurn,
+  HomePath,
+  ProvenanceMarker,
+  RepoSnapshot,
+  SessionDescriptor,
+  SessionId,
+  SessionRef,
+  SourceProvenance,
+  TargetProfile,
+  ToolCallRecord,
+  ToolEffect,
+  TurnKind,
+  TurnRole,
+};
 
 /** The agent list. Adding an agent adds one line here (FR-57). */
 export interface AgentRegistry {

@@ -2,14 +2,63 @@
 // Declarations only: no behaviour, no defaults. If this file and module.md disagree,
 // the document wins and this file is corrected.
 
-import type { AdapterRole, AgentAdapter, AgentCapabilities, LandingLevel, ProvenanceSupport, SelectionLevel } from "../../adapters/contract.js";
-export type { AdapterRole, AgentAdapter, AgentCapabilities, LandingLevel, ProvenanceSupport, SelectionLevel };
+import type {
+  AdapterRole,
+  AgentAdapter,
+  AgentCapabilities,
+  LandingLevel,
+  ProvenanceSupport,
+  SelectionLevel,
+} from "../../adapters/contract.js";
+
+export type {
+  AdapterRole,
+  AgentAdapter,
+  AgentCapabilities,
+  LandingLevel,
+  ProvenanceSupport,
+  SelectionLevel,
+};
+
 import type { HomeEntry, ImportConfig } from "../../platform/config/contract.js";
+
 export type { HomeEntry, ImportConfig };
+
 import type { RepoIdentity, RepoReader } from "../../platform/repo/contract.js";
+
 export type { RepoIdentity, RepoReader };
-import type { AgentId, CanonicalSession, CanonicalTurn, HomePath, RepoSnapshot, SessionDescriptor, SessionId, SessionRef, SourceProvenance, ToolCallRecord, ToolEffect, TurnKind, TurnRole } from "../../session/contract.js";
-export type { AgentId, CanonicalSession, CanonicalTurn, HomePath, RepoSnapshot, SessionDescriptor, SessionId, SessionRef, SourceProvenance, ToolCallRecord, ToolEffect, TurnKind, TurnRole };
+
+import type {
+  AgentId,
+  CanonicalSession,
+  CanonicalTurn,
+  HomePath,
+  RepoSnapshot,
+  SessionDescriptor,
+  SessionId,
+  SessionRef,
+  SourceProvenance,
+  ToolCallRecord,
+  ToolEffect,
+  TurnKind,
+  TurnRole,
+} from "../../session/contract.js";
+
+export type {
+  AgentId,
+  CanonicalSession,
+  CanonicalTurn,
+  HomePath,
+  RepoSnapshot,
+  SessionDescriptor,
+  SessionId,
+  SessionRef,
+  SourceProvenance,
+  ToolCallRecord,
+  ToolEffect,
+  TurnKind,
+  TurnRole,
+};
 
 /** How the user named the session to import (FR-12). */
 export type SelectionInput =

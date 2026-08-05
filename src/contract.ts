@@ -2,8 +2,35 @@
 // Declarations only: no behaviour, no defaults. If this file and module.md disagree,
 // the document wins and this file is corrected.
 
-import type { AgentId, AgentRuntime, HandoverInstruction, HomePath, HostWiring, ImportPipeline, ImportRequest, LandingResult, SelectionInput, SessionId, SessionRef, TargetProfile } from "./host/contract.js";
-export type { AgentId, AgentRuntime, HandoverInstruction, HomePath, HostWiring, ImportPipeline, ImportRequest, LandingResult, SelectionInput, SessionId, SessionRef, TargetProfile };
+import type {
+  AgentId,
+  AgentRuntime,
+  HandoverInstruction,
+  HomePath,
+  HostWiring,
+  ImportPipeline,
+  ImportRequest,
+  LandingResult,
+  SelectionInput,
+  SessionId,
+  SessionRef,
+  TargetProfile,
+} from "./host/contract.js";
+
+export type {
+  AgentId,
+  AgentRuntime,
+  HandoverInstruction,
+  HomePath,
+  HostWiring,
+  ImportPipeline,
+  ImportRequest,
+  LandingResult,
+  SelectionInput,
+  SessionId,
+  SessionRef,
+  TargetProfile,
+};
 
 /** The package entry point (FR-57: adding an agent never changes this file). */
 export interface ResumeFrom {

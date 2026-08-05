@@ -3,6 +3,7 @@
 // the document wins and this file is corrected.
 
 import type { AgentId, HomePath } from "../../session/contract.js";
+
 export type { AgentId, HomePath };
 
 /** One extra home the user added to the search list (FR-5). */

@@ -3,9 +3,44 @@
 // the document wins and this file is corrected.
 
 import type { Bytes, PendingFile } from "../platform/store/contract.js";
+
 export type { Bytes, PendingFile };
-import type { AgentId, CanonicalSession, CanonicalTurn, HomePath, ProvenanceMarker, RepoSnapshot, SessionDescriptor, SessionId, SessionRef, SourceProvenance, TargetProfile, ToolCallRecord, ToolEffect, TurnKind, TurnRole } from "../session/contract.js";
-export type { AgentId, CanonicalSession, CanonicalTurn, HomePath, ProvenanceMarker, RepoSnapshot, SessionDescriptor, SessionId, SessionRef, SourceProvenance, TargetProfile, ToolCallRecord, ToolEffect, TurnKind, TurnRole };
+
+import type {
+  AgentId,
+  CanonicalSession,
+  CanonicalTurn,
+  HomePath,
+  ProvenanceMarker,
+  RepoSnapshot,
+  SessionDescriptor,
+  SessionId,
+  SessionRef,
+  SourceProvenance,
+  TargetProfile,
+  ToolCallRecord,
+  ToolEffect,
+  TurnKind,
+  TurnRole,
+} from "../session/contract.js";
+
+export type {
+  AgentId,
+  CanonicalSession,
+  CanonicalTurn,
+  HomePath,
+  ProvenanceMarker,
+  RepoSnapshot,
+  SessionDescriptor,
+  SessionId,
+  SessionRef,
+  SourceProvenance,
+  TargetProfile,
+  ToolCallRecord,
+  ToolEffect,
+  TurnKind,
+  TurnRole,
+};
 
 /** How the agent lets the user choose a source session (FR-9, FR-10, FR-58). */
 export type SelectionLevel = "interactive-picker" | "numbered-list";

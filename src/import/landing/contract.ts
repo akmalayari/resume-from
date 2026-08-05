@@ -2,14 +2,88 @@
 // Declarations only: no behaviour, no defaults. If this file and module.md disagree,
 // the document wins and this file is corrected.
 
-import type { AdapterRole, AgentAdapter, AgentCapabilities, AgentRuntime, LandingLevel, ProvenanceSupport, SelectionLevel, SerializedSession, StoredSessionFacts, SwitchOutcome, ValidationDefect } from "../../adapters/contract.js";
-export type { AdapterRole, AgentAdapter, AgentCapabilities, AgentRuntime, LandingLevel, ProvenanceSupport, SelectionLevel, SerializedSession, StoredSessionFacts, SwitchOutcome, ValidationDefect };
-import type { DropReason, PinReason, TransferPlan, TurnDrop, TurnPin } from "../transfer/contract.js";
+import type {
+  AdapterRole,
+  AgentAdapter,
+  AgentCapabilities,
+  AgentRuntime,
+  LandingLevel,
+  ProvenanceSupport,
+  SelectionLevel,
+  SerializedSession,
+  StoredSessionFacts,
+  SwitchOutcome,
+  ValidationDefect,
+} from "../../adapters/contract.js";
+
+export type {
+  AdapterRole,
+  AgentAdapter,
+  AgentCapabilities,
+  AgentRuntime,
+  LandingLevel,
+  ProvenanceSupport,
+  SelectionLevel,
+  SerializedSession,
+  StoredSessionFacts,
+  SwitchOutcome,
+  ValidationDefect,
+};
+
+import type {
+  DropReason,
+  PinReason,
+  TransferPlan,
+  TurnDrop,
+  TurnPin,
+} from "../transfer/contract.js";
+
 export type { DropReason, PinReason, TransferPlan, TurnDrop, TurnPin };
-import type { Bytes, CommitError, CommitHandle, CommitRefusal, FileCommitter, PendingFile } from "../../platform/store/contract.js";
+
+import type {
+  Bytes,
+  CommitError,
+  CommitHandle,
+  CommitRefusal,
+  FileCommitter,
+  PendingFile,
+} from "../../platform/store/contract.js";
+
 export type { Bytes, CommitError, CommitHandle, CommitRefusal, FileCommitter, PendingFile };
-import type { AgentId, CanonicalSession, CanonicalTurn, HomePath, ProvenanceMarker, RepoSnapshot, SessionId, SessionRef, SourceProvenance, TargetProfile, ToolCallRecord, ToolEffect, TurnKind, TurnRole } from "../../session/contract.js";
-export type { AgentId, CanonicalSession, CanonicalTurn, HomePath, ProvenanceMarker, RepoSnapshot, SessionId, SessionRef, SourceProvenance, TargetProfile, ToolCallRecord, ToolEffect, TurnKind, TurnRole };
+
+import type {
+  AgentId,
+  CanonicalSession,
+  CanonicalTurn,
+  HomePath,
+  ProvenanceMarker,
+  RepoSnapshot,
+  SessionId,
+  SessionRef,
+  SourceProvenance,
+  TargetProfile,
+  ToolCallRecord,
+  ToolEffect,
+  TurnKind,
+  TurnRole,
+} from "../../session/contract.js";
+
+export type {
+  AgentId,
+  CanonicalSession,
+  CanonicalTurn,
+  HomePath,
+  ProvenanceMarker,
+  RepoSnapshot,
+  SessionId,
+  SessionRef,
+  SourceProvenance,
+  TargetProfile,
+  ToolCallRecord,
+  ToolEffect,
+  TurnKind,
+  TurnRole,
+};
 
 /** What the user must do next when the adapter cannot switch (FR-45). */
 export interface HandoverInstruction {

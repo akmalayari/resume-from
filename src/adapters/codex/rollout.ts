@@ -100,11 +100,11 @@ export function parseEntry(line: string): RolloutEntry | null {
   }
   if (typeof value !== "object" || value === null) return null;
   const record = value as Record<string, unknown>;
-  if (typeof record["type"] !== "string") return null;
-  const payload = record["payload"];
+  if (typeof record.type !== "string") return null;
+  const payload = record.payload;
   return {
-    timestamp: typeof record["timestamp"] === "string" ? record["timestamp"] : "",
-    type: record["type"],
+    timestamp: typeof record.timestamp === "string" ? record.timestamp : "",
+    type: record.type,
     payload:
       typeof payload === "object" && payload !== null ? (payload as Record<string, unknown>) : {},
   };
@@ -131,7 +131,7 @@ export function stringifyRollout(entries: RolloutEntry[]): string {
 }
 
 export function payloadType(entry: RolloutEntry): string {
-  const type = entry.payload["type"];
+  const type = entry.payload.type;
   return typeof type === "string" ? type : "";
 }
 
@@ -143,22 +143,22 @@ export function isMessageEvent(entry: RolloutEntry): boolean {
 }
 
 export function messageTextOf(entry: RolloutEntry): string {
-  const message = entry.payload["message"];
+  const message = entry.payload.message;
   return typeof message === "string" ? message : "";
 }
 
 export function readSessionMeta(entry: RolloutEntry): CodexSessionMeta | null {
   if (entry.type !== CODEX_ENTRY_SESSION_META) return null;
-  const id = entry.payload["id"] ?? entry.payload["session_id"];
+  const id = entry.payload.id ?? entry.payload.session_id;
   if (typeof id !== "string" || id === "") return null;
-  const git = entry.payload["git"];
+  const git = entry.payload.git;
   const gitRecord = typeof git === "object" && git !== null ? (git as Record<string, unknown>) : {};
   return {
     id,
-    timestamp: stringOrNull(entry.payload["timestamp"]) ?? stringOrNull(entry.timestamp),
-    cwd: stringOrNull(entry.payload["cwd"]),
-    commit: stringOrNull(gitRecord["commit_hash"]),
-    branch: stringOrNull(gitRecord["branch"]),
+    timestamp: stringOrNull(entry.payload.timestamp) ?? stringOrNull(entry.timestamp),
+    cwd: stringOrNull(entry.payload.cwd),
+    commit: stringOrNull(gitRecord.commit_hash),
+    branch: stringOrNull(gitRecord.branch),
   };
 }
 

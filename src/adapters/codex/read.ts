@@ -197,9 +197,9 @@ function toCanonicalTurns(entries: RolloutEntry[]): {
     const type = payloadType(entry);
     if (type !== CODEX_ITEM_FUNCTION_CALL_OUTPUT && type !== CODEX_ITEM_CUSTOM_TOOL_CALL_OUTPUT)
       continue;
-    const callId = entry.payload["call_id"];
+    const callId = entry.payload.call_id;
     if (typeof callId !== "string") continue;
-    outputs.set(callId, outputTextOf(entry.payload["output"]));
+    outputs.set(callId, outputTextOf(entry.payload.output));
   }
 
   const turns: CanonicalTurn[] = [];
@@ -215,7 +215,7 @@ function toCanonicalTurns(entries: RolloutEntry[]): {
 
     if (entry.type === CODEX_ENTRY_EVENT_MSG) {
       if (type !== CODEX_EVENT_USER_MESSAGE && type !== CODEX_EVENT_AGENT_MESSAGE) continue;
-      const message = entry.payload["message"];
+      const message = entry.payload.message;
       if (typeof message !== "string" || message.trim() === "") continue;
       turns.push({
         index: turns.length,
@@ -231,13 +231,12 @@ function toCanonicalTurns(entries: RolloutEntry[]): {
     if (entry.type !== CODEX_ENTRY_RESPONSE_ITEM) continue;
     if (type !== CODEX_ITEM_FUNCTION_CALL && type !== CODEX_ITEM_CUSTOM_TOOL_CALL) continue;
 
-    const toolName =
-      typeof entry.payload["name"] === "string" ? (entry.payload["name"] as string) : "";
+    const toolName = typeof entry.payload.name === "string" ? (entry.payload.name as string) : "";
     if (toolName === "") continue;
     const rawArguments =
-      type === CODEX_ITEM_FUNCTION_CALL ? entry.payload["arguments"] : entry.payload["input"];
+      type === CODEX_ITEM_FUNCTION_CALL ? entry.payload.arguments : entry.payload.input;
     const argumentsText = typeof rawArguments === "string" ? rawArguments : "";
-    const callId = entry.payload["call_id"];
+    const callId = entry.payload.call_id;
     const output = typeof callId === "string" ? (outputs.get(callId) ?? null) : null;
     const toolCall = toolCallRecord(toolName, argumentsText, output);
     if (toolCall.effect === "mutating")
@@ -287,7 +286,7 @@ function outputTextOf(output: unknown): string {
     return output
       .map((part) =>
         typeof part === "object" && part !== null
-          ? String((part as Record<string, unknown>)["text"] ?? "")
+          ? String((part as Record<string, unknown>).text ?? "")
           : "",
       )
       .join("\n");

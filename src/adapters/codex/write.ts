@@ -97,13 +97,13 @@ export function validateCodex(serialized: SerializedSession): ValidationDefect[]
       message: "the first entry must be session metadata, or the picker cannot list the thread",
     });
   } else {
-    if (meta.payload["id"] !== serialized.sessionId) {
+    if (meta.payload.id !== serialized.sessionId) {
       defects.push({
         path: "items/0/payload/id",
         message: "session metadata names a different session",
       });
     }
-    const cwd = meta.payload["cwd"];
+    const cwd = meta.payload.cwd;
     if (typeof cwd !== "string" || !isAbsolute(cwd)) {
       defects.push({
         path: "items/0/payload/cwd",
@@ -118,7 +118,7 @@ export function validateCodex(serialized: SerializedSession): ValidationDefect[]
         });
       }
     }
-    if (Number.isNaN(Date.parse(String(meta.payload["timestamp"])))) {
+    if (Number.isNaN(Date.parse(String(meta.payload.timestamp)))) {
       defects.push({
         path: "items/0/payload/timestamp",
         message: "session metadata needs an ISO timestamp",

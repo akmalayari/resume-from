@@ -3,11 +3,44 @@
 // the document wins and this file is corrected.
 
 import type { ImportConfig } from "../../platform/config/contract.js";
+
 export type { ImportConfig };
+
 import type { TokenEstimator } from "../../platform/tokens/contract.js";
+
 export type { TokenEstimator };
-import type { AgentId, CanonicalSession, CanonicalTurn, HomePath, RepoSnapshot, SessionId, SessionRef, SourceProvenance, TargetProfile, ToolCallRecord, ToolEffect, TurnKind, TurnRole } from "../../session/contract.js";
-export type { AgentId, CanonicalSession, CanonicalTurn, HomePath, RepoSnapshot, SessionId, SessionRef, SourceProvenance, TargetProfile, ToolCallRecord, ToolEffect, TurnKind, TurnRole };
+
+import type {
+  AgentId,
+  CanonicalSession,
+  CanonicalTurn,
+  HomePath,
+  RepoSnapshot,
+  SessionId,
+  SessionRef,
+  SourceProvenance,
+  TargetProfile,
+  ToolCallRecord,
+  ToolEffect,
+  TurnKind,
+  TurnRole,
+} from "../../session/contract.js";
+
+export type {
+  AgentId,
+  CanonicalSession,
+  CanonicalTurn,
+  HomePath,
+  RepoSnapshot,
+  SessionId,
+  SessionRef,
+  SourceProvenance,
+  TargetProfile,
+  ToolCallRecord,
+  ToolEffect,
+  TurnKind,
+  TurnRole,
+};
 
 /** Why a turn did not cross over (FR-31, FR-54). */
 export type DropReason = "budget" | "broken-tail";

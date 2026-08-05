@@ -47,6 +47,8 @@
 
 - ⚠️ **Two agents wrote into `src/platform/tokens/` at once — orchestrator error.** I checked the folder mid-wave, saw only the scaffold-generated `contract.ts` timestamped two hours earlier while every other module was producing files, and concluded the agent had died. It had not; it was measuring tokenizer margins before writing. The retry I spawned added two `module.md` sections describing a different implementation, leaving the document stating two contradictory margins for one estimator. **Resolved**: retry stopped, original agent confirmed as sole writer, its measured margins kept, the retry's sections deleted rather than merged. *Lesson for any future run: file mtime is not liveness. A task that is thinking looks identical to a task that is dead, and the recovery from a wrong death-call is more expensive than waiting.*
 
+- ⚠️ **Three Claude Code live tests cannot pass as written — the safety rule and the verification rule collide.** T-CC-16, T-CC-17 and T-CC-18 verify the per-project layout and native resume by making the installed Claude Code create and open a session. They run it against a throwaway `CLAUDE_CONFIG_DIR`, which C-3 requires — and a fresh config dir has no credentials, so the CLI answers `Not logged in · Please run /login` and exits 1. The two rules cannot both hold: you cannot invoke the model in a home that has never been logged into. **Found only because the live tests were actually run at finalize; gated, they reported green.** Pi and Codex are unaffected (Codex's `thread/start` needs no login, per C-7) and the root acceptance test passes live: a real Codex session lands in Pi. **Awaiting a decision.**
+
 ## Implementation Steps
 
 ### Task 1: Project scaffold and contract type declarations
@@ -140,7 +142,7 @@
 - [x] write the tests named in its Test Specification (T-CC-*): Unit Tests and Boundary Tests (TDD — failing first is expected)
 - [x] write the tests named in its Test Specification (T-CC-*): Integration Contract Tests and Behavior Tests
 - [x] implement the module per its Functional Responsibilities, Public Contract, and Constraints and Invariants, inside `src/adapters/claude-code/`, until all its tests pass
-- [x] run the tests marked **live** against an installed Claude Code and a **throwaway** `CLAUDE_CONFIG_DIR` — never a real store (C-3); if Claude Code is unavailable, mark ⚠️ naming the exact tests not run
+- [ ] ⚠️ run the tests marked **live** against an installed Claude Code and a **throwaway** `CLAUDE_CONFIG_DIR` — **RAN, 3 FAILED.** T-CC-16, T-CC-17 and T-CC-18 need an authenticated CLI, and a throwaway config dir is unauthenticated by construction (`Not logged in · Please run /login`). Blocked on a decision, not on code — see Findings
 - [x] run this module's full test set — all green before the task is complete
 
 ### Task 14 [Wave 0]: Implement src/host/cli/ (leaf)

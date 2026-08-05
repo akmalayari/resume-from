@@ -15,7 +15,7 @@ import type { CanonicalSession, ProvenanceMarker, SerializedSession } from "./co
 import { codexAdapterFactory } from "./index.js";
 import { appServer, makeTempHome } from "./test-support.js";
 
-const live = process.env["RESUME_FROM_LIVE"] === "1";
+const live = process.env.RESUME_FROM_LIVE === "1";
 const adapter = codexAdapterFactory.create();
 
 const FIRST_MESSAGE = "make the auth token refresh work";
@@ -80,9 +80,9 @@ describe.skipIf(!live)("live: Codex", () => {
   let previousCodexHome: string | undefined;
 
   beforeAll(() => {
-    previousCodexHome = process.env["CODEX_HOME"];
+    previousCodexHome = process.env.CODEX_HOME;
     home = makeTempHome("codex-live-home-");
-    process.env["CODEX_HOME"] = home;
+    process.env.CODEX_HOME = home;
     serialized = adapter.serialize(
       SESSION,
       { agent: "codex", home, windowTokens: 258_400 },
@@ -97,8 +97,8 @@ describe.skipIf(!live)("live: Codex", () => {
   });
 
   afterAll(() => {
-    if (previousCodexHome === undefined) delete process.env["CODEX_HOME"];
-    else process.env["CODEX_HOME"] = previousCodexHome;
+    if (previousCodexHome === undefined) delete process.env.CODEX_HOME;
+    else process.env.CODEX_HOME = previousCodexHome;
     if (home !== "") rmSync(home, { recursive: true, force: true });
   });
 
@@ -108,10 +108,10 @@ describe.skipIf(!live)("live: Codex", () => {
     // so the declared default and Codex's own answer must agree.
     expect(adapter.capabilities().defaultHome).toBe(home);
     const answers = await appServer(home, []);
-    expect(answers.get(0)?.["codexHome"]).toBe(home);
+    expect(answers.get(0)?.codexHome).toBe(home);
 
     const list = await appServer(home, [{ id: 1, method: "thread/list", params: {} }]);
-    const threads = (list.get(1)?.["data"] ?? []) as Thread[];
+    const threads = (list.get(1)?.data ?? []) as Thread[];
     expect(threads[0]?.path?.startsWith(`${home}/sessions/`)).toBe(true);
   });
 
@@ -122,7 +122,7 @@ describe.skipIf(!live)("live: Codex", () => {
       { id: 2, method: "thread/resume", params: { threadId: serialized.sessionId } },
     ]);
 
-    const threads = (answers.get(1)?.["data"] ?? []) as Thread[];
+    const threads = (answers.get(1)?.data ?? []) as Thread[];
     const listed = threads.find((thread) => thread.id === serialized.sessionId);
     expect(
       listed,
@@ -130,7 +130,7 @@ describe.skipIf(!live)("live: Codex", () => {
     ).toBeDefined();
     expect(listed?.preview).toBe(FIRST_MESSAGE);
 
-    const resumed = answers.get(2)?.["thread"] as Thread | undefined;
+    const resumed = answers.get(2)?.thread as Thread | undefined;
     expect(resumed).toBeDefined();
     if (resumed === undefined) return;
     const items = itemTexts(resumed);
@@ -154,12 +154,12 @@ describe.skipIf(!live)("live: Codex", () => {
       },
     ]);
 
-    const threads = (answers.get(1)?.["data"] ?? []) as Thread[];
+    const threads = (answers.get(1)?.data ?? []) as Thread[];
     const listed = threads.find((thread) => thread.id === serialized.sessionId);
     expect(listed, "C-7 symptom: the thread is missing from thread/list").toBeDefined();
     expect(listed?.preview ?? "", "C-7 symptom: the preview is empty").not.toBe("");
 
-    const read = answers.get(2)?.["thread"] as Thread | undefined;
+    const read = answers.get(2)?.thread as Thread | undefined;
     expect(read?.turns.length ?? 0, "C-7 symptom: thread/read reports zero turns").toBeGreaterThan(
       0,
     );
@@ -178,7 +178,7 @@ describe.skipIf(!live)("live: Codex", () => {
         params: { threadId: serialized.sessionId, includeTurns: true },
       },
     ]);
-    const read = answers.get(1)?.["thread"] as Thread | undefined;
+    const read = answers.get(1)?.thread as Thread | undefined;
     expect(itemTexts(read ?? { id: "", preview: "", path: null, turns: [] })).toHaveLength(
       serialized.itemCount,
     );
