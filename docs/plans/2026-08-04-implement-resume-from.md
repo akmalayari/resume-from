@@ -126,12 +126,12 @@
 - [x] run this module's full test set — all green before the task is complete
 
 ### Task 12 [Wave 0]: Implement src/adapters/codex/ (leaf)
-- [ ] read `src/adapters/codex/module.md` in full — it is the complete and only spec for this task
-- [ ] write the tests named in its Test Specification (T-COD-*): Unit Tests and Boundary Tests (TDD — failing first is expected)
-- [ ] write the tests named in its Test Specification (T-COD-*): Integration Contract Tests and Behavior Tests
-- [ ] implement the module per its Functional Responsibilities, Public Contract, and Constraints and Invariants, inside `src/adapters/codex/`, until all its tests pass
-- [ ] run the tests marked **live** against an installed codex-cli and a throwaway home — C-6 means a silent write proves nothing, so the read-back tests are the evidence; if Codex is unavailable, mark ⚠️ naming the exact tests not run
-- [ ] run this module's full test set — all green before the task is complete
+- [x] read `src/adapters/codex/module.md` in full — it is the complete and only spec for this task
+- [x] write the tests named in its Test Specification (T-COD-*): Unit Tests and Boundary Tests (TDD — failing first is expected)
+- [x] write the tests named in its Test Specification (T-COD-*): Integration Contract Tests and Behavior Tests
+- [x] implement the module per its Functional Responsibilities, Public Contract, and Constraints and Invariants, inside `src/adapters/codex/`, until all its tests pass
+- [x] run the tests marked **live** against an installed codex-cli and a throwaway home — C-6 means a silent write proves nothing, so the read-back tests are the evidence; if Codex is unavailable, mark ⚠️ naming the exact tests not run
+- [x] run this module's full test set — all green before the task is complete
 
 ### Task 13 [Wave 0]: Implement src/adapters/claude-code/ (leaf)
 - [ ] read `src/adapters/claude-code/module.md` in full — it is the complete and only spec for this task
