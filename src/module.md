@@ -208,6 +208,22 @@ src/                            resume-from — the system
 | `host/` | The agent list and the two entry points. It is the composition root. |
 | `platform/` | Git, tokens, configuration, and the guarded write path. All replaceable. |
 
+### The root's own files
+
+Two, and both are doors rather than machinery:
+
+| File | What it is |
+| ---- | ---------- |
+| `index.ts` | The package entry point. It re-exports `createHost`, the command-binary start and the Pi activation from `src/host/`, and builds nothing itself. |
+| `bin.ts` | The command binary. It reads the two facts only the caller knows — which agent it is running inside, and which home — and hands the rest to the host. |
+
+`bin.ts` is here rather than in `src/host/cli/`, even though that module *is* the command binary,
+because a process entry point must reach the composition root and `src/host/cli/` may not: its own
+boundary rule allows a cross-module import only to a `contract.js` (T-CLI-20), and an import of its
+parent would make the module graph cyclic (T-HOS-17, T-ROO-7). The root is the one module the
+design already lets depend on `src/host/`, so the shebang lives here and the binary's whole
+behaviour stays in `src/host/`. Nothing else moves.
+
 ### Key functional flows
 
 **Flow 1 — list (FR-7 to FR-15).** The host reads configuration, asks every source adapter for the
@@ -293,8 +309,9 @@ those two points knows either name.
 
 Each edge appears once, in the direction of the dependency: a parent-and-submodule pair is listed as
 `child → parent` where the child implements the parent's contract, and as `parent → child` where the
-parent composes the children. The counterpart module's own Integrations section states the same edge
-from its side, with the same computed values.
+parent composes the children. Every edge is documented by at least one of its two modules, and most
+by only one — the side that depends. Where both counterparts document an edge, they state the same
+computed values.
 
 No integration exceeds its threshold. Model coupling is capped at distance 2 everywhere; contract
 coupling tolerates any distance; there is no functional or intrusive coupling across any folder
