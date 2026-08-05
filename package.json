@@ -8,7 +8,7 @@
     "node": ">=22"
   },
   "bin": {
-    "resume-from": "./dist/host/cli/bin.js"
+    "resume-from": "./dist/bin.js"
   },
   "exports": {
     ".": "./dist/index.js",
@@ -18,7 +18,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",

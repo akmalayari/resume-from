@@ -49,6 +49,8 @@
 
 - ⚠️ **Three Claude Code live tests cannot pass as written — the safety rule and the verification rule collide.** T-CC-16, T-CC-17 and T-CC-18 verify the per-project layout and native resume by making the installed Claude Code create and open a session. They run it against a throwaway `CLAUDE_CONFIG_DIR`, which C-3 requires — and a fresh config dir has no credentials, so the CLI answers `Not logged in · Please run /login` and exits 1. The two rules cannot both hold: you cannot invoke the model in a home that has never been logged into. **Found only because the live tests were actually run at finalize; gated, they reported green.** Pi and Codex are unaffected (Codex's `thread/start` needs no login, per C-7) and the root acceptance test passes live: a real Codex session lands in Pi. **Resolved, pending one manual step.** The tests now read `RESUME_FROM_LIVE_CLAUDE_HOME` (default `$HOME/.resume-from-live-home`), use it when it is authenticated, and skip with the exact procedure named when it is not. They never create that home, never log in, and never read a credential — `docs/tech-stack.md` makes that prohibition absolute, because a suite that authenticates itself by reading credentials would do so on every machine that checks out this repository. To close it: `CLAUDE_CONFIG_DIR="$HOME/.resume-from-live-home" claude` once, then `RESUME_FROM_LIVE=1 pnpm vitest run src/adapters/claude-code`. The authenticated path is **unverified**.
 
+- ⚠️ **The build emitted nothing at the paths `package.json` declared, and no agent shim exists.** Two gaps found while writing the README, both in packaging rather than in any module. (1) `tsconfig.json` had `rootDir: "."` and included `test/`, so `tsc` emitted `dist/src/...` while `bin` and `exports` pointed at `dist/host/cli/bin.js` and `dist/index.js` — a build that "succeeded" and shipped nothing runnable, and that also emitted every test file. **Fixed**: a separate `tsconfig.build.json` emits `src/` only, tests and helpers excluded, and the entry points now match what is produced. The binary runs. (2) The three per-agent shims — a Claude Code slash-command file, a Codex prompt file, a Pi extension manifest — were never written by any task. **Not guessed**: each needs a shim format this project has not verified against the installed agent, and the adapter layer's own rule is that facts about an agent are confirmed, never assumed. The README states plainly that they are missing and what each must do. *(Both were mine: the tsconfig from Task 1, and the shims fell between the module tasks and the documentation task.)*
+
 ## Implementation Steps
 
 ### Task 1: Project scaffold and contract type declarations
@@ -203,17 +205,17 @@
 - [x] run this module's full test set — all green before the task is complete
 
 ### Task 21: Verify acceptance criteria
-- [ ] run the full test suite — all modules, all four test categories, must pass
-- [ ] run the validator in tree mode over `src/` — `module.md` edits made during implementation must have left the tree defect-free
-- [ ] re-run the coupling check of T-ROO-6 — every documented integration recomputed from the tree, and the root's coupling table still equal to the union of the 19 Integrations sections
-- [ ] run the linter — all issues fixed
-- [ ] verify every ⚠️ noted during implementation is resolved or explicitly accepted by the user
-- [ ] verify `docs/tech-stack.md` records every decision made during implementation, including the tokenizer and the git access method
+- [x] run the full test suite — all modules, all four test categories, must pass
+- [x] run the validator in tree mode over `src/` — `module.md` edits made during implementation must have left the tree defect-free
+- [x] re-run the coupling check of T-ROO-6 — every documented integration recomputed from the tree, and the root's coupling table still equal to the union of the 19 Integrations sections
+- [x] run the linter — all issues fixed
+- [x] verify every ⚠️ noted during implementation is resolved or explicitly accepted by the user
+- [x] verify `docs/tech-stack.md` records every decision made during implementation, including the tokenizer and the git access method
 
 ### Task 22: [Final] Update documentation
-- [ ] write or update `README.md`: what the tool does, how to install each of the three shims, and how to configure extra homes and the budget
-- [ ] verify each implemented `module.md` still matches what was built (spot check; `/modularity:fractal-align` does this rigorously)
-- [ ] confirm the two open requirement questions are answered or still marked open: Q-1 (budget share, default 0.30) and Q-2 (pinned recent turns, default 5), both of which live in `src/platform/config/`
+- [x] write or update `README.md`: what the tool does, how to install each of the three shims, and how to configure extra homes and the budget
+- [x] verify each implemented `module.md` still matches what was built (spot check; `/modularity:fractal-align` does this rigorously)
+- [x] confirm the two open requirement questions are answered or still marked open: Q-1 (budget share, default 0.30) and Q-2 (pinned recent turns, default 5), both of which live in `src/platform/config/`
 
 ## Post-Completion
 *No checkboxes — informational.*
