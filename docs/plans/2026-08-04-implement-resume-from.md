@@ -184,12 +184,12 @@
 - [x] run this module's full test set — all green before the task is complete
 
 ### Task 19 [Wave 1]: Implement src/host/ (composes cli, pi-extension)
-- [ ] confirm every submodule task is complete: `cli/`, `pi-extension/`
-- [ ] read `src/host/module.md` in full — it is the complete and only spec for this task
-- [ ] write the tests named in its Test Specification (T-HOS-*): Unit Tests and Boundary Tests (TDD — failing first is expected)
-- [ ] write the tests named in its Test Specification (T-HOS-*): Integration Contract Tests and Behavior Tests
-- [ ] implement the module's own code and wire its submodules per its Internal Design, inside `src/host/`, until all its tests pass — including the agent list, which lives here and nowhere else
-- [ ] run this module's full test set — all green before the task is complete
+- [x] confirm every submodule task is complete: `cli/`, `pi-extension/`
+- [x] read `src/host/module.md` in full — it is the complete and only spec for this task
+- [x] write the tests named in its Test Specification (T-HOS-*): Unit Tests and Boundary Tests (TDD — failing first is expected)
+- [x] write the tests named in its Test Specification (T-HOS-*): Integration Contract Tests and Behavior Tests
+- [x] implement the module's own code and wire its submodules per its Internal Design, inside `src/host/`, until all its tests pass — including the agent list, which lives here and nowhere else
+- [x] run this module's full test set — all green before the task is complete
 
 ### Task 20 [Wave 2]: Implement src/ (root — composes session, adapters, import, host, platform)
 - [ ] confirm every submodule task is complete: `session/`, `adapters/`, `import/`, `host/`, `platform/`

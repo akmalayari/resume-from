@@ -759,8 +759,17 @@ reading the target adapter's declared `selection` level (FR-58) — never by nam
 4. **Target profile.** `TargetProfileBuilder.build` takes the agent the entry point is running in,
    the home it reported, and the configuration, and produces the profile (FR-3, FR-18).
 5. **Pipeline.** `pipelineFor(target)` wires the finder, the rules, the preview builder and the
-   lander with the services and the registry.
+   lander with the services and the registry. It also chooses the estimator: the budget is a
+   share of the *target* window (FR-30), so the counting rule belongs to the target agent. No
+   capability declares one, so each entry of the list names its own family beside its factory —
+   which keeps adding an agent a one-line change rather than two.
 6. **Entry point.** The picker or the command binary runs, driving the pipeline.
+
+The two starts are not symmetrical, and that is the design rather than an omission. The binary is
+handed an invocation and answers with an outcome, so a configuration error reaches the user as an
+exit code (FR-56). The extension is handed the live command context C-10 proved the switch needs,
+and answers by registering a command; it has no exit code, so it refuses by rejecting. Each start
+reads the target adapter's declared `selection` level and refuses an agent the other one hosts.
 
 ### Why the agent list lives here
 
