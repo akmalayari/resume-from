@@ -46,11 +46,11 @@
 - [x] verify the whole tree type-checks with no implementation present — this is what makes the 14 wave-0 tasks independent
 
 ### Task 2 [Wave 0]: Implement src/session/ (leaf)
-- [ ] read `src/session/module.md` in full — it is the complete and only spec for this task
-- [ ] write the tests named in its Test Specification (T-SES-*): Unit Tests and Boundary Tests (TDD — failing first is expected)
-- [ ] write the tests named in its Test Specification (T-SES-*): Integration Contract Tests and Behavior Tests
-- [ ] implement the module per its Functional Responsibilities, Public Contract, and Constraints and Invariants, inside `src/session/`, until all its tests pass — the reference fixtures it asserts against were built in Task 1 and live in `test/fixtures/`; this module owns the invariants, not the files
-- [ ] run this module's full test set — all green before the task is complete
+- [x] read `src/session/module.md` in full — it is the complete and only spec for this task
+- [x] write the tests named in its Test Specification (T-SES-*): Unit Tests and Boundary Tests (TDD — failing first is expected)
+- [x] write the tests named in its Test Specification (T-SES-*): Integration Contract Tests and Behavior Tests
+- [x] implement the module per its Functional Responsibilities, Public Contract, and Constraints and Invariants, inside `src/session/`, until all its tests pass — the reference fixtures it asserts against were built in Task 1 and live in `test/fixtures/`; this module owns the invariants, not the files
+- [x] run this module's full test set — all green before the task is complete
 
 ### Task 3 [Wave 0]: Implement src/platform/store/ (leaf)
 - [ ] read `src/platform/store/module.md` in full — it is the complete and only spec for this task
