@@ -124,6 +124,14 @@ Changes that require **only this module** to change:
 
 - **A missing configuration file is not an error.** It yields the defaults. Only a present but
   invalid value rejects.
+- **An empty configuration file is not an error either.** A file that holds only whitespace sets
+  nothing, so it yields the defaults (T-CFG-6). Any other file that does not parse rejects
+  (T-CFG-9).
+- **An empty file is a missing file.** A file that holds only whitespace sets nothing, so it yields
+  the defaults. It is not a parse error — T-CFG-6 lists an empty file among the cases that must return
+  every field, and T-CFG-9 is about a file that says something the loader cannot read.
+- **An unknown setting rejects, naming the key.** A misspelled setting that the tool ignored is the
+  same failure as a file the tool ignored: the user changed a number and nothing happened.
 - **Every field is always present in the returned `ImportConfig`.** Callers never handle undefined
   and never apply their own default.
 - **`budgetShare` is greater than 0 and at most 1.** A share of 0 would make every import blocked by

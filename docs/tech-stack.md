@@ -78,6 +78,30 @@ its contract is exactly what the design's contract coupling means.
 A module's own files import each other with plain relative paths and no restriction — inside one
 folder there is no boundary.
 
+**Factories, and who may import one.** A contract declares types, not constructors, so a module that
+must *build* a collaborator needs more than `contract.js`. Exactly two cases may import another
+module's `index.js`:
+
+1. **A parent importing its own submodules.** That is the parent's Internal Design — `src/import/`
+   builds its four stages, `src/host/` builds its two entry points, `src/` builds the host.
+2. **`src/host/`, the composition root**, importing the modules the design says it constructs: every
+   `src/adapters/*` and every `src/platform/*`. `src/host/module.md` states this is the only place
+   that knows which implementations exist, and it is why the agent list lives there.
+
+Everything else takes its collaborators **by injection** and imports types only. A leaf never
+constructs another module: `src/import/landing/` receives a `FileCommitter`, it does not build one.
+
+So the complete rule for a cross-module import specifier:
+
+| Ends in | Who may write it |
+| ------- | ---------------- |
+| `/contract.js` | any module |
+| `/index.js` | a parent importing its own submodule; `src/host/` importing an adapter or a platform service |
+| anything else | nobody — it reaches into another module's internals |
+
+This is what the boundary tests assert. A test that forbids every non-`contract.js` import would make
+the composition root unimplementable, which is not what the design says.
+
 **How one module's tests are run in isolation.** Scoped by path, never repo-wide:
 
 ```

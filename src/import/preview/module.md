@@ -25,6 +25,8 @@ adapter is asked to serialize anything.
 - List every warning, with the repository warning first (FR-19).
 - State that a broken tail was dropped (FR-55).
 - State what the budget dropped (FR-35), in the form `12 older turns dropped`.
+- State how many tool result bodies did not cross over (FR-25), in the form
+  `23 tool result bodies dropped`. It is the second drop line of the T-PRE-9 scenario.
 - Report that the import is blocked when the pinned content alone exceeds the budget (FR-33).
 - Render one line sequence that every host displays as it is, so the preview cannot drift between
   agents (FR-21).
@@ -330,6 +332,10 @@ are.
 - **`lines` is the whole preview and the only thing a host displays.** A host that composes its own
   preview from the structured fields breaks FR-21. The structured fields exist for tests and for a
   picker that wants to highlight a warning, not for re-rendering.
+- **The line order is fixed**: the header lines, the budget line, the warnings, the drop lines, and
+  the blocked lines when the import cannot run. `lines` is exactly those, concatenated in that order,
+  with no separator and nothing else — which is what makes a host that prints `lines` show the whole
+  preview and no more.
 - **The repository warning is always first** (FR-19), when there is one.
 - **A moved repository never blocks** (FR-39). It is a warning; the user decides.
 - **`blocked` is true only for the FR-33 case**: pinned content alone exceeds the budget. Every other

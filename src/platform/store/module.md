@@ -25,7 +25,7 @@ bytes, this module decides whether they ever reach the disk.
 ## Subdomain Classification
 
 **Generic.** Atomic, add-only file creation is a solved problem: write to a temporary name in the
-same directory, then rename. Functional volatility is **low** — the guarantee never changes.
+same directory, then place it without replacing anything. Functional volatility is **low** — the guarantee never changes.
 Implementation volatility is **moderate**: the temporary-file strategy, the durability level (whether
 directories are synced), and the platform-specific rename semantics may all change.
 
@@ -34,8 +34,11 @@ called directly: the switching risk is real, and the contract keeps it local.
 
 ## Encapsulated Knowledge
 
-- **The write strategy.** Temporary file in the destination directory, then rename into place.
-  Nothing outside this module knows that a temporary file ever existed.
+- **The write strategy.** Every file is written under a temporary name in its own destination
+  directory, and only once all of them are staged is each one placed. Placement is a hard link
+  followed by the removal of the temporary name — not a rename: a rename silently overwrites a file
+  that appeared after the existence check, and a hard link fails instead, which is what the race
+  invariant below requires. Nothing outside this module knows that a temporary file ever existed.
 - **The rollback bookkeeping.** Which paths this commit created, and in which order to remove them.
 - **The existence check.** That the check happens before any byte is written, and that a race between
   the check and the rename is resolved by failing the commit, never by overwriting.

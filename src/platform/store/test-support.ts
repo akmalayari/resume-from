@@ -2,7 +2,7 @@
 // created here and removed afterwards; no test touches a real agent home (C-3).
 
 import { createHash } from "node:crypto";
-import { chmod, lstat, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
+import { chmod, lstat, mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 
@@ -54,7 +54,12 @@ export async function snapshot(root: string): Promise<Map<string, string>> {
         tree.set(key, "dir");
         await walk(full);
       } else {
-        tree.set(key, createHash("sha256").update(await readFile(full)).digest("hex"));
+        tree.set(
+          key,
+          createHash("sha256")
+            .update(await readFile(full))
+            .digest("hex"),
+        );
       }
     }
   };

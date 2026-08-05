@@ -1,7 +1,7 @@
 // T-STO-15 — a static check of this module's imports. The `src/platform/` boundary rule says this
 // module knows nothing about sessions, agents or hosts, so it may not import from those trees.
 
-import { readFile, readdir } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { dirname, join, resolve, sep } from "node:path";
 import { expect, it } from "vitest";
 

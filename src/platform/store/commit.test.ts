@@ -172,35 +172,36 @@ describe("integration contract", () => {
     { name: "write-failed", refusal: "write-failed" },
   ] as const;
 
-  it.each(outcomes)("T-STO-8 — a commit handle is returned only on full success ($name)", async ({
-    refusal,
-  }) => {
-    const first = join(home, "first.txt");
-    let second = join(home, "second.txt");
-    if (refusal === "path-exists") {
-      await writeFile(second, "already here");
-    }
-    if (refusal === "write-failed") {
-      const blocker = join(home, "blocker.txt");
-      await writeFile(blocker, "not a directory");
-      second = join(blocker, "second.txt");
-    }
-    const files = [file(first, "a"), file(second, "b")];
+  it.each(outcomes)(
+    "T-STO-8 — a commit handle is returned only on full success ($name)",
+    async ({ refusal }) => {
+      const first = join(home, "first.txt");
+      let second = join(home, "second.txt");
+      if (refusal === "path-exists") {
+        await writeFile(second, "already here");
+      }
+      if (refusal === "write-failed") {
+        const blocker = join(home, "blocker.txt");
+        await writeFile(blocker, "not a directory");
+        second = join(blocker, "second.txt");
+      }
+      const files = [file(first, "a"), file(second, "b")];
 
-    if (refusal === null) {
-      const handle = await committer.commit(files);
-      expect(handle.createdPaths).toEqual([first, second]);
-      expect(typeof handle.rollback).toBe("function");
-      return;
-    }
+      if (refusal === null) {
+        const handle = await committer.commit(files);
+        expect(handle.createdPaths).toEqual([first, second]);
+        expect(typeof handle.rollback).toBe("function");
+        return;
+      }
 
-    const error = await refusalOf(committer.commit(files));
-    expect(error.refusal).toBe(refusal);
-    expect(error.path).toBe(second);
-    expect(error.message).toContain(second);
-    // FR-56: the message says what the user can do next.
-    expect(error.message).toMatch(/remove|rename|choose|check|free|pass/i);
-  });
+      const error = await refusalOf(committer.commit(files));
+      expect(error.refusal).toBe(refusal);
+      expect(error.path).toBe(second);
+      expect(error.message).toContain(second);
+      // FR-56: the message says what the user can do next.
+      expect(error.message).toMatch(/remove|rename|choose|check|free|pass/i);
+    },
+  );
 
   it("T-STO-9 — bytes are written unchanged", async () => {
     const cases = [
@@ -247,7 +248,9 @@ describe("boundary", () => {
     const twice = join(home, "same.txt");
     const before = await snapshot(home);
 
-    const refusal = await refusalOf(committer.commit([file(twice, "first"), file(twice, "second")]));
+    const refusal = await refusalOf(
+      committer.commit([file(twice, "first"), file(twice, "second")]),
+    );
 
     expect(refusal.path).toBe(twice);
     // Named as a duplicate, not reported as a file the user already had.
