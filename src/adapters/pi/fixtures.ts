@@ -5,21 +5,26 @@
  */
 
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import type { ProvenanceMarker } from "./contract.js";
 import {
+  emptyUsage,
+  PI_SESSION_VERSION,
   type PiAssistantMessage,
   type PiCompactionEntry,
   type PiEntry,
-  type PiMessageEntry,
   type PiSessionHeader,
   type PiToolResultMessage,
-  type PiUsage,
   type PiUserMessage,
-  PI_SESSION_VERSION,
-  emptyUsage,
   sessionDirFor,
   sessionFileName,
 } from "./format.js";
@@ -124,6 +129,15 @@ export function piModelChangeDraft(): EntryDraft {
   } as unknown as EntryDraft;
 }
 
+export function piCustomMessageDraft(customType: string): EntryDraft {
+  return {
+    type: "custom_message",
+    customType,
+    content: "an extension put conversation content here",
+    display: true,
+  } as unknown as EntryDraft;
+}
+
 export function piUnknownDraft(type: string): EntryDraft {
   return { type, payload: "something this adapter has never seen" } as unknown as EntryDraft;
 }
@@ -205,24 +219,8 @@ export function markerFixture(): ProvenanceMarker {
     sourceSessionId: "01JQ8Z3K7M4N5P6Q7R8S9T0V1W",
     importedAt: "2026-08-02T10:00:00.000Z",
     droppedSummary: "3 tool result bodies dropped",
-    lines: [
-      "Imported from codex — 01JQ8Z3K7M4N5P6Q7R8S9T0V1W",
-      "3 tool result bodies dropped",
-    ],
+    lines: ["Imported from codex — 01JQ8Z3K7M4N5P6Q7R8S9T0V1W", "3 tool result bodies dropped"],
   };
-}
-
-export function fixtureUsage(): PiUsage {
-  return emptyUsage();
-}
-
-/** Every message entry of a rendered Pi session file. */
-export function messageEntriesOf(text: string): PiMessageEntry[] {
-  return text
-    .split("\n")
-    .filter((line) => line.trim().length > 0)
-    .map((line) => JSON.parse(line) as Record<string, unknown>)
-    .filter((entry): entry is PiMessageEntry => entry.type === "message");
 }
 
 export function entriesOf(text: string): Record<string, unknown>[] {

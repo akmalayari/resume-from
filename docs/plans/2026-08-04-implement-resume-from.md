@@ -118,12 +118,12 @@
 - [x] run this module's full test set — all green before the task is complete
 
 ### Task 11 [Wave 0]: Implement src/adapters/pi/ (leaf)
-- [ ] read `src/adapters/pi/module.md` in full — it is the complete and only spec for this task
-- [ ] write the tests named in its Test Specification (T-PI-*): Unit Tests and Boundary Tests (TDD — failing first is expected)
-- [ ] write the tests named in its Test Specification (T-PI-*): Integration Contract Tests and Behavior Tests
-- [ ] implement the module per its Functional Responsibilities, Public Contract, and Constraints and Invariants, inside `src/adapters/pi/`, until all its tests pass
-- [ ] run the tests marked **live** against an installed Pi and a throwaway session directory — they confirm the default home, the entry names and the marker entry type, which this design refuses to assume; if Pi is unavailable, mark ⚠️ naming the exact tests not run
-- [ ] run this module's full test set — all green before the task is complete
+- [x] read `src/adapters/pi/module.md` in full — it is the complete and only spec for this task
+- [x] write the tests named in its Test Specification (T-PI-*): Unit Tests and Boundary Tests (TDD — failing first is expected)
+- [x] write the tests named in its Test Specification (T-PI-*): Integration Contract Tests and Behavior Tests
+- [x] implement the module per its Functional Responsibilities, Public Contract, and Constraints and Invariants, inside `src/adapters/pi/`, until all its tests pass
+- [x] run the tests marked **live** against an installed Pi and a throwaway session directory — they confirm the default home, the entry names and the marker entry type, which this design refuses to assume; if Pi is unavailable, mark ⚠️ naming the exact tests not run
+- [x] run this module's full test set — all green before the task is complete
 
 ### Task 12 [Wave 0]: Implement src/adapters/codex/ (leaf)
 - [ ] read `src/adapters/codex/module.md` in full — it is the complete and only spec for this task
