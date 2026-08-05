@@ -159,12 +159,12 @@
 - [x] run this module's full test set — all green before the task is complete
 
 ### Task 16 [Wave 1]: Implement src/platform/ (composes config, repo, tokens, store)
-- [ ] confirm every submodule task is complete: `config/`, `repo/`, `tokens/`, `store/`
-- [ ] read `src/platform/module.md` in full — it is the complete and only spec for this task
-- [ ] write the tests named in its Test Specification (T-PLA-*): Unit Tests and Boundary Tests (TDD — failing first is expected)
-- [ ] write the tests named in its Test Specification (T-PLA-*): Integration Contract Tests and Behavior Tests
-- [ ] implement the module's own code and wire its submodules per its Internal Design, inside `src/platform/`, until all its tests pass — its tests are static checks of the boundary rule and a replaceability test that exercises the composed submodules
-- [ ] run this module's full test set — all green before the task is complete
+- [x] confirm every submodule task is complete: `config/`, `repo/`, `tokens/`, `store/`
+- [x] read `src/platform/module.md` in full — it is the complete and only spec for this task
+- [x] write the tests named in its Test Specification (T-PLA-*): Unit Tests and Boundary Tests (TDD — failing first is expected)
+- [x] write the tests named in its Test Specification (T-PLA-*): Integration Contract Tests and Behavior Tests
+- [x] implement the module's own code and wire its submodules per its Internal Design, inside `src/platform/`, until all its tests pass — its tests are static checks of the boundary rule and a replaceability test that exercises the composed submodules
+- [x] run this module's full test set — all green before the task is complete
 
 ### Task 17 [Wave 1]: Implement src/adapters/ (composes pi, codex, claude-code)
 - [ ] confirm every submodule task is complete: `pi/`, `codex/`, `claude-code/`
