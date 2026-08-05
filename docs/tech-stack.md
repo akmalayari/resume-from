@@ -100,13 +100,28 @@ Implement them as Vitest tests that read the import graph, not as lint configura
 they are named deliverables of module documents, and a lint rule can be disabled inline while a
 failing test cannot be. Biome's own rules may be added as a second, redundant guard.
 
-## Open — decide before or during the first task that needs it
+## Runtime dependencies
 
-- **Node version floor.** Assumed current LTS. Confirm against the oldest Node the three agents ship
-  with; the tool runs inside them.
-- **Tokenizer library** for `src/platform/tokens/`. The module's contract is deliberately narrow so
-  this can be chosen late, and changed later (T-TOK-13).
-- **Git access** for `src/platform/repo/`: the `git` binary or a library. The module's Change Vectors
-  list this as a local, reversible choice.
+| Package | Needed by | Why |
+| ------- | --------- | --- |
+| `gpt-tokenizer` | `src/platform/tokens/` | Pure JavaScript, no native binary and no wasm, so the tool stays loadable inside three other CLIs. Covers the `gpt` estimator family exactly. |
 
-Record the answer here the moment one is made.
+That is the whole runtime dependency list. Adding to it is a decision recorded here first, with the
+module that needs it and why.
+
+## Closed — decisions made during build preflight
+
+- **Node version floor: 22.** Set in `package.json` `engines`. The tool runs inside three other Node
+  CLIs, so the floor is deliberately conservative.
+- **Tokenizer for `src/platform/tokens/`:** `gpt-tokenizer` for the `gpt` family. There is no
+  official JavaScript tokenizer for the Claude family, so `claude` and `generic` use a documented
+  character-ratio heuristic, and the module states its margin. This is sound because FR-29 budgets a
+  *share* of the window rather than all of it — the margin is what the share pays for. The estimator
+  is behind an interface, so replacing either half is local (T-IMP-26).
+- **Git access for `src/platform/repo/`:** spawn the `git` binary with `node:child_process`, always
+  passing an **argument array, never a shell string**. No dependency, and it is what makes T-REP-11
+  pass for free: a hostile revision string is an argument, never something a shell can interpret.
+
+## Open
+
+Nothing. Every question this file listed as open has been answered above.

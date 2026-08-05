@@ -64,7 +64,6 @@
 - [ ] write the tests named in its Test Specification (T-TOK-*): Unit Tests and Boundary Tests (TDD — failing first is expected)
 - [ ] write the tests named in its Test Specification (T-TOK-*): Integration Contract Tests and Behavior Tests
 - [ ] implement the module per its Functional Responsibilities, Public Contract, and Constraints and Invariants, inside `src/platform/tokens/`, until all its tests pass
-- [ ] record the chosen tokenizer library in `docs/tech-stack.md` — it is listed there as open
 - [ ] run this module's full test set — all green before the task is complete
 
 ### Task 5 [Wave 0]: Implement src/platform/repo/ (leaf)
@@ -72,7 +71,6 @@
 - [ ] write the tests named in its Test Specification (T-REP-*): Unit Tests and Boundary Tests (TDD — failing first is expected)
 - [ ] write the tests named in its Test Specification (T-REP-*): Integration Contract Tests and Behavior Tests
 - [ ] implement the module per its Functional Responsibilities, Public Contract, and Constraints and Invariants, inside `src/platform/repo/`, until all its tests pass
-- [ ] record the chosen git access method in `docs/tech-stack.md` — it is listed there as open
 - [ ] run this module's full test set — all green before the task is complete
 
 ### Task 6 [Wave 0]: Implement src/platform/config/ (leaf)
