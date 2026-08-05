@@ -134,12 +134,12 @@
 - [x] run this module's full test set — all green before the task is complete
 
 ### Task 13 [Wave 0]: Implement src/adapters/claude-code/ (leaf)
-- [ ] read `src/adapters/claude-code/module.md` in full — it is the complete and only spec for this task
-- [ ] write the tests named in its Test Specification (T-CC-*): Unit Tests and Boundary Tests (TDD — failing first is expected)
-- [ ] write the tests named in its Test Specification (T-CC-*): Integration Contract Tests and Behavior Tests
-- [ ] implement the module per its Functional Responsibilities, Public Contract, and Constraints and Invariants, inside `src/adapters/claude-code/`, until all its tests pass
-- [ ] run the tests marked **live** against an installed Claude Code and a **throwaway** `CLAUDE_CONFIG_DIR` — never a real store (C-3); if Claude Code is unavailable, mark ⚠️ naming the exact tests not run
-- [ ] run this module's full test set — all green before the task is complete
+- [x] read `src/adapters/claude-code/module.md` in full — it is the complete and only spec for this task
+- [x] write the tests named in its Test Specification (T-CC-*): Unit Tests and Boundary Tests (TDD — failing first is expected)
+- [x] write the tests named in its Test Specification (T-CC-*): Integration Contract Tests and Behavior Tests
+- [x] implement the module per its Functional Responsibilities, Public Contract, and Constraints and Invariants, inside `src/adapters/claude-code/`, until all its tests pass
+- [x] run the tests marked **live** against an installed Claude Code and a **throwaway** `CLAUDE_CONFIG_DIR` — never a real store (C-3); if Claude Code is unavailable, mark ⚠️ naming the exact tests not run
+- [x] run this module's full test set — all green before the task is complete
 
 ### Task 14 [Wave 0]: Implement src/host/cli/ (leaf)
 - [ ] read `src/host/cli/module.md` in full — it is the complete and only spec for this task
