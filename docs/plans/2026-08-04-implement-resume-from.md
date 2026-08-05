@@ -176,12 +176,12 @@
 - [x] run this module's full test set — all green before the task is complete
 
 ### Task 18 [Wave 1]: Implement src/import/ (composes discovery, transfer, preview, landing)
-- [ ] confirm every submodule task is complete: `discovery/`, `transfer/`, `preview/`, `landing/`
-- [ ] read `src/import/module.md` in full — it is the complete and only spec for this task
-- [ ] write the tests named in its Test Specification (T-IMP-*): Unit Tests and Boundary Tests (TDD — failing first is expected)
-- [ ] write the tests named in its Test Specification (T-IMP-*): Integration Contract Tests and Behavior Tests — these cover all nine directions end to end with stub adapters
-- [ ] implement the module's own code and wire its submodules per its Internal Design, inside `src/import/`, until all its tests pass
-- [ ] run this module's full test set — all green before the task is complete
+- [x] confirm every submodule task is complete: `discovery/`, `transfer/`, `preview/`, `landing/`
+- [x] read `src/import/module.md` in full — it is the complete and only spec for this task
+- [x] write the tests named in its Test Specification (T-IMP-*): Unit Tests and Boundary Tests (TDD — failing first is expected)
+- [x] write the tests named in its Test Specification (T-IMP-*): Integration Contract Tests and Behavior Tests — these cover all nine directions end to end with stub adapters
+- [x] implement the module's own code and wire its submodules per its Internal Design, inside `src/import/`, until all its tests pass
+- [x] run this module's full test set — all green before the task is complete
 
 ### Task 19 [Wave 1]: Implement src/host/ (composes cli, pi-extension)
 - [ ] confirm every submodule task is complete: `cli/`, `pi-extension/`
