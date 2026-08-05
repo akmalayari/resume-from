@@ -111,11 +111,11 @@
 - [x] run this module's full test set — all green before the task is complete
 
 ### Task 10 [Wave 0]: Implement src/import/landing/ (leaf)
-- [ ] read `src/import/landing/module.md` in full — it is the complete and only spec for this task
-- [ ] write the tests named in its Test Specification (T-LAN-*): Unit Tests and Boundary Tests (TDD — failing first is expected)
-- [ ] write the tests named in its Test Specification (T-LAN-*): Integration Contract Tests and Behavior Tests
-- [ ] implement the module per its Functional Responsibilities, Public Contract, and Constraints and Invariants, inside `src/import/landing/`, until all its tests pass
-- [ ] run this module's full test set — all green before the task is complete
+- [x] read `src/import/landing/module.md` in full — it is the complete and only spec for this task
+- [x] write the tests named in its Test Specification (T-LAN-*): Unit Tests and Boundary Tests (TDD — failing first is expected)
+- [x] write the tests named in its Test Specification (T-LAN-*): Integration Contract Tests and Behavior Tests
+- [x] implement the module per its Functional Responsibilities, Public Contract, and Constraints and Invariants, inside `src/import/landing/`, until all its tests pass
+- [x] run this module's full test set — all green before the task is complete
 
 ### Task 11 [Wave 0]: Implement src/adapters/pi/ (leaf)
 - [ ] read `src/adapters/pi/module.md` in full — it is the complete and only spec for this task
