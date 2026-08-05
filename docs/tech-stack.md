@@ -141,6 +141,29 @@ directory, point the agent at it (`CLAUDE_CONFIG_DIR` for Claude Code, the equiv
 for Pi and Codex), and remove it afterwards. A live test that reads or writes `~/.claude`, `~/.codex`
 or the user's Pi home is a defect, not a stronger test.
 
+**Claude Code needs an authenticated throwaway home, and the tests never authenticate it.** A fresh
+`CLAUDE_CONFIG_DIR` has no account reference, so the CLI answers `Not logged in · Please run /login`
+and exits 1 — which makes any test that asks it to create or open a session fail. Pi and Codex are
+unaffected; Codex's `thread/start` works with no login (C-7).
+
+The resolution is out of band, and deliberately so:
+
+```
+CLAUDE_CONFIG_DIR="$HOME/.resume-from-live-home" claude    # log in once, interactively
+RESUME_FROM_LIVE=1 pnpm vitest run src/adapters/claude-code
+```
+
+The tests read `RESUME_FROM_LIVE_CLAUDE_HOME` (default `$HOME/.resume-from-live-home`), use it when
+it exists and is authenticated, and **skip with an explicit message naming this procedure** when it
+is not. They never create it and never log in.
+
+**No test may read the user's credential store.** Not `~/.claude.json`, not the Keychain, not an
+account reference copied from one home into another. A suite that reads credentials to authenticate
+itself is a worse artefact than a suite that skips: it would run on every machine that later checks
+out this repository. The one-time interactive login keeps the credential entirely outside test code,
+and the pre-authenticated home is still a throwaway — it is not the user's real `~/.claude`, so C-3
+holds unchanged.
+
 ## Boundary enforcement
 
 Several tests are static checks of the import graph rather than behaviour: T-PLA-1, T-PLA-2, T-PLA-7,

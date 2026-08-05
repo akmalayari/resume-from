@@ -5,12 +5,17 @@
  * temporary directory. C-3 says a bad write can damage the user's real sessions, so the
  * interlock is a hard failure rather than a convention: if `mkdtemp` or an environment
  * variable ever silently fails, this is what stops a write into ~/.claude.
+ *
+ * The live tests are the one exception, and they take a second interlock rather than a
+ * weaker one: `assertLiveHome` accepts only the pre-authenticated live home of
+ * docs/tech-stack.md, which the suite never creates and never logs in to.
  */
 
+import { spawnSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { existsSync, realpathSync } from "node:fs";
+import { existsSync, mkdtempSync, realpathSync } from "node:fs";
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import type { PendingFile } from "./contract.js";
 import { sessionFilePath } from "./layout.js";
@@ -30,11 +35,15 @@ function realish(target: string): string {
   return path.join(realpathSync(current), ...missing);
 }
 
+function isWithin(resolved: string, root: string): boolean {
+  return resolved === root || resolved.startsWith(`${root}${path.sep}`);
+}
+
 /** Throw unless `target` is below the temporary directory. The tests never touch a real home. */
 export function assertThrowaway(target: string): void {
   const resolved = realish(target);
   const temp = realpathSync(tmpdir());
-  if (resolved !== temp && !resolved.startsWith(`${temp}${path.sep}`)) {
+  if (!isWithin(resolved, temp)) {
     throw new Error(`refusing to touch ${resolved}: tests only ever write below ${temp}`);
   }
 }
@@ -62,10 +71,104 @@ export async function cleanupThrowaways(): Promise<void> {
   }
 }
 
-/** The commit `src/import/landing/` performs. Refuses an existing path, as FR-49 requires. */
-export async function commitPendingFiles(files: PendingFile[]): Promise<void> {
+// ---------------------------------------------------------------------------
+// The live home. docs/tech-stack.md is normative: the live tests use a home the user
+// authenticated once, out of band; they never create it, never log in, and never read a
+// credential — not ~/.claude.json, not the Keychain, not an account reference copied from
+// anywhere. A suite that authenticated itself would do so on every machine that later
+// checks out this repository.
+// ---------------------------------------------------------------------------
+
+export const LIVE_HOME_ENV = "RESUME_FROM_LIVE_CLAUDE_HOME";
+export const LIVE_HOME_BASENAME = ".resume-from-live-home";
+
+/** The live home: `$RESUME_FROM_LIVE_CLAUDE_HOME`, else `$HOME/.resume-from-live-home`. */
+export function resolveLiveClaudeHome(): string {
+  const configured = process.env[LIVE_HOME_ENV];
+  const home = realish(
+    configured !== undefined && configured !== ""
+      ? configured
+      : path.join(homedir(), LIVE_HOME_BASENAME),
+  );
+  // The live home is still a throwaway. Pointed at a real store it would put C-3 back.
+  const user = realish(homedir());
+  if (home === user || isWithin(user, home) || path.basename(home) === ".claude") {
+    throw new Error(`${LIVE_HOME_ENV}=${home} names a real home: it must be a throwaway`);
+  }
+  return home;
+}
+
+/** Throw unless `target` is inside the live home. The second interlock, beside C-3's first. */
+export function assertLiveHome(target: string): void {
+  const home = resolveLiveClaudeHome();
+  const resolved = realish(target);
+  if (!isWithin(resolved, home)) {
+    throw new Error(`refusing to touch ${resolved}: live tests only ever write below ${home}`);
+  }
+}
+
+export interface LiveClaudeHome {
+  home: string;
+  /** True only when the home exists and an installed Claude Code answers in it. */
+  ready: boolean;
+  /** Why the live tests skip, naming the one-time login. Empty when ready. */
+  reason: string;
+}
+
+let probed: LiveClaudeHome | undefined;
+
+/**
+ * Is the live home usable? Detected without reading any credential: a trivial `claude -p`
+ * runs in it, and a non-zero exit or a "Not logged in" answer means not authenticated.
+ * Probed once per process.
+ */
+export function liveClaudeHome(): LiveClaudeHome {
+  probed ??= probeLiveClaudeHome();
+  return probed;
+}
+
+function probeLiveClaudeHome(): LiveClaudeHome {
+  const home = resolveLiveClaudeHome();
+  const skip = (detail: string): LiveClaudeHome => ({
+    home,
+    ready: false,
+    reason:
+      `${detail}. Log in once, out of band, then re-run:\n` +
+      `  CLAUDE_CONFIG_DIR="${home}" claude\n` +
+      "  RESUME_FROM_LIVE=1 pnpm vitest run src/adapters/claude-code\n" +
+      "These tests never create that home and never read a credential.",
+  });
+
+  if (!existsSync(home)) return skip(`the live Claude Code home ${home} does not exist`);
+
+  // A throwaway working directory: the probe must not key a session to this repository.
+  const cwd = mkdtempSync(path.join(realpathSync(tmpdir()), "resume-from-cc-probe-"));
+  createdRoots.push(cwd);
+  const run = spawnSync("claude", ["-p", "Reply with the single word READY and nothing else."], {
+    cwd,
+    env: { ...process.env, CLAUDE_CONFIG_DIR: home },
+    encoding: "utf8",
+    timeout: 120_000,
+  });
+
+  if (run.error !== undefined) return skip(`claude could not be run: ${run.error.message}`);
+  const said = `${run.stdout ?? ""}${run.stderr ?? ""}`;
+  if (run.status !== 0 || /not logged in/i.test(said)) {
+    return skip(`the live Claude Code home ${home} is not authenticated`);
+  }
+  return { home, ready: true, reason: "" };
+}
+
+/**
+ * The commit `src/import/landing/` performs. Refuses an existing path, as FR-49 requires.
+ * `guard` is the write interlock: `assertThrowaway` by default, `assertLiveHome` for a live test.
+ */
+export async function commitPendingFiles(
+  files: PendingFile[],
+  guard: (target: string) => void = assertThrowaway,
+): Promise<void> {
   for (const file of files) {
-    assertThrowaway(file.absolutePath);
+    guard(file.absolutePath);
     if (existsSync(file.absolutePath)) {
       throw new Error(`refusing to overwrite ${file.absolutePath}`);
     }

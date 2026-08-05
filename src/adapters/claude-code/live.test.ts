@@ -2,10 +2,13 @@
  * Live tests. They need an installed Claude Code and run only under
  * RESUME_FROM_LIVE=1 pnpm vitest run src/adapters/claude-code
  *
- * Every one of them builds a throwaway CLAUDE_CONFIG_DIR below the temporary directory and
- * points Claude Code at it. No test here reads or writes ~/.claude: C-3 says a bad write can
- * damage the user's real sessions, and C-9 states its throwaway-directory result does not lift
- * that risk.
+ * They point Claude Code at the live home of docs/tech-stack.md — RESUME_FROM_LIVE_CLAUDE_HOME,
+ * by default $HOME/.resume-from-live-home — which the user authenticated once, out of band. A
+ * fresh CLAUDE_CONFIG_DIR holds no account reference, so the CLI answers `Not logged in` and
+ * exits 1; these tests therefore skip, naming that one-time login, rather than create the home,
+ * log in, or read a credential. The home is still a throwaway and is not the user's ~/.claude:
+ * C-3 says a bad write can damage real sessions, and C-9 states its throwaway-directory result
+ * does not lift that risk. Nothing the home already holds is modified, and T-CC-17 checks it.
  */
 
 import { spawnSync } from "node:child_process";
@@ -17,10 +20,11 @@ import { createClaudeCodeAdapter } from "./adapter.js";
 import type { CanonicalSession, ProvenanceMarker, SerializedSession } from "./contract.js";
 import { encodeProjectPath, PROJECTS_DIR, sessionFilePath } from "./layout.js";
 import {
-  assertThrowaway,
+  assertLiveHome,
+  checksumTree,
   cleanupThrowaways,
   commitPendingFiles,
-  makeThrowawayHome,
+  liveClaudeHome,
   makeThrowawayRoot,
 } from "./test-support.js";
 
@@ -69,7 +73,7 @@ function runClaude(
   args: string[],
   options: { cwd: string; home: string },
 ): ReturnType<typeof spawnSync> {
-  assertThrowaway(options.home);
+  assertLiveHome(options.home);
   const env = { ...process.env, CLAUDE_CONFIG_DIR: options.home };
   expect(env.CLAUDE_CONFIG_DIR).toBe(options.home);
   return spawnSync("claude", args, {
@@ -109,17 +113,21 @@ describe.skipIf(!live)("T-CC-16 — live: the default home and the per-project l
 
   it(
     "puts a session where this module computes it, for a path that is not only letters and digits",
-    async () => {
-      const home = await makeThrowawayHome();
+    async (ctx) => {
+      const ready = liveClaudeHome();
+      if (!ready.ready) ctx.skip(ready.reason);
+      const home = ready.home;
       const repo = await makeRepo();
 
+      // The home persists between runs, so only what this run added is evidence.
+      const before = new Set(await sessionFilesOf(home));
       const run = runClaude(["-p", "Reply with the single word READY and nothing else."], {
         cwd: repo,
         home,
       });
       expect(run.status, `claude failed: ${run.stderr}`).toBe(0);
 
-      const written = await sessionFilesOf(home);
+      const written = (await sessionFilesOf(home)).filter((file) => !before.has(file));
       expect(written.length).toBeGreaterThan(0);
       const landed = written[0] as string;
 
@@ -136,8 +144,9 @@ describe.skipIf(!live)("T-CC-16 — live: the default home and the per-project l
 
       // And this module can read what Claude Code wrote.
       const listed = await adapter.listSessions(home);
-      expect(listed.map((descriptor) => descriptor.ref.id)).toContain(id);
-      expect(listed[0]?.repoPath).toBe(repo);
+      const row = listed.find((descriptor) => descriptor.ref.id === id);
+      expect(row, `${id} is not listed`).toBeDefined();
+      expect(row?.repoPath).toBe(repo);
     },
     LIVE_TIMEOUT_MS,
   );
@@ -149,9 +158,15 @@ describe.skipIf(!live)("live: the C-9 scenario", () => {
   let serialized: SerializedSession;
   let bytesBefore = "";
   let firstResume: ReturnType<typeof spawnSync>;
+  /** The home around the commit: T-CC-11's discipline, against a home that persists. */
+  let homeBefore = new Map<string, string>();
+  let homeAfter = new Map<string, string>();
 
   beforeAll(async () => {
-    home = await makeThrowawayHome();
+    const ready = liveClaudeHome();
+    // Nothing below this line may run unauthenticated: the commit would create the home.
+    if (!ready.ready) return;
+    home = ready.home;
     repo = await makeRepo();
     const adapter = createClaudeCodeAdapter({ cwd: repo });
     serialized = adapter.serialize(
@@ -160,7 +175,9 @@ describe.skipIf(!live)("live: the C-9 scenario", () => {
       MARKER,
     );
     expect(adapter.validate(serialized)).toEqual([]);
-    await commitPendingFiles(serialized.files);
+    homeBefore = await checksumTree(home);
+    await commitPendingFiles(serialized.files, assertLiveHome);
+    homeAfter = await checksumTree(home);
     bytesBefore = await readFile(serialized.files[0]?.absolutePath as string, "utf8");
     firstResume = runClaude(
       [
@@ -179,7 +196,17 @@ describe.skipIf(!live)("live: the C-9 scenario", () => {
 
   it(
     "T-CC-17 — Claude Code opens the imported session by id, and the turns are on the screen",
-    async () => {
+    async (ctx) => {
+      const ready = liveClaudeHome();
+      if (!ready.ready) ctx.skip(ready.reason);
+
+      // T-CC-11 against the live home: the commit added the session file and nothing else.
+      for (const [file, sum] of homeBefore) {
+        expect(homeAfter.get(file), `${file} changed`).toBe(sum);
+      }
+      const added = [...homeAfter.keys()].filter((file) => !homeBefore.has(file));
+      expect(added).toEqual([path.relative(home, serialized.files[0]?.absolutePath as string)]);
+
       expect(firstResume.status, `claude --resume failed: ${firstResume.stderr}`).toBe(0);
       expect(String(firstResume.stdout).trim().length).toBeGreaterThan(0);
 
@@ -208,7 +235,10 @@ describe.skipIf(!live)("live: the C-9 scenario", () => {
 
   it(
     "T-CC-18 — the imported turns are native: resume works again on them (FR-41, AC-2)",
-    async () => {
+    async (ctx) => {
+      const ready = liveClaudeHome();
+      if (!ready.ready) ctx.skip(ready.reason);
+
       const second = runClaude(
         [
           "--resume",

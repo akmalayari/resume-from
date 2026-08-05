@@ -398,6 +398,16 @@ Tests marked **live** require an installed Claude Code and a throwaway `CLAUDE_C
 in this suite ever runs against a real store**: C-3 says a bad write can damage the user's sessions,
 and C-9 explicitly states its throwaway-directory result does not lift that risk.
 
+A live test needs one thing a fresh directory cannot give it: an account. A fresh `CLAUDE_CONFIG_DIR`
+holds no account reference, so the CLI answers `Not logged in · Please run /login` and exits 1. The
+resolution is the one docs/tech-stack.md rules, and that document is normative here: the live tests
+read `RESUME_FROM_LIVE_CLAUDE_HOME` (default `$HOME/.resume-from-live-home`), use that home when it
+exists and answers a trivial `claude -p`, and **skip with a message naming the one-time login** when
+it does not. They never create it, never log in, and never read a credential store — not
+`~/.claude.json`, not the Keychain, not an account reference copied from anywhere. The home is still
+a throwaway rather than the user's `~/.claude`, so C-3 holds unchanged; because it now persists
+between runs, T-CC-17 checks T-CC-11's discipline against it as well.
+
 ### Unit Tests
 
 **T-CC-1 — capabilities are as designed**
@@ -482,19 +492,22 @@ and C-9 explicitly states its throwaway-directory result does not lift that risk
   reports that entries were skipped.
 
 **T-CC-16 — live: the default home and the per-project layout are what Claude Code uses**
-- Scenario: an installed Claude Code writes a session in a known repository; the declared default
-  home and the computed session path are compared with where it landed.
+- Scenario: an installed Claude Code writes a session in a known repository, inside the live home;
+  the declared default home and the computed session path are compared with where it landed. Only
+  the session files this run added count, because the home persists between runs.
 - Expected behavior: the same directory and the same layout. This is the test that stops the layout
   from being an assumption.
 
 ### Behavior Tests
 
 **T-CC-17 — live: the C-9 scenario**
-- Scenario: a canonical session with two turns is serialized into a throwaway `CLAUDE_CONFIG_DIR` and
-  committed; then `claude --resume <id>`, then the `claude --resume` picker.
+- Scenario: a canonical session with two turns is serialized into the live `CLAUDE_CONFIG_DIR` and
+  committed; the home is checksummed around the commit; then `claude --resume <id>`, then the
+  `claude --resume` picker.
 - Expected behavior: the turns are on the screen as a native user turn and a native agent turn; the
   picker lists the session with its time, branch and size — exactly C-9's measured results, including
-  the two example lines.
+  the two example lines. The commit added the session file and changed nothing the home already
+  held, which is T-CC-11's discipline against a home that is not deleted afterwards.
 
 **T-CC-18 — live: the imported turns are native**
 - Scenario: after T-CC-17, scrollback and the native resume list are used on the imported turns.
