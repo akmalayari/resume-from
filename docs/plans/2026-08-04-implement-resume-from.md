@@ -39,11 +39,11 @@
 ## Implementation Steps
 
 ### Task 1: Project scaffold and contract type declarations
-- [ ] read `docs/tech-stack.md` in full — it is the normative record of every technology decision
-- [ ] create the package: `package.json` (ESM, pnpm, a `bin` entry for the command binary and a library entry point), strict `tsconfig.json`, Vitest config, Biome config
-- [ ] transcribe every module's `Public Contract` section into a `contract.ts` in that module's own folder, verbatim from its `module.md` — declarations only, no behaviour, no defaults; a restated block in a document becomes an import in code, never a second declaration. **18 files, not 19**: `src/platform/module.md` publishes no types of its own by design
-- [ ] build the canonical reference session in `test/fixtures/`, outside `src/` so it adds no module to the design tree — it is data conforming to the contract files just emitted, and it must satisfy every property `src/session/module.md`'s T-SES-8 lists. Every wave-0 task consumes it, so it cannot belong to any one module
-- [ ] verify the whole tree type-checks with no implementation present — this is what makes the 14 wave-0 tasks independent
+- [x] read `docs/tech-stack.md` in full — it is the normative record of every technology decision
+- [x] create the package: `package.json` (ESM, pnpm, a `bin` entry for the command binary and a library entry point), strict `tsconfig.json`, Vitest config, Biome config
+- [x] transcribe every module's `Public Contract` section into a `contract.ts` in that module's own folder, verbatim from its `module.md` — declarations only, no behaviour, no defaults; a restated block in a document becomes an import in code, never a second declaration. **18 files, not 19**: `src/platform/module.md` publishes no types of its own by design
+- [x] build the canonical reference session in `test/fixtures/`, outside `src/` so it adds no module to the design tree — it is data conforming to the contract files just emitted, and it must satisfy every property `src/session/module.md`'s T-SES-8 lists. Every wave-0 task consumes it, so it cannot belong to any one module
+- [x] verify the whole tree type-checks with no implementation present — this is what makes the 14 wave-0 tasks independent
 
 ### Task 2 [Wave 0]: Implement src/session/ (leaf)
 - [ ] read `src/session/module.md` in full — it is the complete and only spec for this task

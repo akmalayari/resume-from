@@ -55,6 +55,41 @@ The build therefore produces both a `bin` entry and a library entry point.
   **The `module.md` block stays normative.** If the two disagree, the document wins and the file is
   corrected — never the reverse.
 
+## Isolation conventions
+
+These two answers make parallel, folder-isolated implementation safe. Follow them exactly; do not
+invent an alternative.
+
+**How one module imports another.** Relative ESM specifiers with an explicit `.js` extension, and
+**only ever to another module's `contract.js`**:
+
+```ts
+// in src/import/transfer/rules.ts
+import type { CanonicalSession, TargetProfile } from "../../session/contract.js";
+import type { TokenEstimator } from "../../platform/tokens/contract.js";
+```
+
+No path aliases, no bundler, no `paths` mapping — `tsc` emits ESM that Node resolves directly. The
+rule has a mechanical form: **a cross-module import whose specifier does not end in
+`/contract.js` is a boundary violation.** That is the check the boundary tests assert (T-PLA-1,
+T-PLA-2, T-HOS-17, T-ROO-7). Importing a sibling's implementation file is never correct; importing
+its contract is exactly what the design's contract coupling means.
+
+A module's own files import each other with plain relative paths and no restriction — inside one
+folder there is no boundary.
+
+**How one module's tests are run in isolation.** Scoped by path, never repo-wide:
+
+```
+pnpm vitest run src/<module-path>
+```
+
+For example `pnpm vitest run src/import/transfer`. Parallel tasks each run only their own scope, so
+they never collide and never see each other's failures. The full suite (`pnpm vitest run`) is the
+orchestrator's to run, at the end.
+
+Tests live beside the code they test, inside the module's folder, named `*.test.ts`.
+
 ## Boundary enforcement
 
 Several tests are static checks of the import graph rather than behaviour: T-PLA-1, T-PLA-2, T-PLA-7,
