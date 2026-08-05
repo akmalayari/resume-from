@@ -8,17 +8,30 @@ import type { CommitError, FileCommitter, PendingFile } from "./contract.js";
 import { createFileCommitter } from "./file-committer.js";
 import { entriesOf, exists, isRoot, makeHome, removeHome, snapshot } from "./test-support.js";
 
-// Records every file opened for writing, so a refusal can be shown to write nothing at all —
-// a checksum alone cannot tell "never wrote" from "wrote, then cleaned up perfectly".
-const opened = vi.hoisted(() => ({ forWriting: [] as string[] }));
+// The filesystem is watched, and on request made to fail. Watching `open` lets a refusal be shown
+// to write nothing at all — a checksum alone cannot tell "never wrote" from "wrote, then cleaned up
+// perfectly". Failing a chosen `link` is the only way to make a file fail *after* earlier files are
+// already on disk, which is what a part-way failure means.
+const fs = vi.hoisted(() => ({
+  openedForWriting: [] as string[],
+  placed: [] as string[],
+  failPlacementOf: null as string | null,
+}));
 
 vi.mock("node:fs/promises", async (importOriginal) => {
   const actual = await importOriginal<typeof import("node:fs/promises")>();
   return {
     ...actual,
     open: async (path: string, flags?: string | number, mode?: string | number) => {
-      if (flags !== undefined && flags !== "r") opened.forWriting.push(String(path));
+      if (flags !== undefined && flags !== "r") fs.openedForWriting.push(String(path));
       return await actual.open(path, flags, mode);
+    },
+    link: async (source: string, destination: string) => {
+      if (fs.failPlacementOf === destination) {
+        throw Object.assign(new Error("simulated device failure"), { code: "EIO" });
+      }
+      await actual.link(source, destination);
+      fs.placed.push(destination);
     },
   };
 });
@@ -29,7 +42,9 @@ let committer: FileCommitter;
 beforeEach(async () => {
   home = await makeHome();
   committer = createFileCommitter();
-  opened.forWriting = [];
+  fs.openedForWriting = [];
+  fs.placed = [];
+  fs.failPlacementOf = null;
 });
 
 afterEach(async () => {
@@ -108,26 +123,26 @@ describe("unit", () => {
     expect(refusal.refusal).toBe("path-exists");
     expect(await snapshot(home)).toEqual(before);
     // The existence check ran before the first byte: not even a temporary file was opened.
-    expect(opened.forWriting).toEqual([]);
+    expect(fs.openedForWriting).toEqual([]);
   });
 
   it("T-STO-5 — a failure part-way through removes what was created", async () => {
-    // The third destination cannot be created: its parent path is an existing regular file,
-    // which only the write itself can discover.
     const first = join(home, "first.txt");
     const second = join(home, "second.txt");
-    const blocker = join(home, "blocker.txt");
-    await writeFile(blocker, "i am a file, not a directory");
-    const third = join(blocker, "third.txt");
+    const third = join(home, "third.txt");
     const before = await snapshot(home);
+    fs.failPlacementOf = third; // the destination fails once the first two are on disk
 
     const refusal = await refusalOf(
       committer.commit([file(first, "a"), file(second, "b"), file(third, "c")]),
     );
 
     expect(refusal.refusal).toBe("write-failed");
+    // The first two really reached the disk, and were then removed again.
+    expect(fs.placed).toEqual([first, second]);
     await expect(exists(first)).resolves.toBe(false);
     await expect(exists(second)).resolves.toBe(false);
+    await expect(exists(third)).resolves.toBe(false);
     expect(await snapshot(home)).toEqual(before);
   });
 
@@ -238,7 +253,7 @@ describe("boundary", () => {
 
     expect(refusal.path).toBe(relativePath);
     expect(refusal.message).toContain(relativePath);
-    expect(opened.forWriting).toEqual([]);
+    expect(fs.openedForWriting).toEqual([]);
     // The path is never resolved against the current directory.
     await expect(exists(resolve(process.cwd(), relativePath))).resolves.toBe(false);
     await expect(exists(resolve(process.cwd(), "relative-store-test"))).resolves.toBe(false);
@@ -257,7 +272,7 @@ describe("boundary", () => {
     expect(refusal.message).toMatch(/twice/i);
     await expect(exists(twice)).resolves.toBe(false);
     expect(await snapshot(home)).toEqual(before);
-    expect(opened.forWriting).toEqual([]);
+    expect(fs.openedForWriting).toEqual([]);
   });
 
   it.skipIf(isRoot)("T-STO-14 — a destination directory that is not writable", async () => {
@@ -270,7 +285,7 @@ describe("boundary", () => {
     expect(refusal.refusal).toBe("not-writable");
     expect(refusal.message).toContain(locked);
     await expect(entriesOf(locked)).resolves.toEqual([]);
-    expect(opened.forWriting).toEqual([]);
+    expect(fs.openedForWriting).toEqual([]);
   });
 });
 
