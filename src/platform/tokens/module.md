@@ -93,6 +93,20 @@ Changes that require **only this module** to change:
 - **The estimator is allowed to be wrong.** FR-29 gives the import a share of the window, not the
   whole of it, so the design already tolerates a margin of error. No caller may treat the number as
   exact.
+- **The margin is stated, and it is what T-TOK-7 asserts.** Measured against a reference count
+  produced by an exact encoder over the whole text:
+  - `gpt` — never below the reference, and at most **10%** above it. The counter is a monotone
+    envelope of the encoder, so it errs high and never low.
+  - `claude` and `generic` — within **25%** for predominantly ASCII text, which is what a coding
+    session carries: English prose, code, tool outcome lines, JSON. Within a **factor of two** for
+    emoji-dense or non-Latin text. There is no public JavaScript tokenizer for the Claude family,
+    so both families count with the same character-ratio heuristic.
+  - Estimating a text in pieces and estimating the whole of it at once differ by at most **one
+    token per piece** (T-TOK-12). That is what lets a caller add up the cost of the parts instead
+    of re-estimating the whole on every drop.
+  - Past the first **256 kB** of a single string the exact counter gives way to the heuristic, so
+    the `gpt` margin is a claim about text below that size. It costs one encoder call per
+    character, and no target's context window is within two orders of magnitude of that much text.
 
 ## Test Specification
 

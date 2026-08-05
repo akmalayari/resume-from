@@ -91,6 +91,15 @@ module's `index.js`:
 Everything else takes its collaborators **by injection** and imports types only. A leaf never
 constructs another module: `src/import/landing/` receives a `FileCommitter`, it does not build one.
 
+**Every module with behaviour ships an `index.ts`**, and it is the module's only entry point: it
+re-exports the module's types from `contract.js` and its factory functions from wherever they are
+implemented. A consumer allowed to construct a collaborator imports `index.js` and nothing deeper —
+so `estimator.ts`, `rules.ts`, `loader.ts` and their siblings stay private to their folder.
+
+A module with **no** behaviour has no `index.ts`, because there is nothing to construct.
+`src/session/` is the only such module: it is types and invariants, and its consumers import
+`contract.js` directly.
+
 So the complete rule for a cross-module import specifier:
 
 | Ends in | Who may write it |

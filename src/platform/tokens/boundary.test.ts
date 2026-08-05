@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { basename, join, relative, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -11,6 +11,10 @@ const sources = readdirSync(MODULE_DIR)
   .map((name) => ({ name, text: readFileSync(join(MODULE_DIR, name), "utf8") }));
 
 const isTest = (name: string): boolean => name.endsWith(".test.ts");
+
+/** The file with its comments removed: what it declares, not what it says about itself. */
+const codeOf = (text: string): string =>
+  text.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
 
 /** Every module specifier the file imports from or re-exports from. */
 const specifiersOf = (text: string): string[] => {
@@ -30,7 +34,11 @@ describe("T-TOK-8: the interface hides the implementation", () => {
   });
 
   it("exports only EstimatorFamily, TokenEstimator and EstimatorFactory", () => {
-    const exported = [...(contract?.text ?? "").matchAll(/^export\s+(?:type|interface|const|function|class)\s+(\w+)/gm)]
+    const exported = [
+      ...(contract?.text ?? "").matchAll(
+        /^export\s+(?:type|interface|const|function|class)\s+(\w+)/gm,
+      ),
+    ]
       .map((match) => match[1])
       .sort();
 
@@ -43,10 +51,14 @@ describe("T-TOK-8: the interface hides the implementation", () => {
   });
 
   it("lets no tokenizer library type escape the module", () => {
-    const reexports = sources.filter((file) => /export\s[^;]*\bfrom\s*["'][^"']*gpt-tokenizer/.test(file.text));
+    const reexports = sources.filter((file) =>
+      /export\s[^;]*\bfrom\s*["'][^"']*gpt-tokenizer/.test(file.text),
+    );
     expect(reexports.map((file) => file.name)).toEqual([]);
 
-    const importers = sources.filter((file) => specifiersOf(file.text).some((s) => s.includes("gpt-tokenizer")));
+    const importers = sources.filter((file) =>
+      specifiersOf(file.text).some((s) => s.includes("gpt-tokenizer")),
+    );
     expect(importers.map((file) => file.name)).toEqual(["estimator.ts"]);
   });
 });
@@ -79,13 +91,20 @@ describe("T-TOK-11: the module knows nothing about sessions", () => {
     }
   });
 
-  it.each(sources.filter((file) => !isTest(file.name)))("$name has no signature mentioning a turn or a session", ({ text }) => {
-    expect(text).not.toMatch(/\bturns?\b/i);
-    expect(text).not.toMatch(/\bsessions?\b/i);
-  });
+  it.each(sources.filter((file) => !isTest(file.name)))(
+    "$name has no signature mentioning a turn or a session",
+    ({ text }) => {
+      const code = codeOf(text);
+      expect(code).not.toMatch(/\bturns?\b/i);
+      expect(code).not.toMatch(/\bsessions?\b/i);
+    },
+  );
 
   it("keeps its tests beside the code", () => {
     const tests = sources.filter((file) => isTest(file.name));
-    expect(tests.map((file) => basename(file.name)).sort()).toEqual(["boundary.test.ts", "estimator.test.ts"]);
+    expect(tests.map((file) => basename(file.name)).sort()).toEqual([
+      "boundary.test.ts",
+      "estimator.test.ts",
+    ]);
   });
 });

@@ -18,12 +18,14 @@ const CODE_BLOCK =
   "  }\n\n" +
   "  return fetchToken().then((t) => store.write(t));\n}\n";
 
-const EMOJI_LINE = "\u{1F600}\u{1F389}\u{1F680}\u{1F525}\u{1F4A1}\u{1F4E6}\u{1F9EA}\u{1F440}\u{1F41B}\u{1F527}";
+const EMOJI_LINE =
+  "\u{1F600}\u{1F389}\u{1F680}\u{1F525}\u{1F4A1}\u{1F4E6}\u{1F9EA}\u{1F440}\u{1F41B}\u{1F527}";
 const CJK = "認証トークンの更新が動作するようにしてください。";
 const CYRILLIC = "Обновление токена не сохраняется на диск.";
 const TOOL_OUTCOME_LINE =
   "Grep('refreshToken', 'src/') -> 7 matches in 3 files (content dropped: imported session, may be stale)";
-const JSON_LINE = '{"role":"assistant","content":[{"type":"text","text":"hello"}],"usage":{"input_tokens":12}}';
+const JSON_LINE =
+  '{"role":"assistant","content":[{"type":"text","text":"hello"}],"usage":{"input_tokens":12}}';
 const PROSE_50 = "the quick brown fox jumps over the lazy dog. ".repeat(50);
 const PROSE_100KB = "the quick brown fox jumps over the lazy dog. ".repeat(2300);
 
@@ -60,7 +62,7 @@ const CORPUS: { name: string; text: string; reference: number; script: "ascii" |
 /** The documented margins of module.md, as numbers. */
 const MARGIN = {
   /** The gpt estimate counts a monotone envelope: never under the reference, at most this far over. */
-  gptOver: 0.15,
+  gptOver: 0.1,
   /** The character heuristic on the text a session actually carries. */
   heuristicAscii: 0.25,
   /** The character heuristic on emoji-dense or non-Latin text. */
@@ -74,6 +76,55 @@ const TEXTS: [name: string, text: string][] = [
   ["emoji line", EMOJI_LINE],
   ["100 kB of prose", PROSE_100KB],
 ];
+
+/** The pieces the random monotonicity walk appends: whitespace runs, scripts, emoji, word stems. */
+const ADVERSARIAL = [
+  "a",
+  " ",
+  "  ",
+  "\n",
+  EMOJI_LINE,
+  "日",
+  "\t",
+  "z",
+  "!",
+  "  \n  ",
+  "def ",
+  "()",
+  "本",
+  "語",
+  "\r\n",
+  "    ",
+  "'",
+  "```",
+  "élan",
+  "the ",
+  "x",
+  "Обн",
+  "اجعل",
+  "refre",
+  "s",
+  "persist",
+  " ",
+  "\uD800",
+  "…",
+  "→",
+  "\v",
+  "\f",
+  "0123456789",
+  "-".repeat(70),
+];
+
+/** xorshift32 — a repeatable walk, so a failure names the text that broke it. */
+const seededRandom = (seed: number): ((bound: number) => number) => {
+  let state = seed;
+  return (bound) => {
+    state ^= state << 13;
+    state ^= state >>> 17;
+    state ^= state << 5;
+    return Math.abs(state) % bound;
+  };
+};
 
 /** 20 steps of appended text, ending far longer than it started. */
 const APPEND_STEPS: string[] = [
@@ -145,6 +196,22 @@ describe.each(FAMILIES)("estimator for the %s family", (family) => {
       previous = count;
     }
   });
+
+  it("T-TOK-4: the estimate is monotone over random appends", () => {
+    // Encoding dips where tokens merge, and the dips hide in text no fixed table would think
+    // to write down. The sequence is seeded, so a failure here is reproducible.
+    const random = seededRandom(0x2f6e2b1);
+    for (let trial = 0; trial < 40; trial++) {
+      let text = "";
+      let previous = 0;
+      for (let step = 0; step < 60; step++) {
+        text += ADVERSARIAL[random(ADVERSARIAL.length)];
+        const count = estimator.estimate(text);
+        expect(count, `after ${JSON.stringify(text)}`).toBeGreaterThanOrEqual(previous);
+        previous = count;
+      }
+    }
+  }, 30_000);
 });
 
 describe("the estimator factory", () => {
@@ -209,17 +276,21 @@ describe("boundary behaviour", () => {
     ["a 10 MB string with no separators", "x".repeat(10_000_000)],
   ];
 
-  it.each(HOSTILE)("T-TOK-9: %s never throws", (_name, text) => {
-    for (const family of FAMILIES) {
-      const estimator = estimatorFactory.forFamily(family);
-      let count = -1;
-      expect(() => {
-        count = estimator.estimate(text);
-      }).not.toThrow();
-      expect(Number.isInteger(count)).toBe(true);
-      expect(count).toBeGreaterThanOrEqual(0);
-    }
-  }, 60_000);
+  it.each(HOSTILE)(
+    "T-TOK-9: %s never throws",
+    (_name, text) => {
+      for (const family of FAMILIES) {
+        const estimator = estimatorFactory.forFamily(family);
+        let count = -1;
+        expect(() => {
+          count = estimator.estimate(text);
+        }).not.toThrow();
+        expect(Number.isInteger(count)).toBe(true);
+        expect(count).toBeGreaterThanOrEqual(0);
+      }
+    },
+    60_000,
+  );
 
   it("T-TOK-10: a tokenizer failure falls back to the generic count", () => {
     const broken = createEstimatorFactory(() => {

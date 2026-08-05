@@ -45,6 +45,8 @@
 - ⚠️ **T-CFG-8 and T-CFG-14 contradict each other, and T-CFG-14 wins.** T-CFG-8 says "a repository-wide search ... no match in `src/import/`, `src/adapters/` or `src/host/`". T-CFG-14 says that after changing the default, "the whole test suite still passes **except the assertions that name the number**" — which only holds if assertions may name it. Both cannot be right. **Ruling: T-CFG-8 scans production sources only.** The property being protected is *the default lives in one place*, not *the digit 0.3 appears in one place*; and the strict reading would forbid `src/import/transfer/` from testing FR-30's own worked example (a 200k window giving a 60k budget), weakening the test of the requirement the number comes from. `src/platform/config/module.md`'s T-CFG-8 Scenario was corrected to match, with the rationale recorded there. *(I initially ruled the other way and was wrong; the module that found it argued the case and was right.)*
 - ⚠️ **The isolation rule made the composition root unimplementable.** `docs/tech-stack.md` said every cross-module import must end in `/contract.js`. But a contract declares types, not constructors, so `src/host/` could never call `createConfigLoader` — and `src/host/module.md` says the host is precisely the place that constructs implementations. **Fixed in `docs/tech-stack.md`**: `contract.js` is importable by anyone; `index.js` is importable by a parent from its own submodules, and by `src/host/` from any adapter or platform service; anything else still reaches into internals. Found by `src/platform/config/` before wave 1 hit it.
 
+- ⚠️ **Two agents wrote into `src/platform/tokens/` at once — orchestrator error.** I checked the folder mid-wave, saw only the scaffold-generated `contract.ts` timestamped two hours earlier while every other module was producing files, and concluded the agent had died. It had not; it was measuring tokenizer margins before writing. The retry I spawned added two `module.md` sections describing a different implementation, leaving the document stating two contradictory margins for one estimator. **Resolved**: retry stopped, original agent confirmed as sole writer, its measured margins kept, the retry's sections deleted rather than merged. *Lesson for any future run: file mtime is not liveness. A task that is thinking looks identical to a task that is dead, and the recovery from a wrong death-call is more expensive than waiting.*
+
 ## Implementation Steps
 
 ### Task 1: Project scaffold and contract type declarations
@@ -69,11 +71,11 @@
 - [x] run this module's full test set — all green before the task is complete
 
 ### Task 4 [Wave 0]: Implement src/platform/tokens/ (leaf)
-- [ ] read `src/platform/tokens/module.md` in full — it is the complete and only spec for this task
-- [ ] write the tests named in its Test Specification (T-TOK-*): Unit Tests and Boundary Tests (TDD — failing first is expected)
-- [ ] write the tests named in its Test Specification (T-TOK-*): Integration Contract Tests and Behavior Tests
-- [ ] implement the module per its Functional Responsibilities, Public Contract, and Constraints and Invariants, inside `src/platform/tokens/`, until all its tests pass
-- [ ] run this module's full test set — all green before the task is complete
+- [x] read `src/platform/tokens/module.md` in full — it is the complete and only spec for this task
+- [x] write the tests named in its Test Specification (T-TOK-*): Unit Tests and Boundary Tests (TDD — failing first is expected)
+- [x] write the tests named in its Test Specification (T-TOK-*): Integration Contract Tests and Behavior Tests
+- [x] implement the module per its Functional Responsibilities, Public Contract, and Constraints and Invariants, inside `src/platform/tokens/`, until all its tests pass
+- [x] run this module's full test set — all green before the task is complete
 
 ### Task 5 [Wave 0]: Implement src/platform/repo/ (leaf)
 - [x] read `src/platform/repo/module.md` in full — it is the complete and only spec for this task
