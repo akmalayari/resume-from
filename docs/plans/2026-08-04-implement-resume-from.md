@@ -34,16 +34,15 @@
   - T-CFG-15 (`src/platform/config/`) → `src/import/` as T-IMP-27
   - the end-to-end half of T-PLA-9 (`src/platform/`) → `src/` as T-ROO-22 — its collaborators are wave-1 *siblings*, so a parallel wave 1 would have broken too
   - the live acceptance scenario in `src/host/pi-extension/` (was T-PIX-19 and T-PIX-20) → already owned by the root as T-ROO-13; the module keeps the interaction tests against a stub pipeline
+
+- ⚠️ **The shared reference fixture had two homes and no owner.** `src/session/module.md` said it shipped the fixtures, `docs/tech-stack.md` put shared fixtures in `test/fixtures/`. Resolved to `test/fixtures/`, built in Task 1: every wave-0 task consumes it, so it cannot belong to one module. `src/session/` owns the invariants it must satisfy and asserts them.
+
 ## Findings during the build
 *Recorded as they were reported. Each is closed by the orchestrator, never by the module that found it.*
 
 - ⚠️ **`src/import/transfer/fixtures.ts` restates the configuration defaults.** `configOf(budgetShare = 0.3, pinnedRecentTurns = 5)` duplicates the two values whose only home is `src/platform/config/` (FR-30/Q-1, FR-32/Q-2). Found by `src/platform/config/`'s own T-CFG-8, which is the tripwire for exactly this. Fix at wave close: required parameters, or values deliberately unlike the defaults. **Also**: `configOf` returns an incomplete `ImportConfig`, missing `extraHomes` and `windowOverrides`.
 - ⚠️ **`src/import/preview/` imports `../transfer/fixtures.js` in its tests.** A cross-module specifier that does not end in `/contract.js` is a boundary violation under `docs/tech-stack.md`. Fix at wave close: preview builds its own fixture plans locally — it restates `TransferPlan`, so it needs nothing from transfer's folder.
 - ⚠️ **T-CFG-8 was narrowed to production sources to make it pass.** Its spec exempts no file. Sent back to full scope; it is expected to fail on the one match above until transfer is fixed, and that failing state is the honest one.
-
-## Design findings resolved before execution (continued)
-
-- ⚠️ **The shared reference fixture had two homes and no owner.** `src/session/module.md` said it shipped the fixtures, `docs/tech-stack.md` put shared fixtures in `test/fixtures/`. Resolved to `test/fixtures/`, built in Task 1: every wave-0 task consumes it, so it cannot belong to one module. `src/session/` owns the invariants it must satisfy and asserts them.
 
 ## Implementation Steps
 
@@ -62,11 +61,11 @@
 - [x] run this module's full test set — all green before the task is complete
 
 ### Task 3 [Wave 0]: Implement src/platform/store/ (leaf)
-- [ ] read `src/platform/store/module.md` in full — it is the complete and only spec for this task
-- [ ] write the tests named in its Test Specification (T-STO-*): Unit Tests and Boundary Tests (TDD — failing first is expected)
-- [ ] write the tests named in its Test Specification (T-STO-*): Integration Contract Tests and Behavior Tests
-- [ ] implement the module per its Functional Responsibilities, Public Contract, and Constraints and Invariants, inside `src/platform/store/`, until all its tests pass
-- [ ] run this module's full test set — all green before the task is complete
+- [x] read `src/platform/store/module.md` in full — it is the complete and only spec for this task
+- [x] write the tests named in its Test Specification (T-STO-*): Unit Tests and Boundary Tests (TDD — failing first is expected)
+- [x] write the tests named in its Test Specification (T-STO-*): Integration Contract Tests and Behavior Tests
+- [x] implement the module per its Functional Responsibilities, Public Contract, and Constraints and Invariants, inside `src/platform/store/`, until all its tests pass
+- [x] run this module's full test set — all green before the task is complete
 
 ### Task 4 [Wave 0]: Implement src/platform/tokens/ (leaf)
 - [ ] read `src/platform/tokens/module.md` in full — it is the complete and only spec for this task
