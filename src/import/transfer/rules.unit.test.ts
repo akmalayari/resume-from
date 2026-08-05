@@ -117,6 +117,18 @@ describe("T-TRA-3 every result body is dropped and marked", () => {
     expect(recordOf(plan, 1).outcomeLine.endsWith(MARKER)).toBe(true);
     expect(plan.bodiesDropped).toBe(2);
   });
+
+  test("a body the budget later dropped is still counted: step 2 removed it either way", () => {
+    const turns = [
+      toolTurn(0, "Read", "'a.ts'", `Read('a.ts') → ${"x".repeat(200)}`),
+      agentMessage(1, "x".repeat(100)),
+    ];
+
+    const plan = planOf(turns, 100, 1, 0);
+
+    expect(droppedIndexes(plan)).toEqual([0]);
+    expect(plan.bodiesDropped).toBe(1);
+  });
 });
 
 describe("T-TRA-4 tool names are not translated", () => {
@@ -134,7 +146,9 @@ describe("T-TRA-4 tool names are not translated", () => {
 
 describe("T-TRA-5 a mutating call is marked and carries no instruction to run", () => {
   test("the edit is a record of text, not something the target can execute", () => {
-    const turns = [toolTurn(0, "Edit", "'src/auth.ts'", "Edit('src/auth.ts') → 1 hunk", "mutating")];
+    const turns = [
+      toolTurn(0, "Edit", "'src/auth.ts'", "Edit('src/auth.ts') → 1 hunk", "mutating"),
+    ];
     const { target, config } = unlimited();
 
     const plan = rules.apply(sessionOf(turns), target, config, charEstimator);
@@ -320,6 +334,10 @@ describe("T-TRA-14 pinned content over budget blocks", () => {
     expect(plan.blockedReason).toContain("pinnedRecentTurns");
     expect(plan.drops).toEqual([]);
     expect(keptIndexes(plan)).toEqual([0]);
+    // The blocked plan reports the cost of everything it selected, so estimatedTokens
+    // still describes `turns` and can be read against budgetTokens.
+    expect(plan.estimatedTokens).toBe(planOf(turns, 1_000_000, 1, 5).estimatedTokens);
+    expect(plan.estimatedTokens).toBeGreaterThan(plan.budgetTokens);
   });
 });
 

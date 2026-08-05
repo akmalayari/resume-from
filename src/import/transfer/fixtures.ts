@@ -72,8 +72,19 @@ export function targetOf(windowTokens = 200_000, agent: AgentId = "codex"): Targ
   return { agent, home: `/homes/${agent}`, windowTokens };
 }
 
-export function configOf(budgetShare = 0.3, pinnedRecentTurns = 5): ImportConfig {
-  return { budgetShare, pinnedRecentTurns };
+/**
+ * The rules read exactly two settings (module.md restates `ImportConfig` as that subset).
+ *
+ * Both are required parameters on purpose. Giving them the real defaults (0.30 and 5) would
+ * restate values whose only home is `src/platform/config/`: when Q-1 or Q-2 is answered there,
+ * every test calling `configOf()` would silently keep testing the old number. That is exactly
+ * what T-CFG-8 exists to catch. Every caller already passes both explicitly.
+ *
+ * The two fields this module must never read are present and empty rather than cast away — a
+ * fixture that lies to the type system is a worse teacher than one that supplies the whole value.
+ */
+export function configOf(budgetShare: number, pinnedRecentTurns: number): ImportConfig {
+  return { budgetShare, pinnedRecentTurns, extraHomes: [], windowOverrides: [] };
 }
 
 /** Hangs fields the canonical vocabulary has no room for onto a value, the way a sloppy adapter would. */

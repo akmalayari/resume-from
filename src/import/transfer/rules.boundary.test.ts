@@ -116,7 +116,9 @@ describe("T-TRA-25 a tool call with no recorded outcome", () => {
 
 describe("T-TRA-26 an outcome that is many lines is reduced to one", () => {
   test("no line break survives into the outcome line", () => {
-    const turns = [toolTurn(0, "shell", "'ls -la'", "total 48\r\ndrwxr-xr-x  6 me\n-rw-r--r--  1 me")];
+    const turns = [
+      toolTurn(0, "shell", "'ls -la'", "total 48\r\ndrwxr-xr-x  6 me\n-rw-r--r--  1 me"),
+    ];
 
     const plan = planOf(turns, 1_000_000, 1, 5);
     const outcomeLine = plan.turns[0]?.toolCall?.outcomeLine ?? "";

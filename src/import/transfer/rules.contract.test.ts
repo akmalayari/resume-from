@@ -55,12 +55,7 @@ describe("T-TRA-16 the counts reconcile", () => {
     ({ size, windowTokens, brokenTail }) => {
       const session = mixedSession(size, brokenTail);
 
-      const plan = rules.apply(
-        session,
-        targetOf(windowTokens),
-        configOf(1, 5),
-        charEstimator,
-      );
+      const plan = rules.apply(session, targetOf(windowTokens), configOf(1, 5), charEstimator);
 
       const budgetDrops = plan.drops.filter((drop) => drop.reason === "budget").length;
       expect(plan.keptTurnCount).toBe(plan.turns.length);
@@ -79,12 +74,7 @@ describe("T-TRA-17 the plan fits the budget when it is not blocked", () => {
     ({ size, windowTokens, brokenTail }) => {
       const session = mixedSession(size, brokenTail);
 
-      const plan = rules.apply(
-        session,
-        targetOf(windowTokens),
-        configOf(1, 5),
-        charEstimator,
-      );
+      const plan = rules.apply(session, targetOf(windowTokens), configOf(1, 5), charEstimator);
 
       if (plan.blockedReason === null) {
         expect(plan.estimatedTokens).toBeLessThanOrEqual(plan.budgetTokens);

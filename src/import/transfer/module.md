@@ -365,7 +365,9 @@ is the largest and most detailed suite in the tree, because these rules are the 
 **T-TRA-2 — a tool call becomes a record**
 - Scenario: a `Read('src/auth.ts')` whose result was 400 lines.
 - Expected behavior: one turn of kind `"tool-call"` with `toolName` `Read`, `argumentsText`
-  `'src/auth.ts'`, and `outcomeLine` `Read('src/auth.ts') → 400 lines` (FR-23).
+  `'src/auth.ts'`, and `outcomeLine` opening with `Read('src/auth.ts') → 400 lines` (FR-23). The
+  outcome the source recorded is carried word for word; FR-25's marker is appended after it, so the
+  line reads in full only when no body was dropped. T-TRA-3 owns the marker.
 
 **T-TRA-3 — every result body is dropped and marked**
 - Scenario: a session whose tool results contain `SECRET-BODY-CONTENT`.
@@ -412,9 +414,11 @@ is the largest and most detailed suite in the tree, because these rules are the 
   order, and stops as soon as the plan fits (FR-31).
 
 **T-TRA-12 — a call and its result are never split**
-- Scenario: the budget cuts exactly between a call and its result.
-- Expected behavior: both are dropped, or both are kept. `drops` never contains one without the other
-  (FR-34).
+- Scenario: the budget cuts exactly at a tool call. In the canonical vocabulary the call and its
+  outcome are one turn, so the cut cannot fall between them — the shape of `ToolCallRecord` is what
+  enforces FR-34, and the test states it.
+- Expected behavior: the turn is dropped whole or kept whole. A kept record never has its outcome
+  stripped, and `drops` never names half of one (FR-34).
 
 **T-TRA-13 — a broken tail is dropped**
 - Scenario: a session whose last tool call has no result, as an agent that crashed would leave.

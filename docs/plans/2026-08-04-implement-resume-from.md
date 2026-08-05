@@ -90,11 +90,11 @@
 - [x] run this module's full test set — all green before the task is complete
 
 ### Task 7 [Wave 0]: Implement src/import/transfer/ (leaf)
-- [ ] read `src/import/transfer/module.md` in full — it is the complete and only spec for this task
-- [ ] write the tests named in its Test Specification (T-TRA-*): Unit Tests and Boundary Tests (TDD — failing first is expected)
-- [ ] write the tests named in its Test Specification (T-TRA-*): Integration Contract Tests and Behavior Tests
-- [ ] implement the module per its Functional Responsibilities, Public Contract, and Constraints and Invariants, inside `src/import/transfer/`, until all its tests pass
-- [ ] run this module's full test set — all green before the task is complete
+- [x] read `src/import/transfer/module.md` in full — it is the complete and only spec for this task
+- [x] write the tests named in its Test Specification (T-TRA-*): Unit Tests and Boundary Tests (TDD — failing first is expected)
+- [x] write the tests named in its Test Specification (T-TRA-*): Integration Contract Tests and Behavior Tests
+- [x] implement the module per its Functional Responsibilities, Public Contract, and Constraints and Invariants, inside `src/import/transfer/`, until all its tests pass
+- [x] run this module's full test set — all green before the task is complete
 
 ### Task 8 [Wave 0]: Implement src/import/discovery/ (leaf)
 - [ ] read `src/import/discovery/module.md` in full — it is the complete and only spec for this task
