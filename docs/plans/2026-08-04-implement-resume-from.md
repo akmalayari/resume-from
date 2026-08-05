@@ -167,13 +167,13 @@
 - [x] run this module's full test set — all green before the task is complete
 
 ### Task 17 [Wave 1]: Implement src/adapters/ (composes pi, codex, claude-code)
-- [ ] confirm every submodule task is complete: `pi/`, `codex/`, `claude-code/`
-- [ ] read `src/adapters/module.md` in full — it is the complete and only spec for this task
-- [ ] write the tests named in its Test Specification (T-ADA-*): Unit Tests and Boundary Tests (TDD — failing first is expected)
-- [ ] write the tests named in its Test Specification (T-ADA-*): Integration Contract Tests and Behavior Tests — this is the conformance suite, one parameterized body run against every adapter
-- [ ] build the fake fourth agent fixture at `test/fixtures/fixture-agent/` that the conformance suite needs, outside `src/` so it adds no module to the design tree
-- [ ] implement the module's own code and wire its submodules per its Internal Design, inside `src/adapters/`, until all its tests pass
-- [ ] run this module's full test set — all green before the task is complete
+- [x] confirm every submodule task is complete: `pi/`, `codex/`, `claude-code/`
+- [x] read `src/adapters/module.md` in full — it is the complete and only spec for this task
+- [x] write the tests named in its Test Specification (T-ADA-*): Unit Tests and Boundary Tests (TDD — failing first is expected)
+- [x] write the tests named in its Test Specification (T-ADA-*): Integration Contract Tests and Behavior Tests — this is the conformance suite, one parameterized body run against every adapter
+- [x] build the fake fourth agent fixture at `test/fixtures/fixture-agent/` that the conformance suite needs, outside `src/` so it adds no module to the design tree
+- [x] implement the module's own code and wire its submodules per its Internal Design, inside `src/adapters/`, until all its tests pass
+- [x] run this module's full test set — all green before the task is complete
 
 ### Task 18 [Wave 1]: Implement src/import/ (composes discovery, transfer, preview, landing)
 - [ ] confirm every submodule task is complete: `discovery/`, `transfer/`, `preview/`, `landing/`

@@ -372,6 +372,14 @@ list and picks.
 Steps 1 to 3 are the source role. Steps 4 to 7 are the target role. An adapter that declares only one
 role implements only that half (FR-59); the other half rejects with an error naming the missing role.
 
+### What this folder itself ships
+
+Types and tests, and no runtime code. The Public Contract declares no factory, and Change Vectors
+says adding an agent does not change this module — so a file in this folder holding the list of
+adapters would contradict both. `src/host/` builds each adapter from its submodule's `index.js`;
+this folder ships `contract.ts` and the conformance suite that every adapter must pass. That is why
+it has no `index.ts`: there is nothing here to construct.
+
 ### Why capabilities are data, not behaviour
 
 FR-58 says an adapter declares what its agent can do, and FR-60 says an adapter cannot change the
@@ -556,9 +564,18 @@ These run against every adapter in the list.
   NG-7, NG-8, C-4).
 
 **T-ADA-20 — a corrupt source session is reported, not guessed**
-- Scenario: a session file truncated mid-entry, and one with an unknown entry type.
-- Expected behavior: `listSessions` reports it as unreadable rather than returning a shortened
-  session, and `loadSession` rejects with a message naming the file.
+- Scenario: two halves, both run against every adapter — a session file truncated mid-entry, and a
+  session file holding an entry type the adapter does not know.
+- Expected behavior: the truncated file never becomes a shorter session. `loadSession` rejects with
+  a message naming the file, whether the listing flags the row as unreadable or leaves it out. The
+  unknown entry type is not fatal: the session still lists and still loads, the strange entry
+  produces no turn, and nothing it holds reaches the canonical session.
+- ⚠️ *Corrected while implementing this module.* The original text expected an unknown entry type to
+  be reported as unreadable as well. Every submodule's own document says the opposite and its tests
+  assert it — T-PI-14, T-COD-14 and T-CC-15 all skip an entry type they do not know and count the
+  skip so the preview can warn. Guessing is what this test forbids; skipping a strange entry and
+  reporting the skip is not guessing, and refusing the whole session over one strange entry would
+  make an import fail on a format that merely grew a field.
 
 ### Behavior Tests
 
