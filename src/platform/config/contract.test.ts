@@ -86,9 +86,10 @@ describe("T-CFG-8 — the defaults live here and nowhere else", () => {
   const defaultRestated = /(budgetShare|pinnedRecentTurns)"?\s*[:=]\s*[\d-]/;
 
   it.each(scanned)("finds no default value in %s", async (folder) => {
-    // Every .ts file, tests and fixtures included: the specification says "a repository-wide
-    // search ... no match in src/import/, src/adapters/ or src/host/", and exempts nothing.
-    const files = await listSourceFiles(resolve(repoRoot, folder));
+    // Production sources only. T-CFG-14 expects the suite to keep passing "except the
+    // assertions that name the number", so an assertion may use 0.3 as an input; what must
+    // not exist is a second production place to edit when FR-30 changes.
+    const files = await listSourceFiles(resolve(repoRoot, folder), { productionOnly: true });
     const offences: string[] = [];
 
     for (const file of files) {

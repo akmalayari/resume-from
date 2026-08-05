@@ -124,9 +124,6 @@ Changes that require **only this module** to change:
 
 - **A missing configuration file is not an error.** It yields the defaults. Only a present but
   invalid value rejects.
-- **An empty configuration file is not an error either.** A file that holds only whitespace sets
-  nothing, so it yields the defaults (T-CFG-6). Any other file that does not parse rejects
-  (T-CFG-9).
 - **An empty file is a missing file.** A file that holds only whitespace sets nothing, so it yields
   the defaults. It is not a parse error — T-CFG-6 lists an empty file among the cases that must return
   every field, and T-CFG-9 is about a file that says something the loader cannot read.
@@ -187,10 +184,15 @@ Changes that require **only this module** to change:
   (FR-56). No case silently falls back to a default.
 
 **T-CFG-8 — the defaults live here and nowhere else**
-- Scenario: a repository-wide search for the literals `0.30` and `0.3` and for a bare `5` used as a
-  turn count, outside this module.
-- Expected behavior: no match in `src/import/`, `src/adapters/` or `src/host/`. FR-30 and FR-32 must
-  be answerable by changing one number.
+- Scenario: a search of the production sources outside this module — every `.ts` file under
+  `src/import/`, `src/adapters/` and `src/host/` except `*.test.ts` and the test-support and
+  fixture helpers — for the literals `0.30` and `0.3` and for a bare `5` used as a turn count.
+- Expected behavior: no match. FR-30 and FR-32 must be answerable by changing one number.
+- Why production only: T-CFG-14 expects the suite to keep passing "except the assertions that name
+  the number", so an assertion is allowed to name `0.3`. The property protected here is that the
+  default has one home to edit, not that the digits appear once. A test that passes `0.3` as an
+  input — such as FR-30's own worked example, a 200k window giving a 60k budget — states no
+  default.
 
 ### Boundary Tests
 

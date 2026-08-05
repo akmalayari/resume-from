@@ -83,11 +83,11 @@
 - [x] run this module's full test set — all green before the task is complete
 
 ### Task 6 [Wave 0]: Implement src/platform/config/ (leaf)
-- [ ] read `src/platform/config/module.md` in full — it is the complete and only spec for this task
-- [ ] write the tests named in its Test Specification (T-CFG-*): Unit Tests and Boundary Tests (TDD — failing first is expected)
-- [ ] write the tests named in its Test Specification (T-CFG-*): Integration Contract Tests and Behavior Tests
-- [ ] implement the module per its Functional Responsibilities, Public Contract, and Constraints and Invariants, inside `src/platform/config/`, until all its tests pass
-- [ ] run this module's full test set — all green before the task is complete
+- [x] read `src/platform/config/module.md` in full — it is the complete and only spec for this task
+- [x] write the tests named in its Test Specification (T-CFG-*): Unit Tests and Boundary Tests (TDD — failing first is expected)
+- [x] write the tests named in its Test Specification (T-CFG-*): Integration Contract Tests and Behavior Tests
+- [x] implement the module per its Functional Responsibilities, Public Contract, and Constraints and Invariants, inside `src/platform/config/`, until all its tests pass
+- [x] run this module's full test set — all green before the task is complete
 
 ### Task 7 [Wave 0]: Implement src/import/transfer/ (leaf)
 - [ ] read `src/import/transfer/module.md` in full — it is the complete and only spec for this task

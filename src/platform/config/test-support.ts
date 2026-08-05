@@ -85,9 +85,9 @@ function isTestCode(name: string): boolean {
 }
 
 /**
- * Every .ts file under root. Test code is included unless `productionOnly` is set —
- * T-CFG-8 searches the repository as written, while T-CFG-14 counts the places a
- * production value can be edited.
+ * Every .ts file under root. `productionOnly` drops tests, fixtures and test support:
+ * T-CFG-8 and T-CFG-14 both count the places a production value can be edited, and an
+ * assertion that names the value is not one of them.
  */
 export async function listSourceFiles(
   root: string,
