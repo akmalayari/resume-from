@@ -1,0 +1,211 @@
+# Implement resume-from
+
+## Overview
+- `resume-from` continues a coding session in a different agent, or in a different profile of the same agent. The user types `/resume-from` in the agent they want to land in, picks a session another agent already wrote, confirms a preview, and keeps working. Nothing is explained twice. All nine agent-to-agent directions work, including moving a session between two homes of one agent.
+- Design tree: `src/` — 19 modules in 3 waves, bottom-up by height. Wave 0 is 14 leaf modules, wave 1 is 4 parent modules, wave 2 is the root.
+- Each task implements exactly one module; its complete specification is that module's `module.md`.
+- The design tree was validated defect-free before this plan was written, and reviewed for coupling balance: no integration exceeds its threshold.
+
+## Development Approach
+- **Testing approach**: TDD — for every module, write the tests from its Test Specification first, then implement until they pass
+- **Tech stack**: defined in `docs/tech-stack.md` — read it before any task; every task uses it, no per-task deviations. New stack decisions made during implementation are recorded there immediately (it is the normative home; this plan does not restate it)
+- Each task's spec is exactly two files — the module's `module.md` and `docs/tech-stack.md`; needing any other file to implement the module is a design defect: stop and report it (⚠️), do not improvise
+- Implement the module's code inside its own folder; never reach into another module's folder or internals — consumers code against the counterpart contracts restated in their own `module.md`
+- Tasks in the same wave are independent: a parallel executor may run them concurrently (e.g. one subagent per task, isolated worktrees); a sequential executor completes them in task order — both are correct
+- Never start a parent module's task before all its submodules' tasks are complete
+- **CRITICAL: every task implements the tests named in its `module.md`'s Test Specification** — all four subsections (Unit, Integration Contract, Boundary, Behavior); they are deliverables, not suggestions
+- **CRITICAL: all tests must pass before the task is complete** — no exceptions
+- **CRITICAL: if the design proves wrong or incomplete during implementation, update the `module.md` first** (it is validated on write), mark the finding with ⚠️ in this plan, then implement to the updated design — never silently diverge from the documents
+- Tests a `module.md` marks **live** need an installed agent and a throwaway home. If the agent is not available, mark the task ⚠️ with the exact tests not run — never quietly skip them and never weaken them to pass
+- Never write into a real agent home. Every test uses a temporary directory or a throwaway configuration directory (C-3)
+
+## Progress Tracking
+- Mark completed items with `[x]` immediately when done
+- Add newly discovered tasks with ➕ prefix
+- Document issues/blockers with ⚠️ prefix
+- Update this plan if implementation deviates from the design tree — and update the affected `module.md`, which is the normative record
+
+## Design findings resolved before execution
+*Found while computing the waves, fixed in the module documents, recorded here so the change is traceable.*
+
+- ⚠️ **Five Behavior Tests named collaborators from a later wave.** A module cannot own a test of collaborators that do not exist when it is implemented, and the "all tests pass" rule has no exceptions — so the tests moved to the module that composes their collaborators, not the rule.
+  - T-SES-16 (`src/session/`) → `src/import/` as T-IMP-25
+  - T-TOK-13 (`src/platform/tokens/`) → `src/import/` as T-IMP-26
+  - T-CFG-15 (`src/platform/config/`) → `src/import/` as T-IMP-27
+  - the end-to-end half of T-PLA-9 (`src/platform/`) → `src/` as T-ROO-22 — its collaborators are wave-1 *siblings*, so a parallel wave 1 would have broken too
+  - the live acceptance scenario in `src/host/pi-extension/` (was T-PIX-19 and T-PIX-20) → already owned by the root as T-ROO-13; the module keeps the interaction tests against a stub pipeline
+- ⚠️ **The shared reference fixture had two homes and no owner.** `src/session/module.md` said it shipped the fixtures, `docs/tech-stack.md` put shared fixtures in `test/fixtures/`. Resolved to `test/fixtures/`, built in Task 1: every wave-0 task consumes it, so it cannot belong to one module. `src/session/` owns the invariants it must satisfy and asserts them.
+
+## Implementation Steps
+
+### Task 1: Project scaffold and contract type declarations
+- [ ] read `docs/tech-stack.md` in full — it is the normative record of every technology decision
+- [ ] create the package: `package.json` (ESM, pnpm, a `bin` entry for the command binary and a library entry point), strict `tsconfig.json`, Vitest config, Biome config
+- [ ] transcribe every module's `Public Contract` section into a `contract.ts` in that module's own folder, verbatim from its `module.md` — declarations only, no behaviour, no defaults; a restated block in a document becomes an import in code, never a second declaration. **18 files, not 19**: `src/platform/module.md` publishes no types of its own by design
+- [ ] build the canonical reference session in `test/fixtures/`, outside `src/` so it adds no module to the design tree — it is data conforming to the contract files just emitted, and it must satisfy every property `src/session/module.md`'s T-SES-8 lists. Every wave-0 task consumes it, so it cannot belong to any one module
+- [ ] verify the whole tree type-checks with no implementation present — this is what makes the 14 wave-0 tasks independent
+
+### Task 2 [Wave 0]: Implement src/session/ (leaf)
+- [ ] read `src/session/module.md` in full — it is the complete and only spec for this task
+- [ ] write the tests named in its Test Specification (T-SES-*): Unit Tests and Boundary Tests (TDD — failing first is expected)
+- [ ] write the tests named in its Test Specification (T-SES-*): Integration Contract Tests and Behavior Tests
+- [ ] implement the module per its Functional Responsibilities, Public Contract, and Constraints and Invariants, inside `src/session/`, until all its tests pass — the reference fixtures it asserts against were built in Task 1 and live in `test/fixtures/`; this module owns the invariants, not the files
+- [ ] run this module's full test set — all green before the task is complete
+
+### Task 3 [Wave 0]: Implement src/platform/store/ (leaf)
+- [ ] read `src/platform/store/module.md` in full — it is the complete and only spec for this task
+- [ ] write the tests named in its Test Specification (T-STO-*): Unit Tests and Boundary Tests (TDD — failing first is expected)
+- [ ] write the tests named in its Test Specification (T-STO-*): Integration Contract Tests and Behavior Tests
+- [ ] implement the module per its Functional Responsibilities, Public Contract, and Constraints and Invariants, inside `src/platform/store/`, until all its tests pass
+- [ ] run this module's full test set — all green before the task is complete
+
+### Task 4 [Wave 0]: Implement src/platform/tokens/ (leaf)
+- [ ] read `src/platform/tokens/module.md` in full — it is the complete and only spec for this task
+- [ ] write the tests named in its Test Specification (T-TOK-*): Unit Tests and Boundary Tests (TDD — failing first is expected)
+- [ ] write the tests named in its Test Specification (T-TOK-*): Integration Contract Tests and Behavior Tests
+- [ ] implement the module per its Functional Responsibilities, Public Contract, and Constraints and Invariants, inside `src/platform/tokens/`, until all its tests pass
+- [ ] record the chosen tokenizer library in `docs/tech-stack.md` — it is listed there as open
+- [ ] run this module's full test set — all green before the task is complete
+
+### Task 5 [Wave 0]: Implement src/platform/repo/ (leaf)
+- [ ] read `src/platform/repo/module.md` in full — it is the complete and only spec for this task
+- [ ] write the tests named in its Test Specification (T-REP-*): Unit Tests and Boundary Tests (TDD — failing first is expected)
+- [ ] write the tests named in its Test Specification (T-REP-*): Integration Contract Tests and Behavior Tests
+- [ ] implement the module per its Functional Responsibilities, Public Contract, and Constraints and Invariants, inside `src/platform/repo/`, until all its tests pass
+- [ ] record the chosen git access method in `docs/tech-stack.md` — it is listed there as open
+- [ ] run this module's full test set — all green before the task is complete
+
+### Task 6 [Wave 0]: Implement src/platform/config/ (leaf)
+- [ ] read `src/platform/config/module.md` in full — it is the complete and only spec for this task
+- [ ] write the tests named in its Test Specification (T-CFG-*): Unit Tests and Boundary Tests (TDD — failing first is expected)
+- [ ] write the tests named in its Test Specification (T-CFG-*): Integration Contract Tests and Behavior Tests
+- [ ] implement the module per its Functional Responsibilities, Public Contract, and Constraints and Invariants, inside `src/platform/config/`, until all its tests pass
+- [ ] run this module's full test set — all green before the task is complete
+
+### Task 7 [Wave 0]: Implement src/import/transfer/ (leaf)
+- [ ] read `src/import/transfer/module.md` in full — it is the complete and only spec for this task
+- [ ] write the tests named in its Test Specification (T-TRA-*): Unit Tests and Boundary Tests (TDD — failing first is expected)
+- [ ] write the tests named in its Test Specification (T-TRA-*): Integration Contract Tests and Behavior Tests
+- [ ] implement the module per its Functional Responsibilities, Public Contract, and Constraints and Invariants, inside `src/import/transfer/`, until all its tests pass
+- [ ] run this module's full test set — all green before the task is complete
+
+### Task 8 [Wave 0]: Implement src/import/discovery/ (leaf)
+- [ ] read `src/import/discovery/module.md` in full — it is the complete and only spec for this task
+- [ ] write the tests named in its Test Specification (T-DIS-*): Unit Tests and Boundary Tests (TDD — failing first is expected)
+- [ ] write the tests named in its Test Specification (T-DIS-*): Integration Contract Tests and Behavior Tests
+- [ ] implement the module per its Functional Responsibilities, Public Contract, and Constraints and Invariants, inside `src/import/discovery/`, until all its tests pass
+- [ ] run this module's full test set — all green before the task is complete
+
+### Task 9 [Wave 0]: Implement src/import/preview/ (leaf)
+- [ ] read `src/import/preview/module.md` in full — it is the complete and only spec for this task
+- [ ] write the tests named in its Test Specification (T-PRE-*): Unit Tests and Boundary Tests (TDD — failing first is expected)
+- [ ] write the tests named in its Test Specification (T-PRE-*): Integration Contract Tests and Behavior Tests
+- [ ] implement the module per its Functional Responsibilities, Public Contract, and Constraints and Invariants, inside `src/import/preview/`, until all its tests pass
+- [ ] run this module's full test set — all green before the task is complete
+
+### Task 10 [Wave 0]: Implement src/import/landing/ (leaf)
+- [ ] read `src/import/landing/module.md` in full — it is the complete and only spec for this task
+- [ ] write the tests named in its Test Specification (T-LAN-*): Unit Tests and Boundary Tests (TDD — failing first is expected)
+- [ ] write the tests named in its Test Specification (T-LAN-*): Integration Contract Tests and Behavior Tests
+- [ ] implement the module per its Functional Responsibilities, Public Contract, and Constraints and Invariants, inside `src/import/landing/`, until all its tests pass
+- [ ] run this module's full test set — all green before the task is complete
+
+### Task 11 [Wave 0]: Implement src/adapters/pi/ (leaf)
+- [ ] read `src/adapters/pi/module.md` in full — it is the complete and only spec for this task
+- [ ] write the tests named in its Test Specification (T-PI-*): Unit Tests and Boundary Tests (TDD — failing first is expected)
+- [ ] write the tests named in its Test Specification (T-PI-*): Integration Contract Tests and Behavior Tests
+- [ ] implement the module per its Functional Responsibilities, Public Contract, and Constraints and Invariants, inside `src/adapters/pi/`, until all its tests pass
+- [ ] run the tests marked **live** against an installed Pi and a throwaway session directory — they confirm the default home, the entry names and the marker entry type, which this design refuses to assume; if Pi is unavailable, mark ⚠️ naming the exact tests not run
+- [ ] run this module's full test set — all green before the task is complete
+
+### Task 12 [Wave 0]: Implement src/adapters/codex/ (leaf)
+- [ ] read `src/adapters/codex/module.md` in full — it is the complete and only spec for this task
+- [ ] write the tests named in its Test Specification (T-COD-*): Unit Tests and Boundary Tests (TDD — failing first is expected)
+- [ ] write the tests named in its Test Specification (T-COD-*): Integration Contract Tests and Behavior Tests
+- [ ] implement the module per its Functional Responsibilities, Public Contract, and Constraints and Invariants, inside `src/adapters/codex/`, until all its tests pass
+- [ ] run the tests marked **live** against an installed codex-cli and a throwaway home — C-6 means a silent write proves nothing, so the read-back tests are the evidence; if Codex is unavailable, mark ⚠️ naming the exact tests not run
+- [ ] run this module's full test set — all green before the task is complete
+
+### Task 13 [Wave 0]: Implement src/adapters/claude-code/ (leaf)
+- [ ] read `src/adapters/claude-code/module.md` in full — it is the complete and only spec for this task
+- [ ] write the tests named in its Test Specification (T-CC-*): Unit Tests and Boundary Tests (TDD — failing first is expected)
+- [ ] write the tests named in its Test Specification (T-CC-*): Integration Contract Tests and Behavior Tests
+- [ ] implement the module per its Functional Responsibilities, Public Contract, and Constraints and Invariants, inside `src/adapters/claude-code/`, until all its tests pass
+- [ ] run the tests marked **live** against an installed Claude Code and a **throwaway** `CLAUDE_CONFIG_DIR` — never a real store (C-3); if Claude Code is unavailable, mark ⚠️ naming the exact tests not run
+- [ ] run this module's full test set — all green before the task is complete
+
+### Task 14 [Wave 0]: Implement src/host/cli/ (leaf)
+- [ ] read `src/host/cli/module.md` in full — it is the complete and only spec for this task
+- [ ] write the tests named in its Test Specification (T-CLI-*): Unit Tests and Boundary Tests (TDD — failing first is expected)
+- [ ] write the tests named in its Test Specification (T-CLI-*): Integration Contract Tests and Behavior Tests
+- [ ] implement the module per its Functional Responsibilities, Public Contract, and Constraints and Invariants, inside `src/host/cli/`, until all its tests pass
+- [ ] run this module's full test set — all green before the task is complete
+
+### Task 15 [Wave 0]: Implement src/host/pi-extension/ (leaf)
+- [ ] read `src/host/pi-extension/module.md` in full — it is the complete and only spec for this task
+- [ ] write the tests named in its Test Specification (T-PIX-*): Unit Tests and Boundary Tests (TDD — failing first is expected)
+- [ ] write the tests named in its Test Specification (T-PIX-*): Integration Contract Tests and Behavior Tests
+- [ ] implement the module per its Functional Responsibilities, Public Contract, and Constraints and Invariants, inside `src/host/pi-extension/`, until all its tests pass
+- [ ] run the tests marked **live** against an installed Pi and a throwaway session directory; if Pi is unavailable, mark ⚠️ naming the exact tests not run
+- [ ] run this module's full test set — all green before the task is complete
+
+### Task 16 [Wave 1]: Implement src/platform/ (composes config, repo, tokens, store)
+- [ ] confirm every submodule task is complete: `config/`, `repo/`, `tokens/`, `store/`
+- [ ] read `src/platform/module.md` in full — it is the complete and only spec for this task
+- [ ] write the tests named in its Test Specification (T-PLA-*): Unit Tests and Boundary Tests (TDD — failing first is expected)
+- [ ] write the tests named in its Test Specification (T-PLA-*): Integration Contract Tests and Behavior Tests
+- [ ] implement the module's own code and wire its submodules per its Internal Design, inside `src/platform/`, until all its tests pass — its tests are static checks of the boundary rule and a replaceability test that exercises the composed submodules
+- [ ] run this module's full test set — all green before the task is complete
+
+### Task 17 [Wave 1]: Implement src/adapters/ (composes pi, codex, claude-code)
+- [ ] confirm every submodule task is complete: `pi/`, `codex/`, `claude-code/`
+- [ ] read `src/adapters/module.md` in full — it is the complete and only spec for this task
+- [ ] write the tests named in its Test Specification (T-ADA-*): Unit Tests and Boundary Tests (TDD — failing first is expected)
+- [ ] write the tests named in its Test Specification (T-ADA-*): Integration Contract Tests and Behavior Tests — this is the conformance suite, one parameterized body run against every adapter
+- [ ] build the fake fourth agent fixture at `test/fixtures/fixture-agent/` that the conformance suite needs, outside `src/` so it adds no module to the design tree
+- [ ] implement the module's own code and wire its submodules per its Internal Design, inside `src/adapters/`, until all its tests pass
+- [ ] run this module's full test set — all green before the task is complete
+
+### Task 18 [Wave 1]: Implement src/import/ (composes discovery, transfer, preview, landing)
+- [ ] confirm every submodule task is complete: `discovery/`, `transfer/`, `preview/`, `landing/`
+- [ ] read `src/import/module.md` in full — it is the complete and only spec for this task
+- [ ] write the tests named in its Test Specification (T-IMP-*): Unit Tests and Boundary Tests (TDD — failing first is expected)
+- [ ] write the tests named in its Test Specification (T-IMP-*): Integration Contract Tests and Behavior Tests — these cover all nine directions end to end with stub adapters
+- [ ] implement the module's own code and wire its submodules per its Internal Design, inside `src/import/`, until all its tests pass
+- [ ] run this module's full test set — all green before the task is complete
+
+### Task 19 [Wave 1]: Implement src/host/ (composes cli, pi-extension)
+- [ ] confirm every submodule task is complete: `cli/`, `pi-extension/`
+- [ ] read `src/host/module.md` in full — it is the complete and only spec for this task
+- [ ] write the tests named in its Test Specification (T-HOS-*): Unit Tests and Boundary Tests (TDD — failing first is expected)
+- [ ] write the tests named in its Test Specification (T-HOS-*): Integration Contract Tests and Behavior Tests
+- [ ] implement the module's own code and wire its submodules per its Internal Design, inside `src/host/`, until all its tests pass — including the agent list, which lives here and nowhere else
+- [ ] run this module's full test set — all green before the task is complete
+
+### Task 20 [Wave 2]: Implement src/ (root — composes session, adapters, import, host, platform)
+- [ ] confirm every submodule task is complete: `session/`, `adapters/`, `import/`, `host/`, `platform/`
+- [ ] read `src/module.md` in full — it is the complete and only spec for this task
+- [ ] write the tests named in its Test Specification (T-ROO-*): Unit Tests and Boundary Tests (TDD — failing first is expected)
+- [ ] write the tests named in its Test Specification (T-ROO-*): Integration Contract Tests and Behavior Tests — these are the system-wide invariants and the acceptance criteria
+- [ ] implement the module's own code and wire its submodules per its Internal Design, inside `src/`, until all its tests pass — the package entry point, the command binary, and the Pi extension entry
+- [ ] run the acceptance behavior tests against installed agents where they need them; if an agent is unavailable, mark ⚠️ naming the exact tests not run
+- [ ] run this module's full test set — all green before the task is complete
+
+### Task 21: Verify acceptance criteria
+- [ ] run the full test suite — all modules, all four test categories, must pass
+- [ ] run the validator in tree mode over `src/` — `module.md` edits made during implementation must have left the tree defect-free
+- [ ] re-run the coupling check of T-ROO-6 — every documented integration recomputed from the tree, and the root's coupling table still equal to the union of the 19 Integrations sections
+- [ ] run the linter — all issues fixed
+- [ ] verify every ⚠️ noted during implementation is resolved or explicitly accepted by the user
+- [ ] verify `docs/tech-stack.md` records every decision made during implementation, including the tokenizer and the git access method
+
+### Task 22: [Final] Update documentation
+- [ ] write or update `README.md`: what the tool does, how to install each of the three shims, and how to configure extra homes and the budget
+- [ ] verify each implemented `module.md` still matches what was built (spot check; `/modularity:fractal-align` does this rigorously)
+- [ ] confirm the two open requirement questions are answered or still marked open: Q-1 (budget share, default 0.30) and Q-2 (pinned recent turns, default 5), both of which live in `src/platform/config/`
+
+## Post-Completion
+*No checkboxes — informational.*
+- Run `/modularity:fractal-align` to verify code ↔ design alignment rigorously
+- The acceptance test of `docs/requirements.md` needs a real Codex session with 20 or more turns and a real Pi in the same repository; run it by hand before release
+- Manual testing, deployment, and external-system updates as applicable

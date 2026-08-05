@@ -1,0 +1,77 @@
+# Tech stack — resume-from
+
+**Status:** normative. This file is the single home of every technology decision. The design tree
+(`src/**/module.md`) says *what* to build; this file says *what with*. Neither restates the other.
+
+**Rule:** every implementer reads this file plus the one `module.md` of the module they are building.
+Nothing else. Any new stack decision — made while planning or while implementing — is written back
+here immediately.
+
+---
+
+## Decided
+
+| Area | Choice | Why |
+| ---- | ------ | --- |
+| **Language** | TypeScript | Pi extensions are JavaScript/TypeScript, and the Claude Code and Codex shims call a Node binary. One language covers all three hosts. |
+| **Runtime** | Node.js | The tool runs inside three Node-based CLIs. |
+| **Code root** | `src/` | Root module's `module.md` sits at `src/module.md`. The design tree is the source tree. |
+| **Package manager** | pnpm | Strict about phantom dependencies, which the module-boundary tests rely on. |
+| **Test runner** | Vitest | TypeScript-native with no transpile step. `test.each` covers the many table-driven specs; temporary-directory and checksum tests need no extra tooling. |
+| **Lint + format** | Biome | One tool for both, no plugin stack. |
+| **Build** | `tsc` | Emits to `dist/`; `.gitignore` already excludes `dist/` and `*.tsbuildinfo`. |
+
+## Delivery shape
+
+Decided in the design (`src/module.md`, Decision 4) and recorded here because it constrains the
+build:
+
+- **One library**, wired by `src/host/`.
+- **One command binary** — `src/host/cli/`. The Codex prompt file and the Claude Code slash-command
+  file call it.
+- **One in-process extension** — `src/host/pi-extension/`. Pi loads it, so it must be importable as a
+  module, not only executable as a binary.
+
+The build therefore produces both a `bin` entry and a library entry point.
+
+## Conventions
+
+- **ES modules.** Pi loads the extension in-process; a CLI binary and an importable module in one
+  package are simplest as ESM.
+- **Strict TypeScript.** `strict: true`. The design leans on the type system to enforce rules —
+  `ToolCallRecord` having no field for a result body is the load-bearing example (FR-24, FR-60).
+- **No runtime dependency may be added without recording it here**, with the module that needs it and
+  why. The design classifies `src/platform/` as generic precisely so its dependencies stay swappable.
+- **Tests live beside the module they test**, inside that module's folder. A module's folder holds its
+  code and its tests; only `src/platform/store/` may create files at runtime.
+- **Test fixtures shared across modules** live in `test/fixtures/`, outside `src/`, so they add no
+  module to the design tree. The conformance suite's fake fourth agent lives at
+  `test/fixtures/fixture-agent/` (see `src/adapters/module.md`, Constraints).
+- **Contract type declarations are transcribed, not invented.** Each module's `Public Contract`
+  section is emitted verbatim into a types-only file in that module's own folder (`contract.ts`).
+  The scaffold task does this for all 19 modules at once, so every wave-0 task compiles against the
+  contracts it restates and the tasks in a wave stay independent — which is what lets them run in
+  parallel. A `contract.ts` holds declarations only: no behaviour, no defaults, no logic.
+  **The `module.md` block stays normative.** If the two disagree, the document wins and the file is
+  corrected — never the reverse.
+
+## Boundary enforcement
+
+Several tests are static checks of the import graph rather than behaviour: T-PLA-1, T-PLA-2, T-PLA-7,
+T-STO-15, T-TOK-11, T-REP-14, T-HOS-13, T-HOS-14, T-HOS-17, T-CLI-20, T-PIX-17, T-PIX-18, T-ROO-7,
+T-ROO-8, T-ROO-10.
+
+Implement them as Vitest tests that read the import graph, not as lint configuration. Two reasons:
+they are named deliverables of module documents, and a lint rule can be disabled inline while a
+failing test cannot be. Biome's own rules may be added as a second, redundant guard.
+
+## Open — decide before or during the first task that needs it
+
+- **Node version floor.** Assumed current LTS. Confirm against the oldest Node the three agents ship
+  with; the tool runs inside them.
+- **Tokenizer library** for `src/platform/tokens/`. The module's contract is deliberately narrow so
+  this can be chosen late, and changed later (T-TOK-13).
+- **Git access** for `src/platform/repo/`: the `git` binary or a library. The module's Change Vectors
+  list this as a local, reversible choice.
+
+Record the answer here the moment one is made.
