@@ -8,3 +8,4 @@ build/
 coverage/
 .vitest/
 .pi/
+.pi-subagents/

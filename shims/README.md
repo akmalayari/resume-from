@@ -1,26 +1,41 @@
 # Host shims
 
-The core package owns session discovery, transfer, previews, and confirmation. These host files only
-make that single implementation available as `/resume-from`.
+The host shims expose one core implementation as `/resume-from`.
 
-| Host | Package | Entry point |
-| --- | --- | --- |
-| Pi | `resume-from` | `shims/pi/extensions/resume-from.js` registered through the `pi.extensions` manifest |
-| Claude Code | `@alexeiled/resume-from-claude` | `commands/resume-from.md` invokes the bundled `dist/bin.js` |
-| Codex | `@alexeiled/resume-from-codex` | `prompts/resume-from.md` invokes the matching published CLI with `npx` |
+- Pi uses `resume-from` and `shims/pi/extensions/resume-from.js`.
+- Claude Code uses `@alexeiled/resume-from-claude` and
+  `commands/resume-from.md`.
+- Codex uses `@alexeiled/resume-from-codex` and `prompts/resume-from.md`.
 
 ## Boundaries
 
-- No shim contains transfer, preview, confirmation, or output-format rules.
-- Claude Code and Codex state `--target-agent` explicitly. They do not infer the target agent.
-- Only the user supplies `--confirm`.
-- The Pi extension uses Pi's documented `registerCommand`, `ui.select`, `ui.confirm`, and
-  `switchSession` APIs. It keeps the live command context only long enough to switch into the new
-  session.
+The core package owns discovery, transfer, preview, and confirmation. A shim
+contains no transfer rules.
 
-## Packaging
+Claude Code and Codex supply `--target-agent`. They do not detect the target
+from the environment. Only the user supplies `--confirm`.
 
-`scripts/release/stage-npm-packages.mjs` stages the Claude and Codex npm artifacts into
-`build/npm/`. `npm run packages:check` dry-packs the core and both plugin artifacts, checks their
-manifests, and verifies that Claude invokes its bundled CLI while Codex pins the matching core CLI
-version.
+The Pi shim uses `registerCommand`, `ui.select`, `ui.confirm`, and
+`switchSession`. It keeps the live command context only until the session switch
+is complete.
+
+## Package staging
+
+Run this command to stage the three npm packages:
+
+```sh
+npm run packages:stage
+```
+
+The command writes generated packages to `build/npm/`.
+
+Run this command to inspect the npm files and manifests:
+
+```sh
+npm run packages:check
+```
+
+The Claude Code package contains its command binary. The Codex package pins the
+matching core package version.
+
+Read the user guides in [`docs/agents/`](../docs/agents/).
