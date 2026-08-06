@@ -1,6 +1,6 @@
 ---
 description: Continue a session from another coding agent or another Claude Code profile
-argument-hint: "[row | session-id | path] [--confirm]"
+argument-hint: "[source-agent] [row | session-id | path] [--home path] [--confirm | --help]"
 allowed-tools: Bash(node:*)
 ---
 
@@ -14,6 +14,9 @@ agent, and rewriting it defeats that.
 !`node "${CLAUDE_PLUGIN_ROOT}/dist/bin.js" --target-agent claude-code $ARGUMENTS`
 
 ## How to read what came back
+
+**Help text** — the user passed `--help` or `-h`. Show the selectors, options, and examples exactly
+as printed. No follow-up is required.
 
 **A numbered list** — the user gave no argument. Tell them to run `/resume-from <row>` with the row
 they want. Each row shows the agent, the home, the time, the title and the turn count.

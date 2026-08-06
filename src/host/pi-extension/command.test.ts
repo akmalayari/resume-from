@@ -226,6 +226,28 @@ describe("T-PIX-1 — no argument opens the picker", () => {
   });
 });
 
+describe("command help", () => {
+  it.each(["help", "-h", "--help"])("shows expected parameters for %s", async (argument) => {
+    const pipeline = stubPipeline();
+    const picked = stubPicker({ choice: "cancelled", selected: null });
+    const ui = stubUi();
+    const { ctx } = stubContext();
+
+    await createResumeFromCommand(deps({ picker: picked.picker, ui: ui.ui })).run(
+      ctx,
+      [argument],
+      pipeline.pipeline,
+    );
+
+    expect(ui.blocks.flat().join("\n")).toContain(
+      "Usage: /resume-from [<session-id> | <file-path>]",
+    );
+    expect(ui.blocks.flat().join("\n")).toContain("No argument opens the session selector.");
+    expect(pipeline.order).toEqual([]);
+    expect(picked.calls).toEqual([]);
+  });
+});
+
 describe("T-PIX-4 — Escape cancels", () => {
   it("never previews and never commits when the picker is cancelled", async () => {
     const pipeline = stubPipeline();

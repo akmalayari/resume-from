@@ -29,7 +29,8 @@ export interface RegisterDeps extends ResumeFromDeps {
   pipeline: ImportPipeline;
 }
 
-const DESCRIPTION = "Continue a session from another agent or profile, here in Pi.";
+const DESCRIPTION =
+  "Continue another session here. Use /resume-from --help for accepted arguments.";
 
 /** Registers /resume-from with Pi. */
 export function registerResumeFrom(registrar: PiCommandRegistrar, deps: RegisterDeps): void {

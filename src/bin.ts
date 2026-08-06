@@ -20,7 +20,29 @@ const TARGET_HOME = "--target-home";
 
 const USAGE =
   `Usage: resume-from ${TARGET_AGENT} <agent> [${TARGET_HOME} <path>] ` +
-  "[<row> | <session-id> | <file-path>] [--home <path>] [--agent <name>] [--confirm]";
+  "[<source-agent>] [<row> | <session-id> | <file-path>] [options]";
+
+export const HELP_TEXT = `${USAGE}
+
+Selectors:
+  no selector       List sessions available for the current repository.
+  <row>             Select a numbered row from that list (1 or greater).
+  <session-id>      Select an exact session ID.
+  <file-path>       Select a session file by absolute, relative or ~/ path.
+
+Options:
+  --agent <name>    Filter source sessions: pi, codex, claude, or claude-code.
+  --home <path>     Filter source sessions to one agent home.
+  --confirm         Import the selection after reviewing its preview.
+  --target-agent    Target host ID; normally supplied by the installed plugin.
+  --target-home     Target agent home; omit to use that agent's default.
+  -h, --help        Show this help.
+
+Examples:
+  resume-from --target-agent codex
+  resume-from --target-agent codex claude 2
+  resume-from --target-agent claude-code session-id --confirm
+  resume-from --target-agent codex ~/sessions/session.jsonl`;
 
 /** The invocation split in two: what the shim states, and what the user typed. */
 export interface ShimArgs {
@@ -66,11 +88,17 @@ export function readShimArgs(argv: string[]): ShimArgs {
 }
 
 export async function main(argv: string[], cwd: string): Promise<number> {
+  if (argv.includes("--help") || argv.includes("-h")) {
+    process.stdout.write(`${HELP_TEXT}\n`);
+    return 0;
+  }
+
   const { targetAgent, targetHome, rest } = readShimArgs(argv);
   if (targetAgent === null) {
     process.stderr.write(
       `${TARGET_AGENT} is missing: the shim that calls this binary states which agent it is ` +
-        `running inside, because guessing it would import into the wrong agent.\n${USAGE}\n`,
+        `running inside, because guessing it would import into the wrong agent.\n${USAGE}\n` +
+        "Run resume-from --help for selectors, options, and examples.\n",
     );
     return 2;
   }

@@ -94,6 +94,7 @@ npm registry access. It pins the CLI version to the installed plugin version.
 ```sh
 pnpm install
 pnpm build
+node dist/bin.js --help                        # selectors, options and examples
 node dist/bin.js --target-agent codex          # list
 node dist/bin.js --target-agent codex 1        # preview row 1
 node dist/bin.js --target-agent codex 1 --confirm

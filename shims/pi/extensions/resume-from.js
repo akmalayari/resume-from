@@ -4,7 +4,7 @@ import { activatePiExtension } from "resume-from";
 import { formatRow } from "resume-from/pi-extension";
 
 const COMMAND_NAME = "resume-from";
-const DESCRIPTION = "Continue a session from another agent or profile.";
+const DESCRIPTION = "Continue another session. Use /resume-from --help for accepted arguments.";
 
 function agentHome() {
   return process.env.PI_CODING_AGENT_DIR ?? join(homedir(), ".pi", "agent");

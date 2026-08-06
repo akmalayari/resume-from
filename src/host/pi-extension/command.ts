@@ -18,7 +18,15 @@ export const RESUME_FROM_COMMAND_NAME = "resume-from";
 
 const CONFIRM_QUESTION = "Import this session? (y/N)";
 const CANCELLED_LINE = "Cancelled. Nothing was imported.";
-const USAGE_LINE = `Usage: /${RESUME_FROM_COMMAND_NAME} [session-id | /path/to/session-file]`;
+const HELP_ARGUMENTS = new Set(["help", "-h", "--help"]);
+const HELP_LINES = [
+  `Usage: /${RESUME_FROM_COMMAND_NAME} [<session-id> | <file-path>]`,
+  "No argument opens the session selector.",
+  "<session-id> previews the matching session.",
+  "<file-path> previews an absolute or relative session file.",
+  "Pi asks for confirmation before importing anything.",
+];
+const USAGE_LINE = HELP_LINES[0] ?? `Usage: /${RESUME_FROM_COMMAND_NAME}`;
 const BLOCKED_FALLBACK = "The import is blocked.";
 
 export interface ResumeFromDeps {
@@ -88,6 +96,10 @@ async function resolveSelection(
   scope: ListRequest,
 ): Promise<SelectionInput | null> {
   const given = args.filter((argument) => argument.trim().length > 0);
+  if (given.length === 1 && HELP_ARGUMENTS.has(given[0] ?? "")) {
+    deps.ui.show(HELP_LINES);
+    return null;
+  }
   if (given.length > 1) {
     deps.ui.show([USAGE_LINE]);
     return null;

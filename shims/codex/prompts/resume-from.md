@@ -1,6 +1,9 @@
 Continue work from a session that another coding agent — Pi, Claude Code, or another Codex profile —
 already wrote.
 
+Accepted arguments are `[source-agent] [row | session-id | path] [--home path] [--confirm]`.
+No selector lists sessions. Pass `--help` or `-h` to show complete help and examples.
+
 Run this in the shell, passing along whatever the user typed after the command name:
 
     npx --yes resume-from@__RESUME_FROM_VERSION__ --target-agent codex $ARGUMENTS
@@ -10,6 +13,8 @@ line. The preview has one fixed shape for every source and target agent; rewriti
 
 What comes back:
 
+- **Help text** — `--help` or `-h` was given. Show the selectors, options, and examples exactly as
+  printed. No follow-up is required.
 - **A numbered list** — no argument was given. Tell the user to run the command again with a row
   number. Each row shows the agent, the home, the time, the title and the turn count.
 - **A preview** — a session was named. It states the turns that cross over, the turns dropped, the
