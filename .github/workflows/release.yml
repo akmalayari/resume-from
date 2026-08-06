@@ -4,13 +4,23 @@ on:
   push:
     tags:
       - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to publish
+        required: true
+        type: string
 
 permissions:
   contents: read
 
 concurrency:
-  group: release-${{ github.ref_name }}
+  group: release-${{ inputs.tag || github.ref_name }}
   cancel-in-progress: false
+
+env:
+  RELEASE_REF: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.tag) || github.ref }}
+  RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
 
 jobs:
   validate:
@@ -20,6 +30,7 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           persist-credentials: false
+          ref: ${{ env.RELEASE_REF }}
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
           node-version: 24.15.0
@@ -33,8 +44,8 @@ jobs:
       - name: Verify release tag
         run: |
           version=$(node -p 'require("./package.json").version')
-          test "$GITHUB_REF_NAME" = "v$version" || {
-            printf 'Tag %s does not match package version v%s\n' "$GITHUB_REF_NAME" "$version" >&2
+          test "$RELEASE_TAG" = "v$version" || {
+            printf 'Tag %s does not match package version v%s\n' "$RELEASE_TAG" "$version" >&2
             exit 1
           }
 
@@ -50,6 +61,7 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+          ref: ${{ env.RELEASE_REF }}
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
           node-version: 24.15.0
@@ -62,8 +74,8 @@ jobs:
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
           git fetch --no-tags origin "$DEFAULT_BRANCH"
-          git merge-base --is-ancestor "$GITHUB_SHA" "origin/$DEFAULT_BRANCH" || {
-            printf 'Tag %s must point to a commit on %s\n' "$GITHUB_REF_NAME" "$DEFAULT_BRANCH" >&2
+          git merge-base --is-ancestor HEAD "origin/$DEFAULT_BRANCH" || {
+            printf 'Tag %s must point to a commit on %s\n' "$RELEASE_TAG" "$DEFAULT_BRANCH" >&2
             exit 1
           }
       - name: Publish npm packages
@@ -82,8 +94,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release edit "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release edit "$RELEASE_TAG" --title "$RELEASE_TAG" --generate-notes
           else
-            gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes
+            gh release create "$RELEASE_TAG" --title "$RELEASE_TAG" --generate-notes
           fi
