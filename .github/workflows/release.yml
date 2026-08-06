@@ -23,7 +23,6 @@ jobs:
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
           node-version: 24.15.0
-          cache: pnpm
           registry-url: https://registry.npmjs.org
       - run: npm install --global pnpm@10.28.2
       - run: pnpm install --frozen-lockfile
@@ -54,7 +53,6 @@ jobs:
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
           node-version: 24.15.0
-          cache: pnpm
           registry-url: https://registry.npmjs.org
       - run: npm install --global pnpm@10.28.2
       - run: pnpm install --frozen-lockfile
