@@ -26,6 +26,7 @@ import {
   type PiCommandRegistrar,
   type PiUi,
   registerResumeFrom,
+  type SessionPicker,
 } from "./pi-extension/index.js";
 import { createHost, type HostDeps } from "./wiring.js";
 
@@ -93,8 +94,10 @@ export interface PiActivation {
   registrar: PiCommandRegistrar;
   /** How lines reach the user, and how a confirmation is taken. */
   ui: PiUi;
-  /** Where the picker's keys come from (FR-9). */
-  keys: KeySource;
+  /** A host-native picker. When present it replaces the lower-level key source. */
+  picker?: SessionPicker;
+  /** Where the picker's keys come from (FR-9) when the host has no native picker. */
+  keys?: KeySource;
   /** The home the agent is running, or null to use the adapter's declared default (FR-3). */
   home: HomePath | null;
   /** The directory the agent is running in. Used to find the repository (FR-13). */
@@ -128,9 +131,17 @@ export async function activatePiExtension(
 
   registerResumeFrom(activation.registrar, {
     pipeline,
-    picker: createKeyPicker({ keys: activation.keys, ui: activation.ui }),
+    picker: pickerFor(activation),
     ui: activation.ui,
     // The extension holds no capability knowledge, so the window comes from here (FR-18).
     windowTokens: target.windowTokens,
   });
+}
+
+function pickerFor(activation: PiActivation): SessionPicker {
+  if (activation.picker !== undefined) return activation.picker;
+  if (activation.keys !== undefined) {
+    return createKeyPicker({ keys: activation.keys, ui: activation.ui });
+  }
+  throw new Error("Pi activation requires either a native picker or a key source.");
 }

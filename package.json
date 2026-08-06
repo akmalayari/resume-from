@@ -1,6 +1,6 @@
 {
   "name": "resume-from",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Continue a coding session in a different agent, or a different profile.",
   "type": "module",
   "license": "MIT",
@@ -15,7 +15,8 @@
     "./pi-extension": "./dist/host/pi-extension/index.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "shims/pi"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
@@ -23,7 +24,11 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "biome check .",
-    "lint:fix": "biome check --write ."
+    "lint:fix": "biome check --write .",
+    "packages:stage": "npm run build && node scripts/release/stage-npm-packages.mjs",
+    "packages:check": "npm run packages:stage && node scripts/release/check-npm-packages.mjs",
+    "pack:dry": "npm pack --dry-run",
+    "prepack": "npm run build"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.3.14",
@@ -33,5 +38,18 @@
   },
   "dependencies": {
     "gpt-tokenizer": "^3.4.0"
+  },
+  "pi": {
+    "extensions": [
+      "./shims/pi/extensions/resume-from.js"
+    ]
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alexei-led/resume-from.git"
+  },
+  "homepage": "https://github.com/alexei-led/resume-from#readme",
+  "bugs": {
+    "url": "https://github.com/alexei-led/resume-from/issues"
   }
 }

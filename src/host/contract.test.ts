@@ -134,6 +134,21 @@ describe("T-HOS-10 — the entry point follows the declared selection level", ()
     expect(request.registrar.names).toEqual(["resume-from"]);
   });
 
+  it("accepts a host-native picker without a raw key source", async () => {
+    const request = {
+      agent: PI,
+      registrar: registrarStub(),
+      ui: { show: () => {}, confirm: () => Promise.resolve("cancelled" as const) },
+      picker: { pick: async () => ({ choice: "cancelled" as const, selected: null }) },
+      home: null,
+      cwd: "/tmp",
+    };
+
+    await activatePiExtension(request, { agents: entries, configLoader: fixedConfig() });
+
+    expect(request.registrar.names).toEqual(["resume-from"]);
+  });
+
   it.each([
     ["numbered-list", CODEX],
     ["a fake fourth agent", FIXTURE_AGENT_ID],

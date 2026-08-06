@@ -60,38 +60,47 @@ cannot open its own picker inside them, and cannot move you between sessions. Pi
 
 ## Install
 
+### Pi
+
+```sh
+pi install npm:resume-from
+```
+
+The core npm package includes the CLI and the Pi extension. Restart Pi, then run `/resume-from`.
+Pi opens its native selector and switches into the imported session after confirmation.
+
+### Claude Code
+
+```sh
+claude plugin marketplace add alexei-led/resume-from
+claude plugin install resume-from@alexei-led-resume-from
+```
+
+The Claude plugin bundles the matching CLI. Run `/resume-from`; it calls that bundled binary and
+prints the preview unchanged.
+
+### Codex
+
+```sh
+codex plugin marketplace add alexei-led/resume-from
+codex plugin add resume-from@alexei-led-resume-from
+```
+
+The Codex prompt runs the matching published `resume-from` CLI through `npx`, so its first use needs
+npm registry access. It pins the CLI version to the installed plugin version.
+
+### Local development
+
 ```sh
 pnpm install
 pnpm build
-```
-
-That produces the command binary (`dist/bin.js`), the library entry point, and the Pi extension
-entry. The binary is usable now:
-
-```sh
 node dist/bin.js --target-agent codex          # list
 node dist/bin.js --target-agent codex 1        # preview row 1
 node dist/bin.js --target-agent codex 1 --confirm
 ```
 
 `--target-agent` is required and never guessed: the caller states which agent it is running inside,
-because guessing would import into the wrong one.
-
-### Not yet written: the per-agent shims
-
-What makes it `/resume-from` rather than a command you type in full is a small shim per agent, and
-**none of the three exists yet**:
-
-| Agent | Shim needed |
-| --- | --- |
-| Claude Code | a slash-command file that calls the binary with `--target-agent claude-code` |
-| Codex | a prompt file that does the same with `--target-agent codex` |
-| Pi | an extension manifest that loads `dist/host/pi-extension/index.js` in-process — required, because moving you into the new session needs a live command context |
-
-They are deliberately absent rather than guessed. Each depends on a shim format this project has not
-verified against the installed agent, and the whole adapter layer is built on the rule that facts
-about an agent are confirmed, never assumed. Writing three plausible-looking files that silently do
-not load would be worse than none.
+because guessing would import into the wrong agent.
 
 ## Configure
 
