@@ -4,7 +4,8 @@ The Pi package gallery finds this project through the `pi-package` keyword in
 `package.json`. The gallery can show a PNG, JPEG, GIF, or WebP file from the
 `pi.image` field.
 
-The image does not exist yet. Use the prompt below in ChatGPT image generation.
+The project image is `assets/resume-from-card.png`. Use the prompt below when
+you need a new version.
 
 ## Image-generation prompt
 
@@ -49,9 +50,9 @@ Output:
 - Produce one image without a border or watermark.
 ```
 
-## Expected files
+## Image file
 
-Save the gallery image here:
+The gallery image is here:
 
 ```text
 assets/resume-from-card.png
@@ -66,20 +67,13 @@ session while the source remains unchanged.
 
 ## Add the image to Pi
 
-After the PNG exists, add its raw GitHub URL to the Pi manifest:
+The Pi manifest uses this URL:
 
-```json
-{
-  "keywords": ["pi-package"],
-  "pi": {
-    "extensions": ["./shims/pi/extensions/resume-from.js"],
-    "image": "<raw-image-url>"
-  }
-}
+```text
+https://raw.githubusercontent.com/alexei-led/resume-from/implement-resume-from/assets/resume-from-card.png
 ```
 
-Use the raw GitHub URL for `assets/resume-from-card.png`. Open the URL before
-release. Make sure that it returns the PNG file.
+Open the URL before release. Make sure that it returns the PNG file.
 
 ## GitHub social preview
 

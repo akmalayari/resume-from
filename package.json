@@ -1,6 +1,6 @@
 {
   "name": "resume-from",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Continue a coding session in a different agent, or a different profile.",
   "keywords": [
     "pi-package",
@@ -22,6 +22,7 @@
     "./pi-extension": "./dist/host/pi-extension/index.js"
   },
   "files": [
+    "assets/resume-from-card.png",
     "dist",
     "shims/pi"
   ],
@@ -49,7 +50,8 @@
   "pi": {
     "extensions": [
       "./shims/pi/extensions/resume-from.js"
-    ]
+    ],
+    "image": "https://raw.githubusercontent.com/alexei-led/resume-from/implement-resume-from/assets/resume-from-card.png"
   },
   "repository": {
     "type": "git",

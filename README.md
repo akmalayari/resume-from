@@ -3,6 +3,8 @@
 [![Release](https://github.com/alexei-led/resume-from/actions/workflows/release.yml/badge.svg)](https://github.com/alexei-led/resume-from/actions/workflows/release.yml)
 [![npm](https://img.shields.io/npm/v/resume-from)](https://www.npmjs.com/package/resume-from)
 
+![A coding conversation moves through a preview checkpoint into a new agent session while the source remains unchanged.](assets/resume-from-card.png)
+
 Move a coding session from one coding agent to another.
 
 ## The problem
