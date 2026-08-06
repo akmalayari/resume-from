@@ -1,6 +1,6 @@
 {
   "name": "resume-from",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Continue a coding session in a different agent, or a different profile.",
   "keywords": [
     "pi-package",
@@ -13,7 +13,7 @@
   "packageManager": "pnpm@11.20.0",
   "license": "MIT",
   "engines": {
-    "node": ">=22"
+    "node": ">=24"
   },
   "bin": {
     "resume-from": "./dist/bin.js"
@@ -47,7 +47,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.7",
-    "@types/node": "^26.1.2",
+    "@types/node": "^24.13.3",
     "typescript": "^7.0.2",
     "typescript-compiler-api": "npm:typescript@6.0.3",
     "vitest": "^4.1.10"

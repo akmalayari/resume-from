@@ -86,6 +86,8 @@ Choose the guide for the agent that will receive the imported session:
 
 ## Development
 
+Development requires Node 24 LTS and pnpm 11.20.0.
+
 ```sh
 pnpm install
 pnpm build
