@@ -7,8 +7,8 @@
  * are of two kinds — static analysis of the source and of the design documents, and a throwaway
  * scene the composed system can actually run in.
  *
- * Source is read with `node:fs` and parsed with the TypeScript syntax API — already a build
- * dependency, and the only way to tell a call from the same word inside a string. `src/platform/`
+ * Source is read with `node:fs` and parsed with the stable TypeScript 6 compiler-API alias. The
+ * TypeScript 7 AST API is unstable, and syntax is the only way to distinguish calls from strings. `src/platform/`
  * and `src/host/` have helpers of the same shape; they live in those modules' folders, so these
  * are this module's own. Test support only: nothing here is imported by shipped code.
  */
@@ -19,7 +19,7 @@ import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import ts from "typescript";
+import ts from "typescript-compiler-api";
 import { createFixtureAgentAdapter } from "../test/fixtures/fixture-agent/index.js";
 import { REFERENCE_SESSION } from "../test/fixtures/reference-session.js";
 import type {

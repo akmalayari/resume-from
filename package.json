@@ -1,6 +1,6 @@
 {
   "name": "resume-from",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Continue a coding session in a different agent, or a different profile.",
   "keywords": [
     "pi-package",
@@ -10,6 +10,7 @@
     "codex"
   ],
   "type": "module",
+  "packageManager": "pnpm@11.20.0",
   "license": "MIT",
   "engines": {
     "node": ">=22"
@@ -17,17 +18,23 @@
   "bin": {
     "resume-from": "./dist/bin.js"
   },
+  "types": "./dist/index.d.ts",
   "exports": {
-    ".": "./dist/index.js",
-    "./pi-extension": "./dist/host/pi-extension/index.js"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./pi-extension": {
+      "types": "./dist/host/pi-extension/index.d.ts",
+      "import": "./dist/host/pi-extension/index.js"
+    }
   },
   "files": [
-    "assets/resume-from-card.png",
     "dist",
     "shims/pi"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "node scripts/clean-dist.mjs && tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -39,10 +46,11 @@
     "prepack": "npm run build"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.3.14",
-    "@types/node": "^24.10.4",
-    "typescript": "^5.9.3",
-    "vitest": "^3.2.4"
+    "@biomejs/biome": "2.5.7",
+    "@types/node": "^26.1.2",
+    "typescript": "^7.0.2",
+    "typescript-compiler-api": "npm:typescript@6.0.3",
+    "vitest": "^4.1.10"
   },
   "dependencies": {
     "gpt-tokenizer": "^3.4.0"
@@ -60,5 +68,8 @@
   "homepage": "https://github.com/alexei-led/resume-from#readme",
   "bugs": {
     "url": "https://github.com/alexei-led/resume-from/issues"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

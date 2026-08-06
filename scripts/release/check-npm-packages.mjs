@@ -12,29 +12,46 @@ const packages = [
     directory: repoRoot,
     expected: [
       "package.json",
+      "README.md",
+      "LICENSE",
       "dist/bin.js",
+      "dist/index.d.ts",
       "dist/host/pi-extension/index.js",
       "shims/pi/extensions/resume-from.js",
     ],
+    maxUnpackedBytes: 500_000,
+    forbidden: (path) => path.startsWith("assets/") || path.endsWith(".map"),
   },
   {
     name: "@alexeiled/resume-from-claude",
     directory: resolve(repoRoot, "build/npm/claude"),
     expected: [
       "package.json",
+      "README.md",
+      "LICENSE",
       ".claude-plugin/plugin.json",
       "commands/resume-from.md",
       "dist/bin.js",
     ],
+    maxUnpackedBytes: 300_000,
+    forbidden: (path) => path.endsWith(".d.ts") || path.endsWith(".map"),
   },
   {
     name: "@alexeiled/resume-from-codex",
     directory: resolve(repoRoot, "build/npm/codex"),
-    expected: ["package.json", ".codex-plugin/plugin.json", "prompts/resume-from.md"],
+    expected: [
+      "package.json",
+      "README.md",
+      "LICENSE",
+      ".codex-plugin/plugin.json",
+      "prompts/resume-from.md",
+    ],
+    maxUnpackedBytes: 20_000,
+    forbidden: (path) => path.startsWith("dist/"),
   },
 ];
 
-function packedFiles(directory) {
+function packedPackage(directory) {
   const output = execFileSync("npm", ["pack", "--dry-run", "--json", "--ignore-scripts"], {
     cwd: directory,
     encoding: "utf8",
@@ -49,7 +66,11 @@ function packedFiles(directory) {
   if (packed === undefined || !Array.isArray(packed.files)) {
     throw new Error(`unexpected npm pack output in ${directory}`);
   }
-  return new Set(packed.files.map((file) => file.path));
+  return {
+    files: new Set(packed.files.map((file) => file.path)),
+    packedBytes: packed.size,
+    unpackedBytes: packed.unpackedSize,
+  };
 }
 
 function requireFile(files, packageName, path) {
@@ -61,9 +82,21 @@ for (const spec of packages) {
   if (manifest.name !== spec.name) throw new Error(`expected ${spec.name}, got ${manifest.name}`);
   if (manifest.version !== version) throw new Error(`${spec.name} version does not match ${version}`);
 
-  const files = packedFiles(spec.directory);
-  for (const path of spec.expected) requireFile(files, spec.name, path);
-  console.log(`${spec.name}@${version}: ${files.size} files`);
+  const packed = packedPackage(spec.directory);
+  for (const path of spec.expected) requireFile(packed.files, spec.name, path);
+  const forbidden = [...packed.files].filter(spec.forbidden);
+  if (forbidden.length > 0) {
+    throw new Error(`${spec.name} tarball contains forbidden files: ${forbidden.join(", ")}`);
+  }
+  if (packed.unpackedBytes > spec.maxUnpackedBytes) {
+    throw new Error(
+      `${spec.name} tarball is ${packed.unpackedBytes} unpacked bytes; limit is ${spec.maxUnpackedBytes}`,
+    );
+  }
+  console.log(
+    `${spec.name}@${version}: ${packed.files.size} files, ${packed.packedBytes} packed bytes, ` +
+      `${packed.unpackedBytes} unpacked bytes`,
+  );
 }
 
 const claudeMarketplace = JSON.parse(

@@ -3,15 +3,15 @@
  * its tests are checks of the boundary rule over the four submodule folders, so they read source
  * from disk and assert on what is really there.
  *
- * Source is read with `node:fs` and parsed with the TypeScript syntax API — already a build
- * dependency, and the only way to tell a type position from a property name, or a call from the
- * same word inside a string. Test support only: nothing here creates a file.
+ * Source is read with `node:fs` and parsed with the stable TypeScript 6 compiler-API alias. The
+ * TypeScript 7 AST API is unstable, and syntax is the only way to distinguish types, properties,
+ * calls, and strings. Test support only: nothing here creates a file.
  */
 
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import ts from "typescript";
+import ts from "typescript-compiler-api";
 import type { ConfigLoader, HomeEntry } from "./config/contract.js";
 import type { RepoReader } from "./repo/contract.js";
 import type { CommitHandle, FileCommitter } from "./store/contract.js";

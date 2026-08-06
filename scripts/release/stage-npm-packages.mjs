@@ -1,4 +1,4 @@
-import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -23,7 +23,7 @@ const packages = [
     description: "Codex plugin prompt for resuming a session from another coding agent.",
     files: [".codex-plugin", "prompts"],
     install:
-      "codex plugin marketplace add alexei-led/resume-from\ncodex plugin install resume-from@alexei-led-resume-from",
+      "codex plugin marketplace add alexei-led/resume-from\ncodex plugin add resume-from@alexei-led-resume-from",
   },
 ];
 
@@ -50,8 +50,12 @@ function stagePackage(spec) {
   const destination = resolve(outputRoot, spec.target);
   const shim = resolve(repoRoot, "shims", spec.target === "claude" ? "claude-code" : "codex");
   cpSync(shim, destination, { recursive: true });
+  cpSync(resolve(repoRoot, "LICENSE"), resolve(destination, "LICENSE"));
   if (spec.target === "claude") {
-    cpSync(resolve(repoRoot, "dist"), resolve(destination, "dist"), { recursive: true });
+    cpSync(resolve(repoRoot, "dist"), resolve(destination, "dist"), {
+      recursive: true,
+      filter: (source) => statSync(source).isDirectory() || source.endsWith(".js"),
+    });
   } else {
     const promptPath = resolve(destination, "prompts/resume-from.md");
     const prompt = readFileSync(promptPath, "utf8").replaceAll("__RESUME_FROM_VERSION__", version);

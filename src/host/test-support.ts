@@ -6,8 +6,8 @@
  * format, static-analysis helpers for the boundary checks, and throwaway homes for the
  * end-to-end directions.
  *
- * Source is read with `node:fs` and parsed with the TypeScript syntax API — already a build
- * dependency, and the only way to tell a call from the same word inside a string. `src/platform/`
+ * Source is read with `node:fs` and parsed with the stable TypeScript 6 compiler-API alias. The
+ * TypeScript 7 AST API is unstable, and syntax is the only way to distinguish calls from strings. `src/platform/`
  * has helpers of the same shape; they live in that module's folder, so these are this module's
  * own. Test support only: nothing here is imported by shipped code.
  */
@@ -17,7 +17,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import ts from "typescript";
+import ts from "typescript-compiler-api";
 import { createFileCommitter } from "../platform/store/index.js";
 import type { AgentEntry } from "./agents.js";
 import type {

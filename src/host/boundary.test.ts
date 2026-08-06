@@ -11,7 +11,7 @@
  */
 
 import { join, sep } from "node:path";
-import ts from "typescript";
+import ts from "typescript-compiler-api";
 import { describe, expect, it } from "vitest";
 import {
   callNames,
