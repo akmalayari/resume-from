@@ -1,6 +1,18 @@
+import { resolve } from "node:path";
 import { defineConfig } from "vitest/config";
 
+const root = import.meta.dirname;
+
 export default defineConfig({
+  resolve: {
+    alias: [
+      {
+        find: "resume-from/pi-extension",
+        replacement: resolve(root, "src/host/pi-extension/index.ts"),
+      },
+      { find: "resume-from", replacement: resolve(root, "src/index.ts") },
+    ],
+  },
   test: {
     // Tests live beside the code they test, inside their module's folder.
     include: ["src/**/*.test.ts", "test/**/*.test.ts"],

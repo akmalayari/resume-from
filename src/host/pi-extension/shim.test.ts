@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 
+vi.mock("resume-from", () => ({ activatePiExtension: vi.fn() }));
+vi.mock("resume-from/pi-extension", () => ({ formatRow: vi.fn() }));
+
 type SessionStartContext = {
   sessionManager: { getEntries(): unknown[] };
   ui: { setWidget(key: string, lines: string[] | undefined): void };
