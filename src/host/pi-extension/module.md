@@ -352,7 +352,7 @@ Changes that require **only this module** to change:
 - The picker interaction changes: filtering, paging, a preview pane beside the list.
 - The confirmation changes from a keypress to a typed word.
 - Pi's extension API changes how a command is registered or how a context is passed.
-- The marker presentation inside Pi changes.
+- The persisted provenance widget inside Pi changes.
 - A second Pi command is added, for example one that lists without importing.
 
 Pi's **session file** changing does not touch this module — that is `src/adapters/pi/`.
@@ -369,6 +369,9 @@ Pi's **session file** changing does not touch this module — that is `src/adapt
 - **A blocked preview cannot be confirmed** (FR-33). The confirmation is not offered.
 - **After landing, the prompt is empty** (FR-46). This module sends no message and runs no tool. The
   `withSession` callback of C-10 must not be used to send anything.
+- **A successful switch invalidates the command context.** The command must not call its old UI after
+  `switchSession` returns. The package shim restores the persisted provenance marker as a widget from
+  the fresh `session_start` context.
 - **A cancelled switch is not an error.** The session is committed and valid; the user is told the
   session ID and how to open it later, exactly as a create-only agent would (FR-45).
 - **The runtime handle passed to `commit` is Pi's own context** and is never passed for an import
@@ -428,10 +431,11 @@ picker. Tests marked **live** need an installed Pi and a throwaway session direc
 - Expected behavior: `commit` receives the same `PiCommandContext` instance that Pi supplied, as the
   runtime handle.
 
-**T-PIX-10 — a landing result is presented**
+**T-PIX-10 — landing presentation respects Pi's session lifecycle**
 - Scenario: parameterized — `switched` true; `switched` false with a handover.
-- Expected behavior: the first shows the marker and leaves the user in the new session; the second
-  shows the session ID and the command that opens it (FR-45, FR-47).
+- Expected behavior: the first never reuses the stale command UI; the package shim restores the
+  persisted marker as a widget from the fresh `session_start` context. The second shows the marker,
+  session ID, and command that opens the committed session (FR-45, FR-47).
 
 ### Boundary Tests
 
@@ -477,9 +481,9 @@ picker. Tests marked **live** need an installed Pi and a throwaway session direc
 **T-PIX-19 — pick, confirm, hand the context over**
 - Scenario: a stub pipeline over a fixture listing; the user types `/resume-from`, moves to a Codex
   row, presses Enter, and confirms the preview.
-- Expected behavior: `commit` is called once, with Pi's own context as the runtime handle; the marker
-  from the result is shown; nothing is sent and no tool is run afterwards (FR-9, FR-46, FR-47). The
-  landing itself is the pipeline's job and is not asserted here.
+- Expected behavior: `commit` is called once, with Pi's own context as the runtime handle; the old
+  command UI is not touched after the switch; nothing is sent and no tool is run afterwards (FR-9,
+  FR-46, FR-47). The landing itself is the pipeline's job and is not asserted here.
 
 **T-PIX-20 — a cancelled switch is not a loss**
 - Scenario: a stub pipeline returning a `LandingResult` with `switched` false and a handover.

@@ -80,7 +80,8 @@ async function runResumeFrom(
   }
 
   // Pi's own context is the runtime handle the Pi adapter switches with (FR-44).
-  present(deps.ui, await pipeline.commit(request, ctx));
+  const landing = await pipeline.commit(request, ctx);
+  if (!landing.switched) present(deps.ui, landing);
 }
 
 /** The import target is always the Pi home the user is in (FR-1, FR-2). */
@@ -138,8 +139,9 @@ function formatFailure(failure: HomeFailure): string {
 }
 
 /**
- * Shows the marker, and the handover when the switch did not happen (FR-45, FR-47).
- * Nothing is sent and no tool is run: the user lands on an empty prompt (FR-46).
+ * Shows the marker and handover when the switch did not happen (FR-45, FR-47).
+ * A successful switch invalidates the command context; the package shim restores
+ * the persisted provenance marker as a widget in the replacement session instead.
  */
 function present(ui: PiUi, landing: LandingResult): void {
   ui.show(landing.marker.lines);

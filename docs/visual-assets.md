@@ -1,82 +1,91 @@
-# Project image brief
+# Visual assets
 
-The Pi package gallery finds this project through the `pi-package` keyword in
-`package.json`. The gallery can show a PNG, JPEG, GIF, or WebP file from the
-`pi.image` field.
+The project uses one source illustration and one rendered package image.
 
-The project image is `assets/resume-from-card.png`. Use the prompt below when
-you need a new version.
+| Asset | Purpose | Format |
+| --- | --- | --- |
+| `assets/resume-from-card.svg` | README front-page illustration and editable source. | 1600 × 1000 SVG |
+| `assets/resume-from-card.png` | Pi package gallery image and social-preview source. | 1600 × 1000 PNG |
 
-## Image-generation prompt
+## What the illustration explains
 
-```text
-Create a clean product illustration for an open-source developer tool named
-“resume-from”.
+The layout follows the actual transfer pipeline from left to right:
 
-Purpose:
-The tool moves a coding session between three terminal-based AI coding agents.
-It preserves the useful conversation and removes stale tool-result bodies. It
-shows a preview, waits for user confirmation, and creates a new native session.
-The source session remains unchanged.
+1. **Source session** — native history in Pi, Claude Code, or Codex.
+2. **Safe transfer** — normalize, filter and budget, then preview and confirm.
+3. **Target session** — a new native session opened with the destination agent.
 
-Visual concept:
-- Show three abstract terminal windows or conversation streams.
-- Use distinct, restrained accent colors for the three agents.
-- Route one conversation through a small neutral transfer bridge.
-- Show a visible preview checkpoint before the destination session.
-- Keep the source stream intact on the left.
-- Show a clean, active destination stream on the right.
-- Use arrows only when they improve the flow.
-- Do not use vendor logos, mascots, company marks, or trademarked interface
-  elements.
-- Do not show people, robots, brains, clouds, locks, shields, or generic AI
-  sparkles.
-- Do not include paragraphs or small labels.
-- If you include text, include only “resume-from” and spell it exactly.
+The bottom row distinguishes content that is kept, made safe, and removed. The source card states that the original session remains unchanged.
 
-Style:
-- Minimal technical editorial illustration.
-- Dark neutral background with high contrast.
-- Flat geometric shapes with subtle depth.
-- Clear at thumbnail size.
-- No photorealism and no 3D chrome effect.
-- No visual clutter.
+The use-case chips name the primary reasons for a transfer: another model, harness, profile, or destination after usage limits.
 
-Output:
-- PNG format.
-- 1600 × 1000 pixels, 8:5 aspect ratio.
-- Keep important elements inside the central 1600 × 800 area.
-- Leave enough empty space for a 2:1 social-preview crop.
-- Produce one image without a border or watermark.
-```
+## Visual system
 
-## Image file
+### Color roles
 
-The gallery image is here:
+| Role | Main color | Meaning |
+| --- | --- | --- |
+| Background | `#080D19` to `#10182B` | Neutral terminal surface. |
+| Cyan | `#38BDF8` | Source session and input flow. |
+| Violet | `#A78BFA` | Format conversion and safety boundary. |
+| Amber | `#FBBF24` | New target-native session. |
+| Green | `#34D399` | Source-preservation guarantee. |
+| Primary text | `#F8FAFC` | High-contrast headings. |
+| Secondary text | `#94A3B8` | Supporting descriptions. |
 
-```text
-assets/resume-from-card.png
-```
+The colors identify roles, not vendors. The illustration contains no vendor logos or copied interface elements.
 
-Use this alt text:
+### Typography
+
+- Product name, stage labels, and transfer notation use a system monospace stack: SFMono, Consolas, Liberation Mono, Menlo.
+- Titles and descriptions use a system sans-serif stack: Inter when available, then the operating-system UI font.
+- The SVG embeds no external font files, so GitHub and package renderers do not need a network request.
+
+### Layout
+
+- Canvas: 8:5, matching the Pi package image requirement.
+- Primary flow: three equal-width cards with explicit arrows.
+- Reading order: title, use cases, transfer flow, content policy.
+- Important content stays inside the central area so a 2:1 social crop remains usable.
+- Text remains readable at README width; the PNG is not intended for very small icon use.
+
+## Accessibility text
+
+Use this alt text for either asset:
 
 ```text
-A coding conversation moves through a preview checkpoint into a new agent
-session while the source remains unchanged.
+A source coding-agent session is normalized, filtered, previewed, and written as a new native session while the source remains unchanged.
 ```
 
-## Add the image to Pi
+The SVG also includes a `<title>` and `<desc>` with the same meaning.
 
-The Pi manifest uses this URL:
+## Render the PNG
+
+The SVG is the source of truth. Regenerate the PNG with librsvg:
+
+```sh
+rsvg-convert --width 1600 --height 1000 \
+  assets/resume-from-card.svg > assets/resume-from-card.png
+```
+
+Verify the result:
+
+```sh
+identify -format '%wx%h %b\n' assets/resume-from-card.png
+```
+
+Expected dimensions are `1600x1000`.
+
+## Pi package gallery
+
+The `pi.image` field in `package.json` points to the PNG:
 
 ```text
 https://raw.githubusercontent.com/alexei-led/resume-from/implement-resume-from/assets/resume-from-card.png
 ```
 
-Open the URL before release. Make sure that it returns the PNG file.
+Open that URL after the release commit reaches `implement-resume-from` and verify that it returns the updated PNG. If the release branch changes, update `pi.image` before publishing.
 
 ## GitHub social preview
 
-Use the same master image as the source. Crop it to `1280 × 640` for the GitHub
-social preview. Add the crop in the GitHub repository settings. GitHub does not
-read this image from `package.json`.
+Use the PNG as the source. Crop it to `1280 × 640` in the repository settings. Keep all three transfer cards visible; trim vertical space before trimming either side.

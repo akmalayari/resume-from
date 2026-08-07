@@ -1,0 +1,184 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000" viewBox="0 0 1600 1000" role="img" aria-labelledby="title description">
+  <title id="title">resume-from session transfer</title>
+  <desc id="description">A source coding-agent session is normalized, filtered, previewed, and written as a new native session while the source remains unchanged.</desc>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#080D19"/>
+      <stop offset="1" stop-color="#10182B"/>
+    </linearGradient>
+    <linearGradient id="sourceHeader" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#0E7490"/>
+      <stop offset="1" stop-color="#155E75"/>
+    </linearGradient>
+    <linearGradient id="transferHeader" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#6D28D9"/>
+      <stop offset="1" stop-color="#5B21B6"/>
+    </linearGradient>
+    <linearGradient id="targetHeader" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#B45309"/>
+      <stop offset="1" stop-color="#92400E"/>
+    </linearGradient>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#22304A" stroke-width="1" opacity="0.3"/>
+    </pattern>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="14" stdDeviation="18" flood-color="#020617" flood-opacity="0.45"/>
+    </filter>
+    <marker id="arrowCyan" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M0,0 L12,6 L0,12 Z" fill="#38BDF8"/>
+    </marker>
+    <marker id="arrowAmber" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M0,0 L12,6 L0,12 Z" fill="#FBBF24"/>
+    </marker>
+    <style>
+      .sans { font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      .mono { font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace; }
+      .eyebrow { font-size: 18px; font-weight: 700; letter-spacing: 2px; }
+      .card-title { font-size: 29px; font-weight: 700; }
+      .body { font-size: 21px; font-weight: 500; }
+      .small { font-size: 18px; font-weight: 500; }
+    </style>
+  </defs>
+
+  <rect width="1600" height="1000" rx="36" fill="url(#background)"/>
+  <rect width="1600" height="1000" rx="36" fill="url(#grid)"/>
+
+  <g class="sans">
+    <text x="100" y="106" class="mono" font-size="56" font-weight="700" fill="#F8FAFC">resume-from</text>
+    <text x="100" y="158" font-size="28" font-weight="600" fill="#D7E0EE">Continue the same task in another coding agent</text>
+    <text x="100" y="198" font-size="21" fill="#94A3B8">Pi · Claude Code · Codex</text>
+
+    <g transform="translate(910 82)">
+      <g>
+        <rect width="132" height="42" rx="21" fill="#122238" stroke="#38BDF8" stroke-opacity="0.55"/>
+        <text x="66" y="27" text-anchor="middle" class="small" fill="#BAE6FD">new model</text>
+      </g>
+      <g transform="translate(144 0)">
+        <rect width="156" height="42" rx="21" fill="#211A3A" stroke="#A78BFA" stroke-opacity="0.55"/>
+        <text x="78" y="27" text-anchor="middle" class="small" fill="#DDD6FE">new harness</text>
+      </g>
+      <g transform="translate(312 0)">
+        <rect width="144" height="42" rx="21" fill="#30210F" stroke="#FBBF24" stroke-opacity="0.55"/>
+        <text x="72" y="27" text-anchor="middle" class="small" fill="#FDE68A">new profile</text>
+      </g>
+      <g transform="translate(80 56)">
+        <rect width="280" height="42" rx="21" fill="#132A24" stroke="#34D399" stroke-opacity="0.55"/>
+        <text x="140" y="27" text-anchor="middle" class="small" fill="#A7F3D0">continue after usage limits</text>
+      </g>
+    </g>
+  </g>
+
+  <g filter="url(#shadow)">
+    <g transform="translate(80 286)">
+      <rect width="400" height="438" rx="24" fill="#101A2C" stroke="#38BDF8" stroke-width="2"/>
+      <path d="M24 0 H376 Q400 0 400 24 V88 H0 V24 Q0 0 24 0 Z" fill="url(#sourceHeader)"/>
+      <circle cx="32" cy="28" r="7" fill="#BAE6FD"/>
+      <circle cx="56" cy="28" r="7" fill="#7DD3FC"/>
+      <circle cx="80" cy="28" r="7" fill="#38BDF8"/>
+      <text x="28" y="68" class="mono eyebrow" fill="#E0F2FE">SOURCE SESSION</text>
+      <text x="28" y="130" class="sans card-title" fill="#F8FAFC">Native history</text>
+      <text x="28" y="164" class="sans small" fill="#94A3B8">from this Git repository</text>
+
+      <g transform="translate(28 202)">
+        <rect width="46" height="46" rx="11" fill="#0E7490"/>
+        <rect x="68" y="2" width="248" height="17" rx="8" fill="#67E8F9" opacity="0.82"/>
+        <rect x="68" y="28" width="288" height="13" rx="6" fill="#475569"/>
+        <rect y="62" width="46" height="46" rx="11" fill="#334155"/>
+        <rect x="68" y="64" width="288" height="17" rx="8" fill="#CBD5E1" opacity="0.68"/>
+        <rect x="68" y="90" width="212" height="13" rx="6" fill="#475569"/>
+        <rect y="124" width="46" height="46" rx="11" fill="#0E7490"/>
+        <rect x="68" y="126" width="226" height="17" rx="8" fill="#67E8F9" opacity="0.82"/>
+        <rect x="68" y="152" width="264" height="13" rx="6" fill="#475569"/>
+      </g>
+
+      <g transform="translate(28 384)">
+        <rect width="344" height="34" rx="11" fill="#102B27" stroke="#34D399" stroke-opacity="0.7"/>
+        <circle cx="22" cy="17" r="7" fill="#34D399"/>
+        <text x="42" y="24" class="sans small" fill="#A7F3D0">source stays unchanged</text>
+      </g>
+    </g>
+
+    <g transform="translate(600 286)">
+      <rect width="400" height="438" rx="24" fill="#15152C" stroke="#A78BFA" stroke-width="2"/>
+      <path d="M24 0 H376 Q400 0 400 24 V88 H0 V24 Q0 0 24 0 Z" fill="url(#transferHeader)"/>
+      <circle cx="32" cy="28" r="7" fill="#EDE9FE"/>
+      <circle cx="56" cy="28" r="7" fill="#C4B5FD"/>
+      <circle cx="80" cy="28" r="7" fill="#A78BFA"/>
+      <text x="28" y="68" class="mono eyebrow" fill="#F5F3FF">SAFE TRANSFER</text>
+      <text x="28" y="130" class="sans card-title" fill="#F8FAFC">Format-aware import</text>
+      <text x="28" y="164" class="sans small" fill="#94A3B8">no model call required</text>
+
+      <g transform="translate(30 194)" class="sans">
+        <circle cx="22" cy="22" r="22" fill="#6D28D9"/>
+        <text x="22" y="29" text-anchor="middle" font-size="19" font-weight="800" fill="#FFFFFF">1</text>
+        <text x="62" y="18" class="body" fill="#F8FAFC">Normalize</text>
+        <text x="62" y="43" class="small" fill="#A9B4C8">into one conversation model</text>
+
+        <circle cx="22" cy="86" r="22" fill="#6D28D9"/>
+        <text x="22" y="93" text-anchor="middle" font-size="19" font-weight="800" fill="#FFFFFF">2</text>
+        <text x="62" y="82" class="body" fill="#F8FAFC">Filter and budget</text>
+        <text x="62" y="107" class="small" fill="#A9B4C8">drop stale result bodies</text>
+
+        <circle cx="22" cy="150" r="22" fill="#6D28D9"/>
+        <text x="22" y="157" text-anchor="middle" font-size="19" font-weight="800" fill="#FFFFFF">3</text>
+        <text x="62" y="146" class="body" fill="#F8FAFC">Preview and confirm</text>
+        <text x="62" y="171" class="small" fill="#A9B4C8">write nothing before approval</text>
+      </g>
+
+      <g transform="translate(28 384)">
+        <rect width="344" height="34" rx="11" fill="#251B40" stroke="#A78BFA" stroke-opacity="0.7"/>
+        <text x="172" y="24" text-anchor="middle" class="mono small" fill="#DDD6FE">source → canonical → target</text>
+      </g>
+    </g>
+
+    <g transform="translate(1120 286)">
+      <rect width="400" height="438" rx="24" fill="#211A13" stroke="#FBBF24" stroke-width="2"/>
+      <path d="M24 0 H376 Q400 0 400 24 V88 H0 V24 Q0 0 24 0 Z" fill="url(#targetHeader)"/>
+      <circle cx="32" cy="28" r="7" fill="#FEF3C7"/>
+      <circle cx="56" cy="28" r="7" fill="#FDE68A"/>
+      <circle cx="80" cy="28" r="7" fill="#FBBF24"/>
+      <text x="28" y="68" class="mono eyebrow" fill="#FFFBEB">TARGET SESSION</text>
+      <text x="28" y="130" class="sans card-title" fill="#F8FAFC">New native session</text>
+      <text x="28" y="164" class="sans small" fill="#A9B4C8">opens with the target agent</text>
+
+      <g transform="translate(28 202)">
+        <rect width="46" height="46" rx="11" fill="#B45309"/>
+        <rect x="68" y="2" width="240" height="17" rx="8" fill="#FCD34D" opacity="0.85"/>
+        <rect x="68" y="28" width="288" height="13" rx="6" fill="#57534E"/>
+        <rect y="62" width="46" height="46" rx="11" fill="#44403C"/>
+        <rect x="68" y="64" width="288" height="17" rx="8" fill="#D6D3D1" opacity="0.7"/>
+        <rect x="68" y="90" width="212" height="13" rx="6" fill="#57534E"/>
+        <rect y="124" width="46" height="46" rx="11" fill="#B45309"/>
+        <rect x="68" y="126" width="236" height="17" rx="8" fill="#FCD34D" opacity="0.85"/>
+        <rect x="68" y="152" width="264" height="13" rx="6" fill="#57534E"/>
+      </g>
+
+      <g transform="translate(28 384)">
+        <rect width="344" height="34" rx="11" fill="#33250E" stroke="#FBBF24" stroke-opacity="0.7"/>
+        <circle cx="22" cy="17" r="7" fill="#FBBF24"/>
+        <text x="42" y="24" class="sans small" fill="#FDE68A">continue with target tools</text>
+      </g>
+    </g>
+  </g>
+
+  <path d="M492 505 H572" fill="none" stroke="#38BDF8" stroke-width="5" stroke-linecap="round" marker-end="url(#arrowCyan)"/>
+  <path d="M1012 505 H1092" fill="none" stroke="#FBBF24" stroke-width="5" stroke-linecap="round" marker-end="url(#arrowAmber)"/>
+
+  <g transform="translate(160 814)" class="sans">
+    <g>
+      <rect width="374" height="88" rx="18" fill="#101A2C" stroke="#31405F"/>
+      <text x="24" y="36" class="eyebrow" fill="#7DD3FC">KEPT</text>
+      <text x="24" y="67" class="body" fill="#E2E8F0">prompts · replies · summaries</text>
+    </g>
+    <g transform="translate(454 0)">
+      <rect width="374" height="88" rx="18" fill="#15152C" stroke="#4C3F74"/>
+      <text x="24" y="36" class="eyebrow" fill="#C4B5FD">MADE SAFE</text>
+      <text x="24" y="67" class="body" fill="#E2E8F0">tool activity becomes plain text</text>
+    </g>
+    <g transform="translate(908 0)">
+      <rect width="374" height="88" rx="18" fill="#211A13" stroke="#6B4C1A"/>
+      <text x="24" y="36" class="eyebrow" fill="#FCD34D">REMOVED</text>
+      <text x="24" y="67" class="body" fill="#E2E8F0">tool-result bodies · vendor state</text>
+    </g>
+  </g>
+</svg>

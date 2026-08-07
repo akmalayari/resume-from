@@ -1,22 +1,8 @@
-# Install and first import
+# Install and run the first transfer
 
-This guide shows the common flow. Read the agent guide for the command that runs
-in your target agent.
+Install `resume-from` in the agent that will receive the imported session. Then run it from the Git repository that owns the source session.
 
-## Choose a target
-
-Install `resume-from` in the target agent:
-
-- Pi uses `pi install npm:resume-from`.
-- Claude Code uses the `alexei-led/resume-from` marketplace.
-- Codex uses the `alexei-led/resume-from` marketplace.
-
-All three agents expose `/resume-from`. Claude Code and Codex also need the
-plugin install command in the sections below.
-
-## Install
-
-Install the package in the agent that will receive the session.
+## 1. Choose the destination
 
 ### Pi
 
@@ -24,7 +10,7 @@ Install the package in the agent that will receive the session.
 pi install npm:resume-from
 ```
 
-Restart Pi after the install. Then run `/resume-from`.
+Restart Pi after installation.
 
 ### Claude Code
 
@@ -33,7 +19,7 @@ claude plugin marketplace add alexei-led/resume-from
 claude plugin install resume-from@alexei-led-resume-from
 ```
 
-Run `/resume-from` in Claude Code.
+Restart Claude Code if `/resume-from` does not appear.
 
 ### Codex
 
@@ -42,44 +28,82 @@ codex plugin marketplace add alexei-led/resume-from
 codex plugin add resume-from@alexei-led-resume-from
 ```
 
-Run `/resume-from` in Codex. The Codex plugin uses the published `resume-from`
-package. The first use needs access to the npm registry.
+The Codex prompt uses a pinned package through `npx`. Its first use needs access to the npm registry.
 
-## Import a session
+## 2. Open the repository in the destination agent
 
-1. Run `/resume-from` with no selector.
-2. Read the numbered session list.
-3. Run `/resume-from <row>` with the row number.
-4. Read the preview.
-5. Run `/resume-from <row> --confirm`.
+Start the destination agent in the same Git repository as the source session. Choose the destination model, provider, and profile before importing.
 
-The exact command differs in Codex and Claude Code. Read the output from the
-tool and follow its native landing command.
+Session discovery is repository-scoped. A known session ID or file path still has to belong to the current repository.
 
-## Use a session ID or path
+## 3. Preview and import
 
-If you know the source session, use one selector.
+### Pi workflow
 
-```sh
-resume-from --target-agent codex <session-id>
-resume-from --target-agent codex /absolute/path/to/session.jsonl
-```
+1. Run `/resume-from`.
+2. Select a source session in Pi's native picker.
+3. Read the preview.
+4. Confirm the import.
 
-The installed agent shims add the target agent. In a host command, use the host
-command instead of the binary form.
+Pi creates and opens the new session in the current process. It leaves the prompt empty.
 
-## Show help
+### Claude Code and Codex workflow
 
-Use `--help` or `-h` to list selectors, filters, and examples.
+1. Run `/resume-from` to list matching sessions.
+2. Run `/resume-from <row>` to preview one session.
+3. Run `/resume-from <row> --confirm` to create the target session.
+4. Run the native landing command printed by the tool.
+
+Claude Code prints:
 
 ```sh
-resume-from --target-agent codex --help
+claude --resume <session-id>
 ```
 
-## What happens after confirmation
+Codex prints:
 
-Pi opens the new session in the same process. Claude Code and Codex create the
-new session and print the native command that opens it. Run that command
-yourself.
+```sh
+codex resume <thread-id>
+```
 
-The source session remains unchanged. The target home receives new files only.
+## Select a known session
+
+The command accepts one row number, session ID, or session file path.
+
+```text
+/resume-from <session-id>
+/resume-from /absolute/path/to/session.jsonl
+```
+
+Claude Code and Codex also support source filters:
+
+```text
+/resume-from --agent pi
+/resume-from --agent claude --home ~/.claude-team
+```
+
+Pi uses its native picker for discovery and accepts a session ID or path directly.
+
+## Check the preview
+
+Before confirmation, verify:
+
+- Source agent, profile, session, repository, and commit warning.
+- Kept and dropped turn counts.
+- Tool-result bodies removed.
+- Estimated tokens and target budget.
+- Changed-file paths.
+
+Nothing has been written at this point. A blocked preview cannot be confirmed.
+
+## Confirm success
+
+A successful transfer has these properties:
+
+- The source session is unchanged.
+- A new target-native session exists.
+- The target can open and read the new session.
+- The imported session shows its source and what was dropped.
+- Tool activity is plain text, not replayable calls.
+
+Use `/resume-from --help` for the exact selectors and filters available in the current host.

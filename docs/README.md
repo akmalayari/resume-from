@@ -1,25 +1,32 @@
 # Documentation
 
-Use this index to find the shortest guide for your task.
+Choose the shortest guide for the task in front of you.
 
-## Start here
+## Start and use `resume-from`
 
-- [Install and first import](getting-started.md)
-- [Configuration](configuration.md)
-- [Troubleshooting](troubleshooting.md)
+- [Install and run the first transfer](getting-started.md)
+- [Common workflows and limitations](workflows.md)
+- [How session transfer works](how-it-works.md)
 
-## Agent guides
+## Install in a specific target agent
 
 - [Pi](agents/pi.md)
 - [Claude Code](agents/claude-code.md)
 - [Codex](agents/codex.md)
 
-## Project resources
+The target-agent guide owns installation and landing instructions. The shared getting-started guide owns the cross-agent workflow.
 
-- [Project image brief](visual-assets.md)
-- [Requirements](requirements.md)
-- [Technical stack](tech-stack.md)
-- [Implementation plan](plans/2026-08-04-implement-resume-from.md)
+## Configure and troubleshoot
 
-The files under `src/**/module.md` define internal module contracts. They are
-for contributors, not for installation or daily use.
+- [Configuration](configuration.md) — extra agent homes, context budget, pinned turns, and context-window overrides.
+- [Troubleshooting](troubleshooting.md) — missing commands, missing sessions, blocked previews, and landing problems.
+
+## Maintain the project
+
+- [Requirements](requirements.md) — normative product behavior and acceptance criteria.
+- [Technical stack](tech-stack.md) — implementation choices and development constraints.
+- [Implementation plan](plans/2026-08-04-implement-resume-from.md) — original delivery sequence.
+- [Visual assets](visual-assets.md) — source artwork, palette, typography, rendering, and accessibility text.
+- [`shims/README.md`](../shims/README.md) — host integration and package staging boundaries.
+
+The files under `src/**/module.md` define internal module contracts. They are contributor references, not user guides.

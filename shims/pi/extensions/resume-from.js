@@ -5,6 +5,17 @@ import { formatRow } from "resume-from/pi-extension";
 
 const COMMAND_NAME = "resume-from";
 const DESCRIPTION = "Continue another session. Use /resume-from --help for accepted arguments.";
+const PROVENANCE_CUSTOM_TYPE = "resume-from-provenance";
+
+function provenanceLines(entries) {
+  for (let index = entries.length - 1; index >= 0; index -= 1) {
+    const entry = entries[index];
+    if (entry?.type !== "custom" || entry.customType !== PROVENANCE_CUSTOM_TYPE) continue;
+    const lines = entry.data?.lines;
+    return Array.isArray(lines) && lines.every((line) => typeof line === "string") ? lines : null;
+  }
+  return null;
+}
 
 function agentHome() {
   return process.env.PI_CODING_AGENT_DIR ?? join(homedir(), ".pi", "agent");
@@ -42,6 +53,11 @@ function pickerFor(context) {
 }
 
 export default function resumeFrom(pi) {
+  pi.on("session_start", (_event, context) => {
+    const lines = provenanceLines(context.sessionManager.getEntries());
+    context.ui.setWidget(PROVENANCE_CUSTOM_TYPE, lines ?? undefined);
+  });
+
   pi.registerCommand(COMMAND_NAME, {
     description: DESCRIPTION,
     async handler(rawArgs, context) {

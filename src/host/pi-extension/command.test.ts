@@ -375,8 +375,8 @@ describe("T-PIX-9 — the runtime handle is Pi's own context", () => {
   });
 });
 
-describe("T-PIX-10 — a landing result is presented", () => {
-  it("shows the marker when the switch happened", async () => {
+describe("T-PIX-10 — landing presentation respects Pi's session lifecycle", () => {
+  it("leaves marker presentation to the new extension instance after switching", async () => {
     const result = landing({ switched: true, handover: null });
     const pipeline = stubPipeline({ landing: result });
     const picked = stubPicker({ choice: "cancelled", selected: null });
@@ -389,7 +389,32 @@ describe("T-PIX-10 — a landing result is presented", () => {
       pipeline.pipeline,
     );
 
-    expect(ui.blocks).toContainEqual(result.marker.lines);
+    expect(ui.blocks).not.toContainEqual(result.marker.lines);
+  });
+
+  it("does not reuse the old UI after switching sessions", async () => {
+    let stale = false;
+    const ui: PiUi = {
+      show() {
+        if (stale) throw new Error("stale command context");
+      },
+      async confirm() {
+        return "selected";
+      },
+    };
+    const pipeline = stubPipeline({
+      landing: landing({ switched: true, handover: null }),
+      onCommit: () => {
+        stale = true;
+      },
+    });
+    const { ctx } = stubContext();
+
+    await expect(
+      createResumeFromCommand(
+        deps({ picker: stubPicker({ choice: "cancelled", selected: null }).picker, ui }),
+      ).run(ctx, ["cx-1"], pipeline.pipeline),
+    ).resolves.toBeUndefined();
   });
 
   it("shows the session ID and the command that opens it when the switch did not happen", async () => {
@@ -575,7 +600,7 @@ describe("T-PIX-16 — nothing is sent after landing", () => {
 // ---------------------------------------------------------------- behavior tests
 
 describe("T-PIX-19 — pick, confirm, hand the context over", () => {
-  it("commits once with Pi's own context, shows the marker and stays silent afterwards", async () => {
+  it("commits once with Pi's own context and stays silent after the switch", async () => {
     const rows = [
       row("pi", "pi-1", "/Users/me/.pi"),
       row("claude-code", "cc-1", "/Users/me/.claude-team"),
@@ -601,7 +626,7 @@ describe("T-PIX-19 — pick, confirm, hand the context over", () => {
     });
     expect(pipeline.commitCalls).toHaveLength(1);
     expect(pipeline.commitCalls[0]?.runtime).toBe(context.ctx);
-    expect(ui.blocks).toContainEqual(result.marker.lines);
+    expect(ui.blocks).not.toContainEqual(result.marker.lines);
     expect(context.sendMessage).not.toHaveBeenCalled();
     expect(context.runTool).not.toHaveBeenCalled();
   });

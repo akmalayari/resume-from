@@ -3,86 +3,140 @@
 [![Release](https://github.com/alexei-led/resume-from/actions/workflows/release.yml/badge.svg)](https://github.com/alexei-led/resume-from/actions/workflows/release.yml)
 [![npm](https://img.shields.io/npm/v/resume-from)](https://www.npmjs.com/package/resume-from)
 
-![A coding conversation moves through a preview checkpoint into a new agent session while the source remains unchanged.](assets/resume-from-card.png)
+![A source coding-agent session is normalized, filtered, previewed, and written as a new native session while the source remains unchanged.](assets/resume-from-card.svg)
 
-Move a coding session from one coding agent to another.
+Continue an AI coding session in another terminal agent or another profile of the same agent.
 
-## The problem
+`resume-from` converts saved sessions between **Pi**, **Claude Code**, and **Codex**. Use it when you want a different model, provider, tool harness, or account without rebuilding the task context by hand.
 
-Coding agents keep session files in different formats and locations. A session
-that starts in Claude Code does not open as a native session in Pi. A Codex
-thread does not open as a Claude Code thread. Copying the file does not solve
-this problem. The file formats differ, and tool results can contain stale or
-sensitive data.
+## Why this exists
 
-`resume-from` reads the source session and writes a new session in the target
-agent format. It keeps the useful conversation, removes tool-result bodies,
-shows a preview, and asks for confirmation. The source session stays unchanged.
+Coding agents save conversations in different locations and vendor-specific formats. A Codex thread is not a Pi session. A Claude Code session cannot be opened directly by Codex.
 
-## Core use cases
+You can ask the next agent to read another tool's raw session file, but then the model must understand that format and decide which internal data is safe or useful. `resume-from` performs that conversion before the target agent starts:
 
-- Start a task in Codex, then continue it in Pi.
-- Move from a terminal agent to a graphical agent.
-- Continue a session from a second Claude Code profile.
-- Recover the task after a context limit blocks the current session.
-- Review exactly what will cross the agent boundary before anything is written.
+1. Find sessions for the current Git repository.
+2. Parse the source agent's format into a common conversation model.
+3. Remove tool-result bodies and vendor-only state.
+4. Fit the useful history to the target context budget.
+5. Show exactly what will be imported.
+6. After confirmation, write a new session in the target agent's native format.
 
-The tool supports Pi, Claude Code, and Codex. It supports all source and target
-directions between these agents.
+The source session is never changed.
 
-| Target agent | Selection     | Landing                       |
-| ------------ | ------------- | ----------------------------- |
-| Pi           | Native picker | Opens the imported session    |
-| Claude Code  | Numbered list | Prints `claude --resume <id>` |
-| Codex        | Numbered list | Prints `codex resume <id>`    |
+## Use it when
 
-## How it works
+- **You want another model or provider.** Start the target agent with the model you want, then import the session.
+- **You want another harness.** Keep the task context while changing terminal UI, tools, permissions, extensions, or agent behavior.
+- **You hit a rate or usage limit.** Continue through another installed agent or account instead of waiting or reconstructing the task.
+- **You need another profile.** Move between work, personal, or team homes, including two profiles of the same agent.
+- **The current context is too large.** Import a budgeted history into a fresh native session.
+- **You want an independent handoff.** Create a target-side copy for continued work or review while preserving the original session.
 
-```mermaid
-flowchart LR
-    A[Source session] --> B[Read and normalize]
-    B --> C[Drop tool-result bodies]
-    C --> D[Preview and budget]
-    D --> E{User confirms}
-    E -- No --> F[Write nothing]
-    E -- Yes --> G[Write target session]
-    G --> H[Open or report target session]
+`resume-from` moves conversation context. It does not copy the repository or migrate a running process. The target agent must have access to the same working tree.
+
+## Supported transfers
+
+Every source-to-target direction is supported, including transfers within the same agent:
+
+| Source \ Target | Pi | Claude Code | Codex |
+| --- | :---: | :---: | :---: |
+| **Pi** | ✓ | ✓ | ✓ |
+| **Claude Code** | ✓ | ✓ | ✓ |
+| **Codex** | ✓ | ✓ | ✓ |
+
+The landing behavior depends on the target:
+
+| Target | After confirmation |
+| --- | --- |
+| **Pi** | Writes and opens the imported session in the current Pi process. |
+| **Claude Code** | Writes the session and prints `claude --resume <session-id>`. |
+| **Codex** | Writes the thread and prints `codex resume <thread-id>`. |
+
+## What crosses the boundary
+
+The importer keeps the parts needed to continue the task, subject to the target token budget:
+
+- User prompts and agent replies.
+- Compaction summaries.
+- Tool activity as **non-replayable plain text**: tool name, recorded arguments, and a one-line outcome.
+- Changed-file paths derived from mutating tool activity.
+- Source provenance and a summary of anything dropped.
+
+It excludes:
+
+- Tool-result bodies, which may be large, stale, or sensitive.
+- Replayable tool-call structures.
+- Hidden reasoning, system prompts, environment blocks, API keys, telemetry, and vendor process state.
+
+A dropped result is marked in the imported conversation. The target agent can reread the current file or rerun a command when it needs fresh state.
+
+### Context budget
+
+By default, the imported history may use up to 30% of the target context window. The first request, recent turns, summaries, and changed-file records are pinned. If older unpinned turns must be removed, the preview reports them. If the pinned content alone does not fit, the import stops before writing.
+
+## Install in the destination agent
+
+Install `resume-from` in the agent that will receive the new session.
+
+### Pi
+
+```sh
+pi install npm:resume-from
 ```
 
-## What moves
+Restart Pi, then run `/resume-from`.
 
-The new session contains:
+### Claude Code
 
-- User messages and agent answers.
-- Compaction summaries.
-- Tool names, arguments, and short outcomes.
-- The list of changed files.
+```sh
+claude plugin marketplace add alexei-led/resume-from
+claude plugin install resume-from@alexei-led-resume-from
+```
 
-The new session does not contain:
+### Codex
 
-- Tool-result bodies.
-- Vendor process state.
+```sh
+codex plugin marketplace add alexei-led/resume-from
+codex plugin add resume-from@alexei-led-resume-from
+```
 
-A dropped tool result has a marker. The target agent can read the current file
-or run the command again.
+The Codex prompt runs the matching published `resume-from` package through `npx`. Its first use needs npm registry access.
 
-## Safety rules
+## Run the first transfer
 
-- It never changes the source session.
-- It never writes before confirmation.
-- It adds files in the target home. It does not replace or delete files.
-- If the required content does not fit, it fails before writing.
+Run the command from the Git repository that owns the source session.
 
-## Install
+### In Pi
 
-Choose the guide for the agent that will receive the imported session:
+1. Run `/resume-from`.
+2. Select a source session in the native picker.
+3. Read the preview.
+4. Confirm.
 
-- [Install and first import](docs/getting-started.md)
-- [Pi](docs/agents/pi.md)
-- [Claude Code](docs/agents/claude-code.md)
-- [Codex](docs/agents/codex.md)
-- [Configuration](docs/configuration.md)
-- [Troubleshooting](docs/troubleshooting.md)
+Pi opens the imported session with an empty prompt. You decide when to continue.
+
+### In Claude Code or Codex
+
+1. Run `/resume-from` to list matching sessions.
+2. Run `/resume-from <row>` to preview one.
+3. Run `/resume-from <row> --confirm` to import it.
+4. Run the native resume command printed by the tool.
+
+You can also select an exact session ID or file path. Selection by path does not bypass the current-repository check.
+
+## Safety properties
+
+- **Read-only source:** source homes and session files are not modified.
+- **Explicit write:** cancellation or a blocked preview writes nothing.
+- **Add-only target:** the importer creates target files; it does not replace or delete existing sessions.
+- **Native validation:** the new file is validated and read back before it is reported as openable.
+- **No model call during transfer:** conversion, filtering, budgeting, and writing are deterministic local operations.
+- **Visible provenance:** the imported session identifies its source and states what was dropped without putting that marker in model context.
+
+## Documentation
+
+The user and maintainer documentation is organized in [`docs/`](docs/README.md).
 
 ## Development
 
@@ -101,12 +155,6 @@ Run the command help after a build:
 ```sh
 node dist/bin.js --help
 ```
-
-## Project resources
-
-- [Image brief for the Pi package gallery](docs/visual-assets.md)
-- [Host shim and package boundaries](shims/README.md)
-- [GitHub issues](https://github.com/alexei-led/resume-from/issues)
 
 ## License
 
