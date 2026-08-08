@@ -1,14 +1,16 @@
 {
   "name": "alexei-led-resume-from",
-  "version": "0.1.6",
-  "interface": { "displayName": "resume-from" },
+  "version": "0.1.7",
+  "interface": {
+    "displayName": "resume-from"
+  },
   "plugins": [
     {
       "name": "resume-from",
       "source": {
         "source": "npm",
         "package": "@alexeiled/resume-from-codex",
-        "version": "0.1.6"
+        "version": "0.1.7"
       },
       "policy": {
         "installation": "AVAILABLE",

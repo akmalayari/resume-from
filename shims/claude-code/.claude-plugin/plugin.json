@@ -1,9 +1,11 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "resume-from",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "Continue a coding session from another agent, or another profile of the same agent.",
-  "author": { "name": "Alexei Ledenev" },
+  "author": {
+    "name": "Alexei Ledenev"
+  },
   "license": "MIT",
   "keywords": ["session", "handoff", "codex", "pi", "resume"]
 }

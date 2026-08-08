@@ -1,8 +1,10 @@
 {
   "name": "resume-from",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "Continue a coding session from another agent or profile.",
-  "author": { "name": "Alexei Ledenev" },
+  "author": {
+    "name": "Alexei Ledenev"
+  },
   "license": "MIT",
   "repository": "https://github.com/alexei-led/resume-from",
   "homepage": "https://github.com/alexei-led/resume-from",

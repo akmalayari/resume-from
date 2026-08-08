@@ -1,20 +1,24 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
   "name": "alexei-led-resume-from",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "Continue a coding session in a different agent or profile.",
-  "owner": { "name": "Alexei Ledenev" },
+  "owner": {
+    "name": "Alexei Ledenev"
+  },
   "plugins": [
     {
       "name": "resume-from",
       "source": {
         "source": "npm",
         "package": "@alexeiled/resume-from-claude",
-        "version": "0.1.6"
+        "version": "0.1.7"
       },
       "description": "Continue a coding session from another agent or profile.",
-      "version": "0.1.6",
-      "author": { "name": "Alexei Ledenev" }
+      "version": "0.1.7",
+      "author": {
+        "name": "Alexei Ledenev"
+      }
     }
   ]
 }
