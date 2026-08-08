@@ -5,6 +5,7 @@ import type { AgentId, ImportRequest, ListRequest } from "./contract.js";
 import { createPipelineFromStages } from "./pipeline.js";
 import {
   AGENTS,
+  commitPreviewed,
   createWorld,
   instrument,
   recordingStages,
@@ -83,17 +84,22 @@ describe("T-IMP-3 — commit repeats the preview then lands", () => {
   it("runs the four preview steps and hands the lander the plan the rules produced", async () => {
     const { calls, stages, plans, landed } = recordingStages();
     const pipeline = createPipelineFromStages(stages);
-
-    await pipeline.commit(
-      {
-        repoRoot: "/repo",
-        target: { agent: "pi", home: "/homes/pi", windowTokens: 200_000 },
-        selection: { by: "row", row: 1 },
-        onlyAgent: null,
-        onlyHome: null,
+    const request = {
+      repoRoot: "/repo",
+      target: {
+        agent: "pi" as const,
+        home: "/homes/pi",
+        windowTokens: 200_000,
       },
-      null,
-    );
+      selection: { by: "row" as const, row: 1 },
+      onlyAgent: null,
+      onlyHome: null,
+    };
+    const report = await pipeline.preview(request);
+    calls.length = 0;
+    plans.length = 0;
+
+    await pipeline.commit(request, null, report.confirmationToken);
 
     expect(calls).toEqual([
       "finder.resolve",
@@ -133,10 +139,8 @@ describe("T-IMP-5 — the target adapter is chosen by the target profile", () =>
       referenceSpec({ id: "codex-1", repoPath: world.repoRoot }),
     );
 
-    await createImportPipeline(worldDeps(world)).commit(
-      importRequest(world, agent, "codex-1"),
-      null,
-    );
+    const pipeline = createImportPipeline(worldDeps(world));
+    await commitPreviewed(pipeline, importRequest(world, agent, "codex-1"));
 
     expect(world.calls.filter((call) => call.endsWith(".serialize"))).toEqual([
       `${agent}.serialize`,
@@ -149,7 +153,9 @@ describe("T-IMP-6 — the diagonal is not a special case", () => {
   it("runs the same stages and the same adapter methods as any other direction", async () => {
     const world = await newWorld();
     const secondPiHome = `${world.root}/homes/pi-work`;
-    const config = { extraHomes: [{ agent: "pi" as const, home: secondPiHome }] };
+    const config = {
+      extraHomes: [{ agent: "pi" as const, home: secondPiHome }],
+    };
 
     await writeSession(secondPiHome, referenceSpec({ id: "pi-work-1", repoPath: world.repoRoot }));
     await writeSession(
@@ -157,16 +163,18 @@ describe("T-IMP-6 — the diagonal is not a special case", () => {
       referenceSpec({ id: "codex-1", repoPath: world.repoRoot }),
     );
 
-    const deps = worldDeps(world, { config: { ...worldDeps(world).config, ...config } });
+    const deps = worldDeps(world, {
+      config: { ...worldDeps(world).config, ...config },
+    });
 
     // pi (work home) → pi (a second home): the diagonal of the scope table (FR-4).
     const diagonal = instrument(deps);
-    await diagonal.pipeline.commit(importRequest(world, "pi", "pi-work-1"), null);
+    await commitPreviewed(diagonal.pipeline, importRequest(world, "pi", "pi-work-1"));
     const diagonalCalls = methodsOf(world.calls.splice(0));
 
     // codex → pi: an ordinary direction.
     const across = instrument(deps);
-    await across.pipeline.commit(importRequest(world, "pi", "codex-1"), null);
+    await commitPreviewed(across.pipeline, importRequest(world, "pi", "codex-1"));
     const acrossCalls = methodsOf(world.calls.splice(0));
 
     expect(diagonal.order).toEqual(across.order);

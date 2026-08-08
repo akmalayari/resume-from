@@ -192,12 +192,29 @@ export async function writeSessionFile(
   options: { truncate?: boolean } = {},
 ): Promise<string> {
   const target = sessionFilePath(home, repoPath, id);
-  let text = `${entries.map((entry) => JSON.stringify(entry)).join("\n")}\n`;
+  let text = `${chainEntries(entries)
+    .map((entry) => JSON.stringify(entry))
+    .join("\n")}\n`;
   if (options.truncate === true) {
     text = text.slice(0, text.length - 12);
   }
   await writeFileIn(target, text);
   return target;
+}
+
+/** Give fixture records the same append-only parent chain Claude writes. */
+export function chainEntries(entries: unknown[]): unknown[] {
+  let previousUuid: string | null = null;
+  return entries.map((value) => {
+    if (typeof value !== "object" || value === null || Array.isArray(value)) return value;
+    const entry = { ...(value as Record<string, unknown>) };
+    if (typeof entry.uuid !== "string" || entry.uuid === "") return entry;
+    if (entry.parentUuid === null || entry.parentUuid === undefined) {
+      entry.parentUuid = previousUuid;
+    }
+    previousUuid = entry.uuid;
+    return entry;
+  });
 }
 
 /** sha256 of every file below `dir`, keyed by path relative to `dir`. */
@@ -333,7 +350,14 @@ export function toolResultEntry(
     type: "user",
     message: {
       role: "user",
-      content: [{ type: "tool_result", tool_use_id: toolUseId, content: body, is_error: isError }],
+      content: [
+        {
+          type: "tool_result",
+          tool_use_id: toolUseId,
+          content: body,
+          is_error: isError,
+        },
+      ],
     },
     toolUseResult: { stdout: body },
   };

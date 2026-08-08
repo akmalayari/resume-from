@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { AgentId, LandingResult } from "./contract.js";
 import { createCliRunner } from "./index.js";
 import {
+  CONFIRMATION_TOKEN,
   descriptor,
   invocation,
   landing,
@@ -16,7 +17,11 @@ describe("T-CLI-21 the FR-10 sequence", () => {
   it("lists, previews row 3, then lands row 3 — three runs with no shared state", async () => {
     const rows = Array.from({ length: 10 }, (_, index) =>
       descriptor({
-        ref: { agent: "codex", home: "/Users/me/.codex", id: `sess-${index + 1}` },
+        ref: {
+          agent: "codex",
+          home: "/Users/me/.codex",
+          id: `sess-${index + 1}`,
+        },
         title: `Session ${index + 1}`,
       }),
     );
@@ -31,7 +36,9 @@ describe("T-CLI-21 the FR-10 sequence", () => {
 
     // 2. /resume-from 3 — a separate run, nothing carried over
     const second = stubPipeline({
-      report: report({ lines: [`From codex ${chosen.ref.id}`, "12 turns cross, 4 dropped"] }),
+      report: report({
+        lines: [`From codex ${chosen.ref.id}`, "12 turns cross, 4 dropped"],
+      }),
     });
     const previewed = await createCliRunner().run(invocation({ argv: ["3"] }), second.pipeline);
     expect(second.calls.preview[0]?.selection).toEqual({ by: "row", row: 3 });
@@ -42,16 +49,23 @@ describe("T-CLI-21 the FR-10 sequence", () => {
     // 3. /resume-from 3 --confirm — a separate run; the pipeline recomputes
     const third = stubPipeline({
       landing: landing({
-        ref: { agent: "claude-code", home: "/Users/me/.claude", id: "landed-from-3" },
+        ref: {
+          agent: "claude-code",
+          home: "/Users/me/.claude",
+          id: "landed-from-3",
+        },
         marker: marker({ sourceSessionId: chosen.ref.id }),
       }),
     });
     const landed = await createCliRunner().run(
-      invocation({ argv: ["3", "--confirm"] }),
+      invocation({ argv: ["3", "--confirm", CONFIRMATION_TOKEN] }),
       third.pipeline,
     );
     expect(third.calls.order).toEqual(["preview", "commit"]);
-    expect(third.calls.commit[0]?.request.selection).toEqual({ by: "row", row: 3 });
+    expect(third.calls.commit[0]?.request.selection).toEqual({
+      by: "row",
+      row: 3,
+    });
     expect(third.calls.commit[0]?.request).toEqual(second.calls.preview[0]);
     expect(landed.stdout.join("\n")).toContain("landed-from-3");
     expect(landed.exitCode).toBe(0);
@@ -62,7 +76,10 @@ describe("T-CLI-22 the same shape from Codex and from Claude Code", () => {
   async function commitWith(agent: AgentId, result: LandingResult) {
     const { pipeline } = stubPipeline({ landing: result });
     return createCliRunner().run(
-      invocation({ argv: ["1", "--confirm"], targetAgent: agent }),
+      invocation({
+        argv: ["1", "--confirm", CONFIRMATION_TOKEN],
+        targetAgent: agent,
+      }),
       pipeline,
     );
   }
@@ -141,12 +158,18 @@ describe("T-CLI-23 a new numbered-list agent needs no change here", () => {
       landing: landing({
         ref: { agent: fourth, home: "/Users/me/.fixture", id: "fixture-9" },
         switched: false,
-        handover: { sessionId: "fixture-9", command: "fixture-agent open fixture-9" },
+        handover: {
+          sessionId: "fixture-9",
+          command: "fixture-agent open fixture-9",
+        },
       }),
     });
 
     const outcome = await createCliRunner().run(
-      invocation({ argv: ["1", "--confirm"], targetAgent: fourth }),
+      invocation({
+        argv: ["1", "--confirm", CONFIRMATION_TOKEN],
+        targetAgent: fourth,
+      }),
       pipeline,
     );
 

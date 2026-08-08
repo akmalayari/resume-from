@@ -34,14 +34,15 @@ called directly: the switching risk is real, and the contract keeps it local.
 
 ## Encapsulated Knowledge
 
-- **The write strategy.** Every file is written under a temporary name in its own destination
-  directory, and only once all of them are staged is each one placed. Placement is a hard link
+- **The write strategy.** The one allowed file is opened empty under a temporary name in its
+  destination directory. The opened inode and its resolved location are verified inside the target
+  root before session bytes are written through the stable file descriptor. Placement is a hard link
   followed by the removal of the temporary name — not a rename: a rename silently overwrites a file
   that appeared after the existence check, and a hard link fails instead, which is what the race
   invariant below requires. Nothing outside this module knows that a temporary file ever existed.
-- **The rollback bookkeeping.** Which paths this commit created, and in which order to remove them.
+- **Created-path reporting.** Which published paths a successful commit returns to its caller.
 - **The existence check.** That the check happens before any byte is written, and that a race between
-  the check and the rename is resolved by failing the commit, never by overwriting.
+  the check and placement is resolved by failing the commit, never by overwriting.
 - **Platform details.** Rename atomicity, directory permissions, and how a partially created
   directory tree is cleaned up.
 
@@ -65,11 +66,9 @@ interface PendingFile {
 /** Why a commit refused to run, or failed (FR-56). */
 type CommitRefusal = "path-exists" | "not-writable" | "write-failed";
 
-/** A commit that succeeded and can still be undone (FR-52, FR-53). */
+/** A commit that succeeded and reports the paths it created (FR-52, FR-53). */
 interface CommitHandle {
   createdPaths: string[];
-  /** Removes exactly the files and directories this commit created. Touches nothing else. */
-  rollback(): Promise<void>;
 }
 
 /** Raised when a commit refuses to run or fails. Carries an actionable message (FR-56). */
@@ -79,15 +78,17 @@ interface CommitError {
   path: string | null;
   /** What failed, and what the user can do next (FR-56). */
   message: string;
+  /** Paths retained for safety or not removed by cleanup, when manual inspection may be required. */
+  remainingPaths?: string[];
 }
 
-/** Adds files to a home. It only adds (FR-49), and it is all or nothing (FR-53). */
+/** Atomically adds zero or one file to a home (FR-49, FR-53). */
 interface FileCommitter {
   /**
-   * Creates every file, or none. Rejects with a CommitError.
-   * Rejects before writing any byte when a path already exists.
+   * Creates zero or one file. Rejects with a CommitError before filesystem access when more than one
+   * file is supplied, or before writing bytes when the destination already exists.
    */
-  commit(files: PendingFile[]): Promise<CommitHandle>;
+  commit(root: string, files: PendingFile[]): Promise<CommitHandle>;
 }
 ```
 
@@ -106,25 +107,38 @@ Changes that require **only this module** to change:
 
 - The durability level rises — for example the destination directory is synced after the rename.
 - The temporary-file naming or location strategy changes.
-- Rollback becomes best-effort with a report instead of all-or-nothing.
+- Successful commits report additional publication facts.
 - A new refusal reason is added for a platform-specific failure.
 
 ## Constraints and Invariants
 
-- **A file that exists is never opened for writing, truncated, or removed** (FR-49, AC-4). The only
-  paths this module may remove are paths the same commit created, through `rollback`.
+- **A file that exists is never opened for writing, truncated, or removed** (FR-49, AC-4).
 - **The existence check runs before the first byte is written.** A refusal must leave the filesystem
   untouched, including temporary files.
-- **A failed commit removes every file it created before failing** (FR-53). There is no partial
-  session, ever.
-- **`rollback` is idempotent.** Calling it twice, or calling it after a manual deletion, succeeds.
+- **A failed commit reports every path it could not safely clean up** (FR-53). It never claims that
+  cleanup succeeded while a path may remain.
+- **A commit accepts at most one file.** More than one is refused before any filesystem call. This is
+  what makes process interruption atomic without a portable multi-path transaction primitive.
+- **A successful handle has no removal operation.** Portable Node APIs cannot atomically unlink a
+  pathname only if its device and inode still match. Published paths are therefore preserved and
+  reported by `createdPaths` rather than exposed to a check-then-unlink race.
 - **`commit` never inspects the bytes.** No parsing, no validation, no re-encoding. Structural
   validation of a session is `src/adapters/`' job and it happens before this module is called
   (FR-50).
-- **Directories created by a commit are removed by its rollback**, but only when they are empty and
-  only when this commit created them.
+- **Published paths are never automatically removed after success.** Callers use `createdPaths` for
+  truthful failure reporting and manual inspection.
 - **Paths are absolute.** A relative path is a programming error and is refused, not resolved against
   the current directory.
+- **Destination lookup is confined to `root` before bytes are written.** Lexical escapes and
+  existing or concurrently substituted symlinks that resolve outside the root are refused. After
+  opening a zero-byte temporary file, its actual inode and resolved location are checked before bytes
+  are written through that same descriptor. This does not claim to defend against another authorized
+  same-UID process relocating the already acquired directory inode; such a process can also relocate
+  the completed file after commit and is outside this local-writer threat model.
+- **Created files are private.** New files use mode `0600` and new directories use mode `0700`,
+  independent of the process umask.
+- **Cleanup favors preservation over guessing.** Published paths are preserved for manual inspection;
+  temporary-file cleanup checks device and inode and reports any path it cannot clean up.
 
 ## Test Specification
 
@@ -132,37 +146,34 @@ Every test runs against a temporary directory. No test touches a real agent home
 
 ### Unit Tests
 
-**T-STO-1 — a commit creates every file**
-- Scenario: `commit` with three files in a fresh directory.
-- Expected behavior: all three exist with the exact bytes given, and `CommitHandle.createdPaths`
-  lists all three.
+**T-STO-1 — a commit creates its file**
+- Scenario: `commit` with one file in a fresh directory.
+- Expected behavior: it exists with the exact bytes given and `CommitHandle.createdPaths` lists it.
 
 **T-STO-2 — missing parent directories are created**
 - Scenario: a file whose parent directory does not exist.
 - Expected behavior: the directory tree is created and the file is written.
 
-**T-STO-3 — an existing path refuses the whole commit**
-- Scenario: three files, the second of which already exists.
-- Expected behavior: rejects with `refusal` `"path-exists"` and the offending path. The first and
-  third files are **not** created (FR-49).
+**T-STO-3 — an existing path refuses the commit**
+- Scenario: the one destination already exists.
+- Expected behavior: rejects with `refusal` `"path-exists"`; the existing file is unchanged (FR-49).
 
 **T-STO-4 — a refusal writes nothing at all**
 - Scenario: the directory is checksummed before the refused commit of T-STO-3, and after it.
 - Expected behavior: the checksums are identical, including the absence of any temporary file.
 
-**T-STO-5 — a failure part-way through removes what was created**
-- Scenario: three files; the write of the third fails (the destination is made unwritable).
-- Expected behavior: rejects with `"write-failed"`, and the first two files do not exist afterwards
-  (FR-53).
+**T-STO-5 — multiple files are refused before filesystem access**
+- Scenario: a commit is given two destinations.
+- Expected behavior: rejects with `"write-failed"` before inspecting or creating any path (FR-53).
 
-**T-STO-6 — rollback removes exactly what the commit created**
-- Scenario: a directory holding one pre-existing file; a commit adds two more; `rollback` runs.
-- Expected behavior: the two new files are gone, the pre-existing file is untouched, and directories
-  the commit created are removed while directories that existed before are not.
+**T-STO-6 — a handle reports the published path without a removal operation**
+- Scenario: a directory holding one pre-existing file; a commit adds one file.
+- Expected behavior: the handle reports the new file in `createdPaths`, exposes no rollback operation,
+  and the pre-existing file is untouched.
 
-**T-STO-7 — rollback is idempotent**
-- Scenario: `rollback` is called twice; and once after a created file was deleted by hand.
-- Expected behavior: both calls resolve without error.
+**T-STO-7 — an empty commit has no removal operation**
+- Scenario: `commit` is called with no files.
+- Expected behavior: the handle contains an empty `createdPaths` and no rollback operation.
 
 ### Integration Contract Tests
 
@@ -178,7 +189,7 @@ Every test runs against a temporary directory. No test touches a real agent home
 
 **T-STO-10 — an empty commit succeeds and does nothing**
 - Scenario: `commit` with an empty list.
-- Expected behavior: resolves with an empty `createdPaths`; `rollback` on it is a no-op.
+- Expected behavior: resolves with an empty `createdPaths` and no removal operation.
 
 ### Boundary Tests
 
@@ -187,10 +198,9 @@ Every test runs against a temporary directory. No test touches a real agent home
 - Expected behavior: rejects before writing. The path is never resolved against the current
   directory.
 
-**T-STO-12 — two files with the same path in one commit are refused**
-- Scenario: a commit listing the same absolute path twice.
-- Expected behavior: rejects. Otherwise the second write would overwrite the first, which is the one
-  thing this module must never do.
+**T-STO-12 — any two files in one commit are refused**
+- Scenario: a commit lists two distinct absolute paths.
+- Expected behavior: rejects before filesystem access because multi-path placement is not atomic.
 
 **T-STO-13 — a path that appears between the check and the rename**
 - Scenario: the destination file is created by another process after the existence check and before
@@ -200,6 +210,12 @@ Every test runs against a temporary directory. No test touches a real agent home
 **T-STO-14 — a destination directory that is not writable**
 - Scenario: the parent directory has no write permission.
 - Expected behavior: rejects with `"not-writable"` and a message naming the directory.
+- Scenario: a destination escapes `root` lexically or through an existing symlink.
+- Expected behavior: rejects before staging any session byte.
+- Scenario: the checked parent is replaced with a symlink outside `root` immediately before the
+  temporary file is opened.
+- Expected behavior: the opened empty file is found outside `root`; the commit rejects before writing
+  session bytes, and no session bytes exist outside the root.
 
 **T-STO-15 — the module knows nothing about sessions**
 - Scenario: a static check of this module's imports.
@@ -209,12 +225,12 @@ Every test runs against a temporary directory. No test touches a real agent home
 ### Behavior Tests
 
 **T-STO-16 — a target home is never damaged**
-- Scenario: a directory populated with 50 files is checksummed; a commit adds two files; the
+- Scenario: a directory populated with 50 files is checksummed; a commit adds one file; the
   directory is checksummed again.
-- Expected behavior: every pre-existing file is byte-identical, and exactly two paths are new
+- Expected behavior: every pre-existing file is byte-identical, and exactly one path is new
   (FR-49, the AC-4 guarantee applied to the target).
 
 **T-STO-17 — an interrupted commit leaves no partial session**
-- Scenario: the process is killed between the write of the first file and the second.
+- Scenario: the process is killed while the one allowed file is still being staged.
 - Expected behavior: no destination file exists. Only temporary files may remain, and they carry a
   name no agent will read.

@@ -1,6 +1,6 @@
 ---
 description: Continue a session from another coding agent or another Claude Code profile
-argument-hint: "[source-agent] [row | session-id | path] [--home path] [--confirm | --help]"
+argument-hint: "[source-agent] [row | session-id | path] [--home path] [--confirm token | --help]"
 allowed-tools: Bash(node:*)
 ---
 
@@ -11,7 +11,14 @@ Run the tool and show the user its output **exactly as printed**. Do not summari
 reorder it, and do not rewrite any line: the preview has one fixed shape for every source and target
 agent, and rewriting it defeats that.
 
-!`node "${CLAUDE_PLUGIN_ROOT}/dist/bin.js" --target-agent claude-code $ARGUMENTS`
+The user's arguments are data:
+
+    $ARGUMENTS
+
+Use the Bash tool once. Invoke the fixed prefix below, then pass every user argument as a separate,
+shell-quoted argv item after `--`. Never interpolate the raw argument string into a shell command.
+
+    node "${CLAUDE_PLUGIN_ROOT}/dist/bin.js" --target-agent claude-code --
 
 ## How to read what came back
 
@@ -23,7 +30,7 @@ they want. Each row shows the agent, the home, the time, the title and the turn 
 
 **A preview** — the user named a session. It states how many turns cross over, how many were
 dropped, the token budget against this window, and any warnings. **Nothing has been written yet.**
-Ask the user to confirm, and tell them the exact command: `/resume-from <row> --confirm`.
+The tool prints the exact confirmation command, including its opaque token. Show that command unchanged.
 
 **A landing result** — the import ran. The tool prints the new session ID and the native command
 that opens it. Claude Code cannot move the user between sessions, so say plainly that they need to
@@ -40,6 +47,6 @@ word for word is already larger than the budget. The tool names the setting to c
 - Never invent a session, a row number, or a session ID. Only ever pass through what the user gave.
 - Never add `--confirm` on your own. The user confirms; you do not confirm on their behalf.
 - The tool writes nothing until `--confirm`, and in the target home it only ever adds files. Do not
-offer to clean up, move or delete anything.
+  offer to clean up, move or delete anything.
 - After a successful import, stop. Do not start working on the imported task — the user will type
-their next instruction themselves.
+  their next instruction themselves.

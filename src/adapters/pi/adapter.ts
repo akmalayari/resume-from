@@ -36,10 +36,11 @@ import {
   UNREADABLE_TITLE_PREFIX,
 } from "./format.js";
 import {
-  changedPathsFrom,
+  changedPathsFromEntries,
   entriesToTurns,
   lastTimestamp,
   parseSessionText,
+  resolveActiveEntries,
   titleFromEntries,
 } from "./parse.js";
 import { type PiSerializeDeps, serializeSession } from "./serialize.js";
@@ -107,13 +108,14 @@ function describe(
   const id = parsed.header?.id ?? sessionIdFromFileName(basename(filePath)) ?? basename(filePath);
   const ref = { agent: "pi" as const, home, id };
   const startedAt = toIsoUtc(parsed.header?.timestamp) ?? fileTime;
+  const resolved = resolveActiveEntries(parsed.entries);
 
-  if (!parsed.header || parsed.truncated) {
+  if (!parsed.header || parsed.truncated || resolved.unreadable !== null) {
     return {
       ref,
       title: `${UNREADABLE_TITLE_PREFIX}${basename(filePath)}`,
       startedAt,
-      updatedAt: lastTimestamp(parsed.entries) ?? fileTime,
+      updatedAt: lastTimestamp(resolved.activePath) ?? fileTime,
       turnCount: 0,
       repoPath: null,
       filePath,
@@ -121,12 +123,12 @@ function describe(
   }
 
   const loaded = entriesToTurns(parsed.entries);
-  const title = titleFromEntries(parsed.entries);
+  const title = titleFromEntries(resolved.activePath);
   return {
     ref,
     title: title ? shortTitle(title) : `${basename(filePath)}`,
     startedAt,
-    updatedAt: lastTimestamp(parsed.entries) ?? startedAt,
+    updatedAt: lastTimestamp(resolved.activePath) ?? startedAt,
     turnCount: loaded.turns.length,
     repoPath: parsed.header.cwd.length > 0 ? parsed.header.cwd : null,
     filePath,
@@ -186,7 +188,8 @@ export function createPiAdapter(overrides: Partial<PiAdapterDeps> = {}): AgentAd
     async loadSession(descriptor: SessionDescriptor): Promise<CanonicalSession> {
       const text = await readFile(descriptor.filePath, "utf8");
       const parsed = parseSessionText(text);
-      if (!parsed.header || parsed.truncated) {
+      const resolved = resolveActiveEntries(parsed.entries);
+      if (!parsed.header || parsed.truncated || resolved.unreadable !== null) {
         throw new Error(
           `the Pi session file ${descriptor.filePath} cannot be read: it is truncated or not a Pi session`,
         );
@@ -198,12 +201,12 @@ export function createPiAdapter(overrides: Partial<PiAdapterDeps> = {}): AgentAd
           ref: { agent: "pi", home: descriptor.ref.home, id: parsed.header.id },
           title: descriptor.title,
           startedAt,
-          updatedAt: lastTimestamp(parsed.entries) ?? startedAt,
+          updatedAt: lastTimestamp(resolved.activePath) ?? startedAt,
           repo: {
             // Pi records neither the commit nor the branch of a session.
             commit: null,
             branch: null,
-            changedPaths: changedPathsFrom(loaded.turns),
+            changedPaths: changedPathsFromEntries(resolved.activePath),
           },
         },
         turns: loaded.turns,
@@ -234,7 +237,10 @@ export function createPiAdapter(overrides: Partial<PiAdapterDeps> = {}): AgentAd
       return {
         sessionId,
         itemCount: parsed.entries.length,
-        openable: parsed.header?.id === sessionId && !parsed.truncated,
+        openable:
+          parsed.header?.id === sessionId &&
+          !parsed.truncated &&
+          resolveActiveEntries(parsed.entries).unreadable === null,
       };
     },
 
@@ -251,7 +257,9 @@ export function createPiAdapter(overrides: Partial<PiAdapterDeps> = {}): AgentAd
       // Called from a Pi command handler only. The deleted design documents claimed a call
       // from an event handler deadlocks; the claim was never tested, so this module only
       // uses the path C-10 proved. `src/host/pi-extension/` guarantees the call site.
-      const result = await context.switchSession(filePath, { withSession: () => undefined });
+      const result = await context.switchSession(filePath, {
+        withSession: () => undefined,
+      });
       const cancelled = result?.cancelled === true;
       // A cancelled switch is not a failure: the session stays committed and the user opens
       // it later with Pi's own command.

@@ -42,6 +42,8 @@ const EMPTY_TURN_TEXT = "(empty message)";
 const TIMESTAMP_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$/;
 /** A per-session sidecar directory is named after its session. */
 const SIDECAR_DIR_PATTERN = /^[0-9a-fA-F-]{8,}$/;
+const INERT_PROJECT_FILES = new Set(["sessions-index.json", ".session-aliases"]);
+const INERT_PROJECT_DIRS = new Set(["memory"]);
 const MAX_MINT_ATTEMPTS = 8;
 
 interface EntryContext {
@@ -76,9 +78,10 @@ function refuseUnrecognisedProjectRecord(home: string, repoPath: string): void {
     return; // a record that does not exist yet is a new path, which is exactly what is allowed
   }
   for (const item of items) {
-    if (item.name.startsWith(".")) continue;
     if (item.isFile() && item.name.endsWith(SESSION_FILE_SUFFIX)) continue;
+    if (item.isFile() && INERT_PROJECT_FILES.has(item.name)) continue;
     if (item.isDirectory() && SIDECAR_DIR_PATTERN.test(item.name)) continue;
+    if (item.isDirectory() && INERT_PROJECT_DIRS.has(item.name)) continue;
     throw new Error(
       `Claude Code adapter: ${path.join(dir, item.name)} is not a session file this adapter ` +
         "recognises. Registering the imported session may require editing it, and this adapter " +
@@ -159,7 +162,11 @@ function buildEntries(
     const text = turnText(turn);
 
     if (turn.role === "user") {
-      entries.push({ ...base, type: ENTRY_TYPE_USER, message: { role: "user", content: text } });
+      entries.push({
+        ...base,
+        type: ENTRY_TYPE_USER,
+        message: { role: "user", content: text },
+      });
       continue;
     }
     entries.push({
@@ -299,7 +306,10 @@ function checkEntry(
       });
     }
     if (asString(message.model) === null) {
-      defects.push({ path: `${at}/message/model`, message: "assistant message has no model" });
+      defects.push({
+        path: `${at}/message/model`,
+        message: "assistant message has no model",
+      });
     }
   }
 }
@@ -313,7 +323,10 @@ export function validate(serialized: SerializedSession): ValidationDefect[] {
   let index = 0;
   serialized.files.forEach((file, fileIndex) => {
     if (!path.isAbsolute(file.absolutePath)) {
-      defects.push({ path: `files/${fileIndex}/absolutePath`, message: "path is not absolute" });
+      defects.push({
+        path: `files/${fileIndex}/absolutePath`,
+        message: "path is not absolute",
+      });
     }
     if (!file.absolutePath.endsWith(`${serialized.sessionId}${SESSION_FILE_SUFFIX}`)) {
       defects.push({

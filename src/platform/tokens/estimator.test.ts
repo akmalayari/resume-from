@@ -41,7 +41,12 @@ const PROSE_100KB = "the quick brown fox jumps over the lazy dog. ".repeat(2300)
  * `script` selects the margin: "ascii" is what a session actually carries (English prose,
  * code, tool outcome lines, JSON); "wide" is emoji-dense or non-Latin text.
  */
-const CORPUS: { name: string; text: string; reference: number; script: "ascii" | "wide" }[] = [
+const CORPUS: {
+  name: string;
+  text: string;
+  reference: number;
+  script: "ascii" | "wide";
+}[] = [
   { name: "word", text: "refactor", reference: 2, script: "ascii" },
   {
     name: "sentence",
@@ -51,7 +56,12 @@ const CORPUS: { name: string; text: string; reference: number; script: "ascii" |
   },
   { name: "paragraph", text: PARAGRAPH, reference: 47, script: "ascii" },
   { name: "code", text: CODE_BLOCK, reference: 50, script: "ascii" },
-  { name: "toolOutcomeLine", text: TOOL_OUTCOME_LINE, reference: 28, script: "ascii" },
+  {
+    name: "toolOutcomeLine",
+    text: TOOL_OUTCOME_LINE,
+    reference: 28,
+    script: "ascii",
+  },
   { name: "json", text: JSON_LINE, reference: 24, script: "ascii" },
   { name: "prose", text: PROSE_50, reference: 501, script: "ascii" },
   { name: "emoji", text: EMOJI_LINE, reference: 19, script: "wide" },
@@ -292,16 +302,34 @@ describe("boundary behaviour", () => {
     60_000,
   );
 
-  it("T-TOK-10: a tokenizer failure falls back to the generic count", () => {
+  it("T-TOK-10: a tokenizer failure falls back to a UTF-8 byte upper bound", () => {
     const broken = createEstimatorFactory(() => {
       throw new Error("encoder unavailable");
     });
-    const generic = estimatorFactory.forFamily("generic");
 
     for (const [, text] of TEXTS) {
-      expect(broken.forFamily("gpt").estimate(text)).toBe(generic.estimate(text));
+      expect(broken.forFamily("gpt").estimate(text)).toBe(Buffer.byteLength(text, "utf8"));
     }
     expect(broken.forFamily("gpt").estimate("")).toBe(0);
+  });
+
+  it("charges the GPT tail with a UTF-8 byte upper bound after the exact cutoff", () => {
+    const exactPrefix = "x".repeat(262_144);
+    const tail = "\0".repeat(128);
+    const estimator = estimatorFactory.forFamily("gpt");
+
+    const tailCost = estimator.estimate(exactPrefix + tail) - estimator.estimate(exactPrefix);
+
+    expect(tailCost).toBeGreaterThanOrEqual(Buffer.byteLength(tail, "utf8"));
+  });
+
+  it("uses a UTF-8 byte upper bound when the GPT tokenizer fails", () => {
+    const broken = createEstimatorFactory(() => {
+      throw new Error("encoder unavailable");
+    });
+    const text = "\0".repeat(128);
+
+    expect(broken.forFamily("gpt").estimate(text)).toBe(Buffer.byteLength(text, "utf8"));
   });
 });
 

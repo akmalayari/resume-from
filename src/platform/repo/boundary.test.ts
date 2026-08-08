@@ -5,6 +5,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, expect, test } from "vitest";
+import { runGit } from "./git.js";
 import { createRepoReader } from "./index.js";
 import {
   checksumTree,
@@ -26,7 +27,10 @@ test("T-REP-11 — a hostile revision string is safe", async () => {
 
   const hostile = [
     { name: "a shell fragment", revision: "; rm -rf /" },
-    { name: "an option that runs a program", revision: "--upload-pack=touch pwned" },
+    {
+      name: "an option that runs a program",
+      revision: "--upload-pack=touch pwned",
+    },
     { name: "a 10 kB revision", revision: "a".repeat(10 * 1024) },
     { name: "an empty revision", revision: "" },
   ];
@@ -100,6 +104,32 @@ test("T-REP-14 — the module knows nothing about sessions", async () => {
       expect(local || external, `${file} imports ${specifier}`).toBe(true);
     }
   }
+});
+
+test("a git subprocess is stopped after its finite timeout", async () => {
+  const dir = await tempDir("resume-from-git-timeout-");
+
+  await expect(runGit(dir, ["hash-object", "--stdin"], { timeoutMs: 20 })).rejects.toThrow(
+    "timed out after 20 ms",
+  );
+});
+
+test("the reader factory passes an AbortSignal to every git subprocess", async () => {
+  const dir = await tempDir("resume-from-git-abort-");
+  const controller = new AbortController();
+  controller.abort();
+
+  await expect(createRepoReader(dir, { signal: controller.signal }).identify(dir)).rejects.toThrow(
+    "aborted",
+  );
+});
+
+test("the reader factory rejects an unbounded timeout", async () => {
+  const dir = await tempDir("resume-from-git-invalid-timeout-");
+
+  expect(() => createRepoReader(dir, { timeoutMs: Number.POSITIVE_INFINITY })).toThrow(
+    "timeoutMs must be a positive, finite integer",
+  );
 });
 
 function importSpecifiersOf(source: string): string[] {

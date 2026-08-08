@@ -108,7 +108,7 @@ type ToolEffect = "read-only" | "mutating" | "unknown";
 interface ToolCallRecord {
   /** The original tool name. Never translated (FR-27). */
   toolName: string;
-  /** The arguments as the source recorded them. */
+  /** The source arguments after deterministic credential redaction. */
   argumentsText: string;
   /** Exactly one line about the outcome (FR-23). */
   outcomeLine: string;
@@ -282,7 +282,11 @@ interface AgentAdapter {
   readBack(home: HomePath, sessionId: SessionId): Promise<StoredSessionFacts>;
 
   /** Target role, only when capabilities().landing is "create-and-switch" (FR-43, FR-44). */
-  switchTo(home: HomePath, sessionId: SessionId, runtime: AgentRuntime): Promise<SwitchOutcome>;
+  switchTo(
+    home: HomePath,
+    sessionId: SessionId,
+    runtime: AgentRuntime,
+  ): Promise<SwitchOutcome>;
 }
 ```
 
@@ -303,11 +307,9 @@ interface PendingFile {
 /** Why a commit refused to run, or failed (FR-56). */
 type CommitRefusal = "path-exists" | "not-writable" | "write-failed";
 
-/** A commit that succeeded and can still be undone (FR-52, FR-53). */
+/** A commit that succeeded and reports the paths it created (FR-52, FR-53). */
 interface CommitHandle {
   createdPaths: string[];
-  /** Removes exactly the files and directories this commit created. Touches nothing else. */
-  rollback(): Promise<void>;
 }
 
 /** Raised when a commit refuses to run or fails. Carries an actionable message (FR-56). */
@@ -317,15 +319,17 @@ interface CommitError {
   path: string | null;
   /** What failed, and what the user can do next (FR-56). */
   message: string;
+  /** Paths retained for safety or not removed by cleanup, when manual inspection may be required. */
+  remainingPaths?: string[];
 }
 
-/** Adds files to a home. It only adds (FR-49), and it is all or nothing (FR-53). */
+/** Atomically adds zero or one file to a home (FR-49, FR-53). */
 interface FileCommitter {
   /**
-   * Creates every file, or none. Rejects with a CommitError.
-   * Rejects before writing any byte when a path already exists.
+   * Creates zero or one file. Rejects with a CommitError before filesystem access when more than one
+   * file is supplied, or before writing bytes when the destination already exists.
    */
-  commit(files: PendingFile[]): Promise<CommitHandle>;
+  commit(root: string, files: PendingFile[]): Promise<CommitHandle>;
 }
 ```
 
@@ -371,7 +375,7 @@ interface ConfigError {
 
 /** Loads configuration and fills every missing field with its default. */
 interface ConfigLoader {
-  /** Rejects with a ConfigError when a present value is invalid. A missing file is not an error. */
+  /** Rejects for invalid values or unreadable paths. A genuinely missing file is not an error. */
   load(): Promise<ImportConfig>;
 }
 ```
@@ -488,6 +492,8 @@ interface PreviewWarning {
 ```ts
 /** Everything the user sees before confirming (FR-16 to FR-21). */
 interface PreviewReport {
+  /** Opaque binding that must be returned unchanged to commit this exact preview (FR-20). */
+  confirmationToken: string;
   /** Source, target, and the turn counts that cross and are dropped (FR-17). */
   headerLines: string[];
   /** For example "Budget: 34k tokens of a 200k window" (FR-18). */
@@ -554,7 +560,11 @@ interface ImportPipeline {
   /** Writes nothing (FR-16). */
   preview(request: ImportRequest): Promise<PreviewReport>;
   /** Runs only after the user confirmed the preview (FR-20). */
-  commit(request: ImportRequest, runtime: AgentRuntime): Promise<LandingResult>;
+  commit(
+    request: ImportRequest,
+    runtime: AgentRuntime,
+    confirmationToken: string,
+  ): Promise<LandingResult>;
 }
 ```
 
@@ -606,7 +616,10 @@ interface PiSwitchResult {
  * supplies it as the AgentRuntime handle; nothing else may construct one (C-10).
  */
 interface PiSwitchContext {
-  switchSession(path: string, options: PiSwitchOptions): Promise<PiSwitchResult>;
+  switchSession(
+    path: string,
+    options: PiSwitchOptions,
+  ): Promise<PiSwitchResult>;
 }
 ```
 
@@ -626,7 +639,11 @@ interface PiResumeFromCommand {
    * Pi calls this when the user types /resume-from.
    * It is a command handler, which is the only call site C-10 proved safe for switchSession.
    */
-  run(ctx: PiCommandContext, args: string[], pipeline: ImportPipeline): Promise<void>;
+  run(
+    ctx: PiCommandContext,
+    args: string[],
+    pipeline: ImportPipeline,
+  ): Promise<void>;
 }
 ```
 
@@ -661,7 +678,11 @@ interface TargetProfileBuilder {
    * Uses the adapter's declared default home when home is null (FR-3),
    * and the user's window override when there is one (FR-18).
    */
-  build(agent: AgentId, home: HomePath | null, config: ImportConfig): TargetProfile;
+  build(
+    agent: AgentId,
+    home: HomePath | null,
+    config: ImportConfig,
+  ): TargetProfile;
 }
 ```
 
@@ -744,9 +765,9 @@ They do not call each other. Exactly one of them runs per process: the command b
 is in Codex or Claude Code, the extension when the user is in Pi. This module decides which, by
 reading the target adapter's declared `selection` level (FR-58) — never by name.
 
-| Submodule | Runs when | Landing it can reach | Why it is separate |
-| --------- | --------- | -------------------- | ------------------ |
-| `cli/` | `selection` is `"numbered-list"` | create-only (C-2) | Separate process; prints to standard output |
+| Submodule       | Runs when                             | Landing it can reach     | Why it is separate                                     |
+| --------------- | ------------------------------------- | ------------------------ | ------------------------------------------------------ |
+| `cli/`          | `selection` is `"numbered-list"`      | create-only (C-2)        | Separate process; prints to standard output            |
 | `pi-extension/` | `selection` is `"interactive-picker"` | create-and-switch (C-10) | In-process; holds the command context the switch needs |
 
 ### Construction order
@@ -760,7 +781,7 @@ reading the target adapter's declared `selection` level (FR-58) — never by nam
    the home it reported, and the configuration, and produces the profile (FR-3, FR-18).
 5. **Pipeline.** `pipelineFor(target)` wires the finder, the rules, the preview builder and the
    lander with the services and the registry. It also chooses the estimator: the budget is a
-   share of the *target* window (FR-30), so the counting rule belongs to the target agent. No
+   share of the _target_ window (FR-30), so the counting rule belongs to the target agent. No
    capability declares one, so each entry of the list names its own family beside its factory —
    which keeps adding an agent a one-line change rather than two.
 6. **Entry point.** The picker or the command binary runs, driving the pipeline.

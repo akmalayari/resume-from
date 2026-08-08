@@ -85,7 +85,7 @@ Changes that require **only this module** to change:
 - **`estimate` is pure and synchronous.** The rules call it many times per import and must stay
   reproducible: the preview and the commit of the same request must produce the same numbers.
 - **`estimate` never throws.** Any text, including empty text and invalid UTF-8 sequences, returns a
-  number. A tokenizer failure falls back to the generic count.
+  number. A GPT tokenizer failure falls back to the conservative UTF-8 byte count.
 - **The count is monotone in length.** Appending text never lowers the estimate. The budget rules of
   FR-31 drop turns until the total fits and would not terminate otherwise.
 - **The estimate is a whole number and is never negative.** Empty text returns 0.
@@ -104,9 +104,9 @@ Changes that require **only this module** to change:
   - Estimating a text in pieces and estimating the whole of it at once differ by at most **one
     token per piece** (T-TOK-12). That is what lets a caller add up the cost of the parts instead
     of re-estimating the whole on every drop.
-  - Past the first **256 kB** of a single string the exact counter gives way to the heuristic, so
-    the `gpt` margin is a claim about text below that size. It costs one encoder call per
-    character, and no target's context window is within two orders of magnitude of that much text.
+  - Past the first **256 kB** of a single string the exact counter gives way to one token per UTF-8
+    byte. The `gpt` margin is a claim about text below that size; longer input is deliberately
+    over-counted so a budget cannot admit text the model window may reject.
 
 ## Test Specification
 
@@ -157,9 +157,9 @@ Changes that require **only this module** to change:
 - Scenario: a lone surrogate, invalid UTF-8, a 10 MB string, a string of null bytes.
 - Expected behavior: each returns a number. No exception reaches the caller.
 
-**T-TOK-10 — a tokenizer failure falls back to the generic count**
+**T-TOK-10 — a tokenizer failure falls back to a conservative count**
 - Scenario: the underlying encoder is stubbed to throw.
-- Expected behavior: `estimate` returns the generic count and does not propagate the failure.
+- Expected behavior: `estimate` returns the UTF-8 byte count and does not propagate the failure.
 
 **T-TOK-11 — the module knows nothing about sessions**
 - Scenario: a static check of this module's imports and signatures.
@@ -174,7 +174,7 @@ Changes that require **only this module** to change:
   session at once, so the rules can add turn costs instead of re-estimating the whole plan on every
   drop.
 
-*T-TOK-13 was moved to `src/import/` as T-IMP-26. It runs the transfer rules with two different
+_T-TOK-13 was moved to `src/import/` as T-IMP-26. It runs the transfer rules with two different
 estimators, and the rules compose above this module — a module cannot own a test of a collaborator
 that does not exist when it is implemented. The switching-risk claim of the generic classification is
-still tested; it is tested where both halves exist.*
+still tested; it is tested where both halves exist._

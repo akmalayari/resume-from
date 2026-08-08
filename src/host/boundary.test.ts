@@ -189,7 +189,7 @@ describe("T-HOS-15 — this module never writes and never reads a session", () =
 });
 
 describe("T-HOS-16 — the runtime handle is never constructed here", () => {
-  /** The second argument of every `commit(request, runtime)` call in a file. */
+  /** The runtime argument of every `commit(request, runtime, confirmationToken)` call in a file. */
   const runtimeArguments = (source: { ast: ts.SourceFile }): string[] => {
     const found: string[] = [];
     const walk = (node: ts.Node): void => {
@@ -197,7 +197,7 @@ describe("T-HOS-16 — the runtime handle is never constructed here", () => {
         ts.isCallExpression(node) &&
         ts.isPropertyAccessExpression(node.expression) &&
         node.expression.name.text === "commit" &&
-        node.arguments.length === 2
+        node.arguments.length === 3
       ) {
         const runtime = node.arguments[1];
         if (runtime !== undefined) found.push(runtime.getText(source.ast));

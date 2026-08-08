@@ -7,6 +7,7 @@
  * `response_item` drives the model history only.
  */
 
+import { lstat, readdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import type { HomePath, SessionId } from "./contract.js";
@@ -26,6 +27,7 @@ export const CODEX_SOURCE_CLI = "cli";
 export const CODEX_ENTRY_SESSION_META = "session_meta";
 export const CODEX_ENTRY_EVENT_MSG = "event_msg";
 export const CODEX_ENTRY_RESPONSE_ITEM = "response_item";
+export const CODEX_ENTRY_COMPACTED = "compacted";
 
 export const CODEX_EVENT_USER_MESSAGE = "user_message";
 export const CODEX_EVENT_AGENT_MESSAGE = "agent_message";
@@ -45,7 +47,7 @@ export const KNOWN_ENTRY_TYPES: ReadonlySet<string> = new Set([
   CODEX_ENTRY_RESPONSE_ITEM,
   "turn_context",
   "world_state",
-  "compacted",
+  CODEX_ENTRY_COMPACTED,
   "inter_agent_communication_metadata",
 ]);
 
@@ -91,6 +93,37 @@ export function isRolloutFileName(name: string): boolean {
   return name.startsWith("rollout-") && name.endsWith(".jsonl");
 }
 
+/** The exact thread id encoded after Codex's fixed timestamp prefix. */
+export function sessionIdFromRolloutFileName(name: string): string | null {
+  const match = /^rollout-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-(.+)\.jsonl$/.exec(name);
+  return match?.[1] ?? null;
+}
+
+/** Rollouts below one sessions root, without following symlinks or hiding I/O failures. */
+export async function listRolloutFiles(root: string): Promise<string[]> {
+  const rootInfo = await lstat(root).catch((error: unknown) => {
+    if (isNotFoundError(error)) return null;
+    throw error;
+  });
+  if (rootInfo === null) return [];
+  if (rootInfo.isSymbolicLink()) return [];
+  if (!rootInfo.isDirectory()) throw new Error(`Codex sessions root is not a directory: ${root}`);
+
+  const found: string[] = [];
+  const walk = async (directory: string): Promise<void> => {
+    for (const entry of (await readdir(directory, { withFileTypes: true })).sort((left, right) =>
+      left.name.localeCompare(right.name),
+    )) {
+      const full = join(directory, entry.name);
+      if (entry.isSymbolicLink()) continue;
+      if (entry.isDirectory()) await walk(full);
+      else if (entry.isFile() && isRolloutFileName(entry.name)) found.push(full);
+    }
+  };
+  await walk(root);
+  return found;
+}
+
 export function parseEntry(line: string): RolloutEntry | null {
   let value: unknown;
   try {
@@ -114,7 +147,10 @@ export function parseEntry(line: string): RolloutEntry | null {
  * A rollout that cannot be parsed line for line is truncated: Codex writes one whole JSON
  * object per line, so a line that is not one means the file was cut mid-entry.
  */
-export function parseRolloutText(text: string): { entries: RolloutEntry[]; truncated: boolean } {
+export function parseRolloutText(text: string): {
+  entries: RolloutEntry[];
+  truncated: boolean;
+} {
   const entries: RolloutEntry[] = [];
   let truncated = false;
   for (const line of text.split("\n")) {
@@ -164,6 +200,15 @@ export function readSessionMeta(entry: RolloutEntry): CodexSessionMeta | null {
 
 function stringOrNull(value: unknown): string | null {
   return typeof value === "string" && value !== "" ? value : null;
+}
+
+export function isNotFoundError(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: unknown }).code === "ENOENT"
+  );
 }
 
 /** ISO-8601 UTC, or null when the source recorded nothing usable. */

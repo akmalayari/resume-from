@@ -38,7 +38,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "biome check .",
+    "lint": "biome check . && eslint . --cache --cache-strategy content",
     "lint:fix": "biome check --write .",
     "packages:stage": "npm run build && node scripts/release/stage-npm-packages.mjs",
     "packages:check": "npm run packages:stage && node scripts/release/check-npm-packages.mjs",
@@ -47,7 +47,10 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.7",
+    "@eslint/js": "^10.0.1",
     "@types/node": "^24.13.3",
+    "eslint": "^10.8.0",
+    "globals": "^17.9.0",
     "typescript": "^7.0.2",
     "typescript-compiler-api": "npm:typescript@6.0.3",
     "vitest": "^4.1.10"
@@ -59,7 +62,7 @@
     "extensions": [
       "./shims/pi/extensions/resume-from.js"
     ],
-    "image": "https://raw.githubusercontent.com/alexei-led/resume-from/implement-resume-from/assets/resume-from-card.png"
+    "image": "https://raw.githubusercontent.com/alexei-led/resume-from/fa0bfa778b52c64accc53155f12f3b895476ea08/assets/resume-from-card.png"
   },
   "repository": {
     "type": "git",

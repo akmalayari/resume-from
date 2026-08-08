@@ -157,9 +157,11 @@ describe.each(cases)("T-ADA-18 — %s: a minted session ID does not collide", (_
 
     const existing: PendingFile[] = [];
     for (let n = 0; n < 100; n++) {
-      existing.push(...adapter.serialize(REFERENCE_SESSION, profile, marker).files);
+      const files = adapter.serialize(REFERENCE_SESSION, profile, marker).files;
+      expect(files).toHaveLength(1);
+      existing.push(...files);
+      await commit(files);
     }
-    await commit(existing);
 
     const taken = new Set(existing.map((file) => file.absolutePath));
     const minted = new Set<string>();
@@ -199,7 +201,11 @@ describe.each(cases)(
       const descriptor: SessionDescriptor = listed.find(
         (item) => item.filePath === whole.absolutePath,
       ) ?? {
-        ref: { agent: adapter.capabilities().agent, home, id: serialized.sessionId },
+        ref: {
+          agent: adapter.capabilities().agent,
+          home,
+          id: serialized.sessionId,
+        },
         title: "",
         startedAt: "",
         updatedAt: "",
@@ -219,7 +225,9 @@ describe.each(cases)(
       if (!hasRole(adapter, "source")) return;
 
       const clean = await seedSource(entry, REFERENCE_SESSION);
-      const strange = await seedSource(entry, REFERENCE_SESSION, { unknown: true });
+      const strange = await seedSource(entry, REFERENCE_SESSION, {
+        unknown: true,
+      });
 
       const cleanTurns = (
         await adapter.loadSession(

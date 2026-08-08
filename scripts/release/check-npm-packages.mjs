@@ -1,10 +1,12 @@
-import { readFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
+import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repoRoot = resolve(fileURLToPath(new URL("../..", import.meta.url)));
-const version = JSON.parse(readFileSync(resolve(repoRoot, "package.json"), "utf8")).version;
+const rootManifest = JSON.parse(readFileSync(resolve(repoRoot, "package.json"), "utf8"));
+const version = rootManifest.version;
 
 const packages = [
   {
@@ -51,25 +53,30 @@ const packages = [
   },
 ];
 
-function packedPackage(directory) {
-  const output = execFileSync("npm", ["pack", "--dry-run", "--json", "--ignore-scripts"], {
+function packedPackage(directory, destination) {
+  const output = execFileSync(
+    "npm",
+    ["pack", "--json", "--ignore-scripts", "--pack-destination", destination],
+    {
     cwd: directory,
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
-  });
+    },
+  );
   const result = JSON.parse(output);
   const packed = Array.isArray(result)
     ? result.length === 1
       ? result[0]
       : undefined
     : Object.values(result).find((value) => value && typeof value === "object" && "files" in value);
-  if (packed === undefined || !Array.isArray(packed.files)) {
+  if (packed === undefined || !Array.isArray(packed.files) || typeof packed.filename !== "string") {
     throw new Error(`unexpected npm pack output in ${directory}`);
   }
   return {
     files: new Set(packed.files.map((file) => file.path)),
     packedBytes: packed.size,
     unpackedBytes: packed.unpackedSize,
+    tarball: resolve(destination, packed.filename),
   };
 }
 
@@ -77,26 +84,109 @@ function requireFile(files, packageName, path) {
   if (!files.has(path)) throw new Error(`${packageName} tarball is missing ${path}`);
 }
 
-for (const spec of packages) {
-  const manifest = JSON.parse(readFileSync(resolve(spec.directory, "package.json"), "utf8"));
-  if (manifest.name !== spec.name) throw new Error(`expected ${spec.name}, got ${manifest.name}`);
-  if (manifest.version !== version) throw new Error(`${spec.name} version does not match ${version}`);
-
-  const packed = packedPackage(spec.directory);
-  for (const path of spec.expected) requireFile(packed.files, spec.name, path);
-  const forbidden = [...packed.files].filter(spec.forbidden);
-  if (forbidden.length > 0) {
-    throw new Error(`${spec.name} tarball contains forbidden files: ${forbidden.join(", ")}`);
+function requireMatchingField(manifest, field, packageName) {
+  if (JSON.stringify(manifest[field]) !== JSON.stringify(rootManifest[field])) {
+    throw new Error(`${packageName} ${field} does not match the root package.`);
   }
-  if (packed.unpackedBytes > spec.maxUnpackedBytes) {
-    throw new Error(
-      `${spec.name} tarball is ${packed.unpackedBytes} unpacked bytes; limit is ${spec.maxUnpackedBytes}`,
+}
+
+function installPackage(tarball, directory, name) {
+  const consumer = resolve(directory, `consumer-${name}`);
+  mkdirSync(consumer);
+  writeFileSync(
+    resolve(consumer, "package.json"),
+    `${JSON.stringify({ name: "resume-from-package-smoke", private: true, type: "module" })}\n`,
+  );
+  execFileSync(
+    "npm",
+    ["install", "--ignore-scripts", "--no-audit", "--no-fund", "--no-package-lock", tarball],
+    { cwd: consumer, stdio: "pipe" },
+  );
+  return consumer;
+}
+
+function smokeTestRoot(tarball, directory) {
+  const consumer = installPackage(tarball, directory, "root");
+  execFileSync(
+    process.execPath,
+    [
+      "--input-type=module",
+      "-e",
+      'const root = await import("resume-from"); const pi = await import("resume-from/pi-extension"); if (typeof root.createHost !== "function" || typeof pi.formatRow !== "function") throw new Error("package exports are unavailable");',
+    ],
+    { cwd: consumer, stdio: "pipe" },
+  );
+  execFileSync(resolve(consumer, "node_modules/.bin/resume-from"), ["--help"], {
+    cwd: consumer,
+    stdio: "pipe",
+  });
+}
+
+function smokeTestClaude(tarball, directory) {
+  const consumer = installPackage(tarball, directory, "claude");
+  execFileSync(
+    process.execPath,
+    [resolve(consumer, "node_modules/@alexeiled/resume-from-claude/dist/bin.js"), "--help"],
+    { cwd: consumer, stdio: "pipe" },
+  );
+}
+
+function assertNoRawArgumentInterpolation(path) {
+  const contents = readFileSync(path, "utf8");
+  const unsafeLine = contents
+    .split(/\r?\n/u)
+    .find(
+      (line) =>
+        line.includes("$ARGUMENTS") &&
+        (line.includes("!`") || /\b(?:node|npx|resume-from)\b/u.test(line)),
+    );
+  if (unsafeLine !== undefined) {
+    throw new Error(`${path} interpolates raw $ARGUMENTS into an executable command.`);
+  }
+}
+
+const temporaryRoot = mkdtempSync(resolve(tmpdir(), "resume-from-packages-"));
+try {
+  const tarballs = new Map();
+  for (const spec of packages) {
+    const manifest = JSON.parse(readFileSync(resolve(spec.directory, "package.json"), "utf8"));
+    if (manifest.name !== spec.name) throw new Error(`expected ${spec.name}, got ${manifest.name}`);
+    if (manifest.version !== version) throw new Error(`${spec.name} version does not match ${version}`);
+
+    if (spec.name === "@alexeiled/resume-from-claude") {
+      requireMatchingField(manifest, "type", spec.name);
+      requireMatchingField(manifest, "engines", spec.name);
+      requireMatchingField(manifest, "dependencies", spec.name);
+    }
+
+    const packed = packedPackage(spec.directory, temporaryRoot);
+    tarballs.set(spec.name, packed.tarball);
+    for (const path of spec.expected) requireFile(packed.files, spec.name, path);
+    const forbidden = [...packed.files].filter(spec.forbidden);
+    if (forbidden.length > 0) {
+      throw new Error(`${spec.name} tarball contains forbidden files: ${forbidden.join(", ")}`);
+    }
+    if (packed.unpackedBytes > spec.maxUnpackedBytes) {
+      throw new Error(
+        `${spec.name} tarball is ${packed.unpackedBytes} unpacked bytes; limit is ${spec.maxUnpackedBytes}`,
+      );
+    }
+    console.log(
+      `${spec.name}@${version}: ${packed.files.size} files, ${packed.packedBytes} packed bytes, ` +
+        `${packed.unpackedBytes} unpacked bytes`,
     );
   }
-  console.log(
-    `${spec.name}@${version}: ${packed.files.size} files, ${packed.packedBytes} packed bytes, ` +
-      `${packed.unpackedBytes} unpacked bytes`,
-  );
+
+  const rootTarball = tarballs.get("resume-from");
+  const claudeTarball = tarballs.get("@alexeiled/resume-from-claude");
+  if (rootTarball === undefined || claudeTarball === undefined) {
+    throw new Error("runtime package tarballs were not created");
+  }
+  smokeTestRoot(rootTarball, temporaryRoot);
+  smokeTestClaude(claudeTarball, temporaryRoot);
+  console.log("isolated install and runtime smoke checks passed");
+} finally {
+  rmSync(temporaryRoot, { recursive: true, force: true });
 }
 
 const claudeMarketplace = JSON.parse(
@@ -126,6 +216,7 @@ const claudeCommand = readFileSync(
 if (!claudeCommand.includes("${CLAUDE_PLUGIN_ROOT}/dist/bin.js")) {
   throw new Error("Claude command does not invoke its bundled CLI.");
 }
+assertNoRawArgumentInterpolation(resolve(repoRoot, "build/npm/claude/commands/resume-from.md"));
 
 const codexPrompt = readFileSync(
   resolve(repoRoot, "build/npm/codex/prompts/resume-from.md"),
@@ -134,3 +225,4 @@ const codexPrompt = readFileSync(
 if (codexPrompt.includes("__RESUME_FROM_VERSION__") || !codexPrompt.includes(`resume-from@${version}`)) {
   throw new Error("Codex prompt does not pin the matching core CLI version.");
 }
+assertNoRawArgumentInterpolation(resolve(repoRoot, "build/npm/codex/prompts/resume-from.md"));

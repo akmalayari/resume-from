@@ -4,8 +4,8 @@
  * ignored (FR-28, C-4).
  */
 
-import { readdir, readFile, stat } from "node:fs/promises";
-import { join } from "node:path";
+import { readFile } from "node:fs/promises";
+import { isAbsolute } from "node:path";
 import type {
   CanonicalSession,
   CanonicalTurn,
@@ -13,8 +13,10 @@ import type {
   ToolCallRecord,
   ToolEffect,
 } from "./contract.js";
+import { redactSensitiveArgumentsText, redactSensitiveText } from "./redaction.js";
 import type { CodexSessionMeta, RolloutEntry } from "./rollout.js";
 import {
+  CODEX_ENTRY_COMPACTED,
   CODEX_ENTRY_EVENT_MSG,
   CODEX_ENTRY_RESPONSE_ITEM,
   CODEX_EVENT_AGENT_MESSAGE,
@@ -23,8 +25,9 @@ import {
   CODEX_ITEM_CUSTOM_TOOL_CALL_OUTPUT,
   CODEX_ITEM_FUNCTION_CALL,
   CODEX_ITEM_FUNCTION_CALL_OUTPUT,
-  isRolloutFileName,
+  isNotFoundError,
   KNOWN_ENTRY_TYPES,
+  listRolloutFiles,
   parseRolloutText,
   payloadType,
   readSessionMeta,
@@ -113,12 +116,13 @@ export async function readRollout(filePath: string): Promise<CodexRollout> {
 
 export async function listCodexSessions(home: string): Promise<SessionDescriptor[]> {
   const descriptors: SessionDescriptor[] = [];
-  for (const filePath of await rolloutFiles(sessionsRoot(home))) {
+  for (const filePath of await listRolloutFiles(sessionsRoot(home))) {
     let rollout: CodexRollout;
     try {
       rollout = await scanRollout(filePath);
-    } catch {
-      continue; // A file that cannot be read at all is left out of the listing.
+    } catch (error) {
+      if (isNotFoundError(error)) continue; // A rollout may disappear during a concurrent cleanup.
+      throw error;
     }
     if (rollout.meta === null) continue;
     descriptors.push({
@@ -127,8 +131,7 @@ export async function listCodexSessions(home: string): Promise<SessionDescriptor
       startedAt: rollout.startedAt ?? "",
       updatedAt: rollout.updatedAt ?? rollout.startedAt ?? "",
       turnCount: rollout.turns.length,
-      repoPath:
-        rollout.meta.commit !== null || rollout.meta.branch !== null ? rollout.meta.cwd : null,
+      repoPath: rollout.meta.cwd !== null && isAbsolute(rollout.meta.cwd) ? rollout.meta.cwd : null,
       filePath,
     });
   }
@@ -152,24 +155,6 @@ export async function loadCodexSession(descriptor: SessionDescriptor): Promise<C
     },
     turns: rollout.turns,
   };
-}
-
-async function rolloutFiles(root: string): Promise<string[]> {
-  let names: string[];
-  try {
-    names = await readdir(root);
-  } catch {
-    return [];
-  }
-  const found: string[] = [];
-  for (const name of names.sort()) {
-    const full = join(root, name);
-    const info = await stat(full).catch(() => null);
-    if (info === null) continue;
-    if (info.isDirectory()) found.push(...(await rolloutFiles(full)));
-    else if (isRolloutFileName(name)) found.push(full);
-  }
-  return found;
 }
 
 function titleOf(text: string): string {
@@ -212,6 +197,20 @@ function toCanonicalTurns(entries: RolloutEntry[]): {
       continue;
     }
     const type = payloadType(entry);
+
+    if (entry.type === CODEX_ENTRY_COMPACTED) {
+      const message = entry.payload.message;
+      if (typeof message !== "string" || message.trim() === "") continue;
+      turns.push({
+        index: turns.length,
+        role: "agent",
+        kind: "summary",
+        text: message,
+        toolCall: null,
+        timestamp: toIsoUtc(entry.timestamp),
+      });
+      continue;
+    }
 
     if (entry.type === CODEX_ENTRY_EVENT_MSG) {
       if (type !== CODEX_EVENT_USER_MESSAGE && type !== CODEX_EVENT_AGENT_MESSAGE) continue;
@@ -260,15 +259,16 @@ function toolCallRecord(
   argumentsText: string,
   output: string | null,
 ): ToolCallRecord {
-  const head = `${toolName}(${singleLine(argumentsText, ARGUMENTS_PREVIEW_LIMIT)})`;
+  const safeArguments = redactSensitiveArgumentsText(argumentsText);
+  const head = `${toolName}(${singleLine(safeArguments, ARGUMENTS_PREVIEW_LIMIT)})`;
   const outcomeLine =
     output === null
       ? `${head} → no output recorded`
       : `${head} → ${output.split("\n").length} lines, body dropped`;
   return {
     toolName,
-    argumentsText,
-    outcomeLine,
+    argumentsText: safeArguments,
+    outcomeLine: redactSensitiveText(outcomeLine),
     effect: effectOf(toolName),
     bodyDropped: output !== null,
   };

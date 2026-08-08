@@ -24,7 +24,7 @@ use needs access to the npm registry. Later use can use the local npm cache.
 2. Read the numbered list.
 3. Run `/resume-from <row>`.
 4. Read the preview.
-5. Run `/resume-from <row> --confirm`.
+5. Run the token-bearing `/resume-from <row> --confirm <token>` command printed by the preview.
 
 Codex cannot move the current process into the new thread. The command prints
 the new thread ID and the native resume command.

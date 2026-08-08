@@ -22,6 +22,9 @@ const DROPPED_BODY_MARKER = "(content dropped: imported session, may be stale)";
 /** FR-23. One line, in words, when the source recorded no outcome at all. */
 const NO_OUTCOME_RECORDED = "(outcome not recorded by the source)";
 
+/** Role/kind delimiters and message framing that target serializers add around every turn. */
+const TURN_FRAMING_TOKENS = 4;
+
 /** The order pins are reported in when one turn is pinned for more than one reason. */
 const PIN_ORDER: readonly PinReason[] = [
   "first-request",
@@ -74,42 +77,15 @@ function hasBrokenTail(turns: readonly CanonicalTurn[]): boolean {
   return !last.toolCall || toSingleLine(last.toolCall.outcomeLine) === "";
 }
 
-/**
- * FR-36: no agent records the dirty file list, so it is derived from the arguments of the
- * mutating calls. The first quoted run is the path when there is one, the whole argument
- * text otherwise. A crude rule on purpose — improving it changes only this module.
- */
-function pathFromArguments(argumentsText: string): string | null {
-  const trimmed = argumentsText.trim();
-  if (trimmed === "") return null;
-  const open = trimmed.search(/['"`]/);
-  if (open === -1) return trimmed;
-  const rest = trimmed.slice(open + 1);
-  const close = rest.search(/['"`]/);
-  if (close <= 0) return trimmed;
-  return rest.slice(0, close);
-}
-
-function deriveChangedPaths(
-  turns: readonly CanonicalTurn[],
-  recorded: readonly string[],
-): string[] {
+/** Adapters understand their native tool schema; this layer only normalizes their path list. */
+function dedupeChangedPaths(recorded: readonly string[]): string[] {
   const paths: string[] = [];
   const seen = new Set<string>();
-  const add = (path: string): void => {
+  for (const path of recorded) {
     if (path !== "" && !seen.has(path)) {
       seen.add(path);
       paths.push(path);
     }
-  };
-  for (const path of recorded) add(path);
-  // Every mutating call of the source counts, including one the broken-tail rule removed:
-  // an agent that crashed after the write still left the file changed.
-  for (const turn of turns) {
-    const record = turn.toolCall;
-    if (record?.effect !== "mutating") continue;
-    const path = pathFromArguments(record.argumentsText);
-    if (path !== null) add(path);
   }
   return paths;
 }
@@ -152,7 +128,7 @@ function turnCost(turn: CanonicalTurn, estimator: TokenEstimator): number {
   const text = record
     ? `${turn.text}\n${record.toolName}\n${record.argumentsText}\n${record.outcomeLine}`
     : turn.text;
-  return estimator.estimate(text);
+  return estimator.estimate(text) + TURN_FRAMING_TOKENS;
 }
 
 function copyProvenance(provenance: SourceProvenance, changedPaths: string[]): SourceProvenance {
@@ -229,10 +205,14 @@ function apply(
   const turns = selected.filter((_, position) => kept[position]);
   drops.sort((left, right) => left.index - right.index);
   return {
-    target: { agent: target.agent, home: target.home, windowTokens: target.windowTokens },
+    target: {
+      agent: target.agent,
+      home: target.home,
+      windowTokens: target.windowTokens,
+    },
     provenance: copyProvenance(
       session.provenance,
-      deriveChangedPaths(source, session.provenance.repo.changedPaths),
+      dedupeChangedPaths(session.provenance.repo.changedPaths),
     ),
     turns,
     pins,

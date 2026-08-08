@@ -1,7 +1,12 @@
+import { activatePiExtension } from "resume-from";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("resume-from", () => ({ activatePiExtension: vi.fn() }));
-vi.mock("resume-from/pi-extension", () => ({ formatRow: vi.fn() }));
+vi.mock("resume-from/pi-extension", () => ({
+  formatRow: vi.fn(),
+  safeLines: (lines: string[]) => lines,
+  safeText: (text: string) => text,
+}));
 
 type SessionStartContext = {
   sessionManager: { getEntries(): unknown[] };
@@ -12,6 +17,35 @@ type ShimFactory = (pi: {
   on(event: string, handler: SessionStartHandler): void;
   registerCommand(name: string, definition: unknown): void;
 }) => void;
+
+type OuterCommandContext = {
+  cwd: string;
+  hasUI: boolean;
+  ui: {
+    notify(message: string, level: string): void;
+    confirm(title: string, question: string): Promise<boolean>;
+    select(title: string, options: string[]): Promise<string | undefined>;
+  };
+  switchSession(path: string, options: unknown): Promise<unknown>;
+};
+
+type OuterCommandHandler = (rawArgs: string, context: OuterCommandContext) => Promise<void>;
+
+async function loadOuterCommand(): Promise<OuterCommandHandler> {
+  const shimUrl = new URL("../../../shims/pi/extensions/resume-from.js", import.meta.url).href;
+  const module = (await import(shimUrl)) as { default: ShimFactory };
+  let handler: OuterCommandHandler | undefined;
+
+  module.default({
+    on() {},
+    registerCommand(_name, definition) {
+      handler = (definition as { handler: OuterCommandHandler }).handler;
+    },
+  });
+
+  if (handler === undefined) throw new Error("resume-from shim did not register its command");
+  return handler;
+}
 
 async function loadSessionStartHandler(): Promise<SessionStartHandler> {
   const shimUrl = new URL("../../../shims/pi/extensions/resume-from.js", import.meta.url).href;
@@ -77,5 +111,45 @@ describe("Pi package shim provenance", () => {
     );
 
     expect(setWidget).toHaveBeenCalledWith("resume-from-provenance", undefined);
+  });
+});
+
+describe("Pi package shim command boundary", () => {
+  it("uses one absolute home and preserves a path containing spaces as one argument", async () => {
+    const previous = process.env.PI_CODING_AGENT_DIR;
+    process.env.PI_CODING_AGENT_DIR = "relative-pi-home";
+    const run = vi.fn().mockResolvedValue(undefined);
+    vi.mocked(activatePiExtension).mockImplementation(async (deps) => {
+      deps.registrar.registerCommand({
+        name: "resume-from",
+        description: "test",
+        run,
+      });
+    });
+
+    try {
+      const handler = await loadOuterCommand();
+      const context: OuterCommandContext = {
+        cwd: "/repo",
+        hasUI: true,
+        ui: {
+          notify: vi.fn(),
+          confirm: vi.fn().mockResolvedValue(true),
+          select: vi.fn().mockResolvedValue(undefined),
+        },
+        switchSession: vi.fn().mockResolvedValue({ cancelled: false }),
+      };
+
+      await handler(" sessions/my session.jsonl ", context);
+
+      const activation = vi.mocked(activatePiExtension).mock.calls.at(-1)?.[0];
+      expect(activation?.home).toMatch(/\/relative-pi-home$/);
+      expect(run).toHaveBeenCalledOnce();
+      expect(run.mock.calls[0]?.[0].home).toBe(activation?.home);
+      expect(run.mock.calls[0]?.[1]).toEqual(["sessions/my session.jsonl"]);
+    } finally {
+      if (previous === undefined) delete process.env.PI_CODING_AGENT_DIR;
+      else process.env.PI_CODING_AGENT_DIR = previous;
+    }
   });
 });

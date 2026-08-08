@@ -60,6 +60,8 @@ export interface PreviewWarning {
 
 /** Everything the user sees before confirming (FR-16 to FR-21). */
 export interface PreviewReport {
+  /** Opaque binding that must be returned unchanged to commit this exact preview (FR-20). */
+  confirmationToken: string;
   /** Source, target, and the turn counts that cross and are dropped (FR-17). */
   headerLines: string[];
   /** For example "Budget: 34k tokens of a 200k window" (FR-18). */
@@ -76,7 +78,10 @@ export interface PreviewReport {
   lines: string[];
 }
 
+/** Preview content before the pipeline binds it to a confirmation token. */
+export type PreviewContent = Omit<PreviewReport, "confirmationToken">;
+
 /** Builds the preview from a plan and the current repository state. */
 export interface PreviewBuilder {
-  build(plan: TransferPlan): Promise<PreviewReport>;
+  build(plan: TransferPlan): Promise<PreviewContent>;
 }

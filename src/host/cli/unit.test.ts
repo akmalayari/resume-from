@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { SelectionInput } from "./contract.js";
 import { createCliRunner } from "./index.js";
 import {
+  CONFIRMATION_TOKEN,
   descriptor,
   invocation,
   listing,
@@ -109,7 +110,10 @@ describe("T-CLI-5 a session ID and a file path are told apart", () => {
     {
       name: "a session ID",
       token: "9f8e7d6c-4b2a-4c1d-9e8f-0a1b2c3d4e5f",
-      expected: { by: "session-id", id: "9f8e7d6c-4b2a-4c1d-9e8f-0a1b2c3d4e5f" },
+      expected: {
+        by: "session-id",
+        id: "9f8e7d6c-4b2a-4c1d-9e8f-0a1b2c3d4e5f",
+      },
     },
     {
       name: "an absolute path",
@@ -119,6 +123,21 @@ describe("T-CLI-5 a session ID and a file path are told apart", () => {
     {
       name: "a relative path",
       token: "sessions/x.jsonl",
+      expected: { by: "file-path", path: `${REPO_ROOT}/sessions/x.jsonl` },
+    },
+    {
+      name: "a Windows drive path",
+      token: "C:\\Users\\me\\session.jsonl",
+      expected: { by: "file-path", path: "C:\\Users\\me\\session.jsonl" },
+    },
+    {
+      name: "a UNC path",
+      token: "\\\\server\\share\\session.jsonl",
+      expected: { by: "file-path", path: "\\\\server\\share\\session.jsonl" },
+    },
+    {
+      name: "a backslash relative path",
+      token: "sessions\\x.jsonl",
       expected: { by: "file-path", path: `${REPO_ROOT}/sessions/x.jsonl` },
     },
     { name: "a bare number", token: "7", expected: { by: "row", row: 7 } },
@@ -146,17 +165,31 @@ describe("T-CLI-6 the agent and home flags are parsed", () => {
     expect(calls.list[0]?.onlyAgent).toBe("claude-code");
     expect(calls.list[0]?.onlyHome).toBe(`${homedir()}/.claude-team`);
   });
+
+  it.each([
+    ["agent", ["--agent", "codex", "--agent", "codex"]],
+    ["home", ["--home", "/one", "--home", "/two"]],
+  ])("rejects a duplicate %s filter", async (_name, argv) => {
+    const { pipeline } = stubPipeline();
+    const outcome = await createCliRunner().run(invocation({ argv }), pipeline);
+    expect(outcome.exitCode).toBe(2);
+    expect(outcome.stderr.join(" ")).toMatch(/twice/i);
+  });
 });
 
 describe("T-CLI-7 the confirmation flag commits", () => {
   it("commits the same request the preview used, with a null runtime handle", async () => {
     const { pipeline, calls } = stubPipeline();
 
-    const outcome = await createCliRunner().run(invocation({ argv: ["3", "--confirm"] }), pipeline);
+    const outcome = await createCliRunner().run(
+      invocation({ argv: ["3", "--confirm", CONFIRMATION_TOKEN] }),
+      pipeline,
+    );
 
     expect(calls.order).toEqual(["preview", "commit"]);
     expect(calls.commit[0]?.request).toEqual(calls.preview[0]);
     expect(calls.commit[0]?.runtime).toBeNull();
+    expect(calls.commit[0]?.confirmationToken).toBe(CONFIRMATION_TOKEN);
     expect(outcome.exitCode).toBe(0);
   });
 });

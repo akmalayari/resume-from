@@ -22,6 +22,7 @@ import {
   type PiAssistantMessage,
   type PiCompactionEntry,
   type PiEntry,
+  type PiMessage,
   type PiSessionHeader,
   type PiToolResultMessage,
   type PiUserMessage,
@@ -111,11 +112,15 @@ export function piToolResultDraft(
   return { type: "message", message } as unknown as EntryDraft;
 }
 
-export function piCompactionDraft(summary: string): EntryDraft {
+export function piCompactionDraft(
+  summary: string,
+  options: { firstKeptEntryId?: string; retainedTail?: PiMessage[] } = {},
+): EntryDraft {
   const draft: Omit<PiCompactionEntry, "id" | "parentId" | "timestamp"> = {
     type: "compaction",
     summary,
-    firstKeptEntryId: "00000001",
+    firstKeptEntryId: options.firstKeptEntryId ?? "__first__",
+    ...(options.retainedTail === undefined ? {} : { retainedTail: options.retainedTail }),
     tokensBefore: 1234,
   };
   return draft as unknown as EntryDraft;
@@ -139,7 +144,10 @@ export function piCustomMessageDraft(customType: string): EntryDraft {
 }
 
 export function piUnknownDraft(type: string): EntryDraft {
-  return { type, payload: "something this adapter has never seen" } as unknown as EntryDraft;
+  return {
+    type,
+    payload: "something this adapter has never seen",
+  } as unknown as EntryDraft;
 }
 
 /** Render a whole Pi session file: a `session` header followed by chained entries. */
@@ -160,6 +168,9 @@ export function piSessionText(
     const id = nextEntryId();
     const entry = {
       ...draft,
+      ...(draft.type === "compaction" && draft.firstKeptEntryId === "__first__"
+        ? { firstKeptEntryId: entries[0]?.id }
+        : {}),
       id,
       parentId,
       timestamp: draft.timestamp ?? nextIso(),

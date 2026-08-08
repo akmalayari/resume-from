@@ -28,10 +28,12 @@ const packages = [
 ];
 
 function packageManifest(spec) {
-  return {
+  const manifest = {
     name: spec.name,
     version,
     description: spec.description,
+    type: rootPackage.type,
+    engines: rootPackage.engines,
     license: "MIT",
     repository: { type: "git", url: `git+${repository}.git` },
     homepage: `${repository}#readme`,
@@ -40,6 +42,12 @@ function packageManifest(spec) {
     files: spec.files,
     publishConfig: { access: "public" },
   };
+
+  if (spec.target === "claude") {
+    manifest.dependencies = rootPackage.dependencies;
+  }
+
+  return manifest;
 }
 
 function packageReadme(spec) {

@@ -357,7 +357,6 @@ export interface ImportWork {
   dir: string;
   family: EstimatorFamily;
   text: string;
-  fileCount: number;
 }
 
 export interface ImportOutcome {
@@ -380,11 +379,13 @@ export async function runImport(
   const config = await services.config.load();
   const identity = await services.repo.identify(work.dir);
   const tokens = services.tokens.forFamily(work.family).estimate(work.text);
-  const files = Array.from({ length: work.fileCount }, (_, index) => ({
-    absolutePath: join(work.dir, "landed", `${work.name}-${index}.json`),
-    bytes: Buffer.from(`{"run":"${work.name}","file":${index}}`, "utf8"),
-  }));
-  const handle = await services.store.commit(files);
+  const files = [
+    {
+      absolutePath: join(work.dir, "landed", `${work.name}.json`),
+      bytes: Buffer.from(`{"run":"${work.name}"}`, "utf8"),
+    },
+  ];
+  const handle = await services.store.commit(work.dir, files);
   return {
     budgetShare: config.budgetShare,
     extraHomes: config.extraHomes,

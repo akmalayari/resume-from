@@ -3,7 +3,6 @@ import type {
   AgentRuntime,
   CanonicalSession,
   CommitError,
-  CommitHandle,
   CommitRefusal,
   FileCommitter,
   HomePath,
@@ -52,31 +51,25 @@ function asCommitError(cause: unknown): CommitError | null {
     : null;
 }
 
-/**
- * Undoes a commit and describes the failure that caused it (FR-53). A rollback
- * that itself fails is reported with the paths that may remain: silence there
- * would leave a partial session the user cannot find.
- */
-async function undoAndFail(
-  handle: CommitHandle,
+function commitNextStep(refused: CommitError | null): string {
+  if (refused === null) return `Nothing was created. ${RETRY}`;
+  if (refused.remainingPaths !== undefined && refused.remainingPaths.length > 0) {
+    return `Cleanup was incomplete. Inspect these paths, then run the import again: ${refused.remainingPaths.join(", ")}.`;
+  }
+  return COMMIT_NEXT_STEP[refused.refusal];
+}
+
+function failAfterCommit(
+  createdPaths: string[],
   stage: LandingStage,
   what: string,
   home: HomePath,
-): Promise<LandingFailure> {
-  try {
-    await handle.rollback();
-    return new LandingFailure(
-      stage,
-      `${what} The files it had created were removed, so nothing remains in ${home}. ${RETRY}`,
-      { rolledBack: true },
-    );
-  } catch (cause) {
-    return new LandingFailure(
-      stage,
-      `${what} Undoing the write failed as well: ${reasonOf(cause)}. These paths may still exist and must be removed by hand: ${handle.createdPaths.join(", ")}. Remove them, then run the import again.`,
-      { rolledBack: false },
-    );
-  }
+): LandingFailure {
+  const preserved =
+    createdPaths.length === 0
+      ? `No paths were created in ${home}.`
+      : `The committed paths were preserved because automatic removal could delete replacements. Inspect them before retrying: ${createdPaths.join(", ")}.`;
+  return new LandingFailure(stage, `${what} ${preserved} ${RETRY}`);
 }
 
 async function runLanding(
@@ -100,7 +93,10 @@ async function runLanding(
 
   const capabilities = adapter.capabilities();
   const marker = buildMarker(plan, importedAt);
-  const session: CanonicalSession = { provenance: plan.provenance, turns: plan.turns };
+  const session: CanonicalSession = {
+    provenance: plan.provenance,
+    turns: plan.turns,
+  };
 
   let serialized: SerializedSession;
   try {
@@ -109,6 +105,12 @@ async function runLanding(
     throw new LandingFailure(
       "serialize",
       `The ${target} adapter could not turn the plan into its own session format: ${reasonOf(cause)}. Nothing was written to ${home}. ${RETRY}`,
+    );
+  }
+  if (serialized.files.length > 1) {
+    throw new LandingFailure(
+      "serialize",
+      `The ${target} adapter produced ${serialized.files.length} files for one session. Atomic placement supports at most one file, so nothing was written to ${home}. Report this as an adapter bug.`,
     );
   }
 
@@ -130,14 +132,13 @@ async function runLanding(
     );
   }
 
-  let handle: CommitHandle;
+  let createdPaths: string[];
   try {
-    handle = await committer.commit(serialized.files);
+    ({ createdPaths } = await committer.commit(home, serialized.files));
   } catch (cause) {
     const refused = asCommitError(cause);
     const where = refused?.path ? ` (path: ${refused.path})` : "";
-    const next =
-      refused === null ? `Nothing was created. ${RETRY}` : COMMIT_NEXT_STEP[refused.refusal];
+    const next = commitNextStep(refused);
     throw new LandingFailure(
       "commit",
       `Creating the new session in ${home} failed: ${reasonOf(cause)}${where} ${next}`,
@@ -148,24 +149,32 @@ async function runLanding(
   try {
     stored = await adapter.readBack(home, serialized.sessionId);
   } catch (cause) {
-    throw await undoAndFail(
-      handle,
+    throw failAfterCommit(
+      createdPaths,
       "read-back",
       `The new session in ${home} could not be read back: ${reasonOf(cause)}.`,
       home,
     );
   }
+  if (stored.sessionId !== serialized.sessionId) {
+    throw failAfterCommit(
+      createdPaths,
+      "read-back",
+      `${target} read back session ${stored.sessionId} instead of the new session ${serialized.sessionId}.`,
+      home,
+    );
+  }
   if (stored.itemCount !== serialized.itemCount) {
-    throw await undoAndFail(
-      handle,
+    throw failAfterCommit(
+      createdPaths,
       "read-back",
       `${target} stored ${stored.itemCount} of the ${serialized.itemCount} items that were sent, so the session is incomplete.`,
       home,
     );
   }
   if (!stored.openable) {
-    throw await undoAndFail(
-      handle,
+    throw failAfterCommit(
+      createdPaths,
       "read-back",
       `${target} could not open the new session ${serialized.sessionId}.`,
       home,
@@ -193,7 +202,6 @@ async function runLanding(
     throw new LandingFailure(
       "switch",
       `The new session was created and is valid, but moving you into it failed: ${reasonOf(cause)}. The session was kept. Open it yourself: ${handover().command}`,
-      { rolledBack: false },
     );
   }
 

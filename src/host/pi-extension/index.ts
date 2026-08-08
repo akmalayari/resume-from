@@ -17,6 +17,7 @@ export {
   type KeySource,
   type PickerKey,
 } from "./picker.js";
+export { safeLines, safeText } from "./presentation.js";
 export {
   type PiCommandDefinition,
   type PiCommandRegistrar,

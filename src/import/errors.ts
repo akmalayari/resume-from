@@ -10,6 +10,7 @@ export type ImportStage =
   | "plan"
   | "preview"
   | "blocked"
+  | "confirmation"
   | "source-changed"
   | "landing";
 

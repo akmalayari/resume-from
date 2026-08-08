@@ -5,6 +5,7 @@ import {
   assistantTextEntry,
   assistantToolUseEntry,
   bodyOfLines,
+  chainEntries,
   cleanupThrowaways,
   type EntryContext,
   makeThrowawayHome,
@@ -19,14 +20,20 @@ import {
 
 const REPO = "/work/app";
 const OTHER_REPO = "/work/other";
-const CTX: EntryContext = { cwd: REPO, gitBranch: "fix/auth-refresh", sessionId: "s-1" };
+const CTX: EntryContext = {
+  cwd: REPO,
+  gitBranch: "fix/auth-refresh",
+  sessionId: "s-1",
+};
 
 afterEach(async () => {
   await cleanupThrowaways();
 });
 
 function textOf(entries: unknown[]): string {
-  return entries.map((entry) => JSON.stringify(entry)).join("\n");
+  return chainEntries(entries)
+    .map((entry) => JSON.stringify(entry))
+    .join("\n");
 }
 
 describe("T-CC-2 — a session file becomes canonical turns", () => {
@@ -80,6 +87,69 @@ describe("T-CC-2 — a session file becomes canonical turns", () => {
     expect(withEdit.changedPaths).toEqual(["src/auth.ts"]);
     expect(withEdit.turns[0]?.toolCall?.effect).toBe("mutating");
   });
+
+  it("reads the current compact-summary user shape as an agent summary", () => {
+    const read = readSessionText(
+      textOf([
+        userEntry(CTX, uuidFor(20), "2026-08-01T09:14:02.000Z", "old request"),
+        userEntry(CTX, uuidFor(21), "2026-08-01T09:15:00.000Z", "Current compact summary", {
+          isCompactSummary: true,
+          isVisibleInTranscriptOnly: true,
+        }),
+        assistantTextEntry(CTX, uuidFor(22), "2026-08-01T09:15:02.000Z", "continued"),
+      ]),
+    );
+
+    expect(read.turns.map((turn) => [turn.role, turn.kind, turn.text])).toEqual([
+      ["user", "message", "old request"],
+      ["agent", "summary", "Current compact summary"],
+      ["agent", "message", "continued"],
+    ]);
+  });
+});
+
+describe("Claude active transcript graph", () => {
+  it("keeps only the last non-sidechain leaf's ancestry", () => {
+    const entries = chainEntries([
+      userEntry(CTX, uuidFor(30), "2026-08-01T09:14:02.000Z", "shared request"),
+      assistantTextEntry(CTX, uuidFor(31), "2026-08-01T09:14:03.000Z", "abandoned answer"),
+      assistantTextEntry(CTX, uuidFor(32), "2026-08-01T09:14:04.000Z", "active answer"),
+    ]) as Record<string, unknown>[];
+    entries[2] = { ...entries[2], parentUuid: uuidFor(30) };
+
+    const read = readSessionText(entries.map((entry) => JSON.stringify(entry)).join("\n"));
+    expect(read.unreadable).toBeNull();
+    expect(read.turns.map((turn) => turn.text)).toEqual(["shared request", "active answer"]);
+    expect(JSON.stringify(read)).not.toContain("abandoned answer");
+  });
+
+  it("does not let a later sidechain replace the main leaf", () => {
+    const main = chainEntries([
+      userEntry(CTX, uuidFor(33), "2026-08-01T09:14:02.000Z", "main request"),
+      assistantTextEntry(CTX, uuidFor(34), "2026-08-01T09:14:03.000Z", "main answer"),
+    ]) as Record<string, unknown>[];
+    const sidechain = {
+      ...userEntry(CTX, uuidFor(35), "2026-08-01T09:14:04.000Z", "private sidechain"),
+      parentUuid: uuidFor(34),
+      isSidechain: true,
+    };
+
+    const read = readSessionText(textOf([...main, sidechain]));
+    expect(read.turns.map((turn) => turn.text)).toEqual(["main request", "main answer"]);
+    expect(JSON.stringify(read)).not.toContain("private sidechain");
+  });
+
+  it("reports a broken active parent chain as unreadable", () => {
+    const entries = chainEntries([
+      userEntry(CTX, uuidFor(36), "2026-08-01T09:14:02.000Z", "root"),
+      assistantTextEntry(CTX, uuidFor(37), "2026-08-01T09:14:03.000Z", "orphan"),
+    ]) as Record<string, unknown>[];
+    entries[1] = { ...entries[1], parentUuid: "missing-parent" };
+
+    const read = readSessionText(entries.map((entry) => JSON.stringify(entry)).join("\n"));
+    expect(read.turns).toEqual([]);
+    expect(read.unreadable).toMatch(/missing parent/);
+  });
 });
 
 describe("T-CC-3 — tool results become one outcome line", () => {
@@ -120,7 +190,11 @@ describe("T-CC-3 — tool results become one outcome line", () => {
           message: {
             role: "user",
             content: [
-              { type: "tool_result", tool_use_id: "t1", content: { files: ["a.ts", "b.ts"] } },
+              {
+                type: "tool_result",
+                tool_use_id: "t1",
+                content: { files: ["a.ts", "b.ts"] },
+              },
             ],
           },
         },
@@ -173,6 +247,51 @@ describe("T-CC-14 — excluded content never crosses", () => {
 
   it.each(secrets)("never carries %s into the canonical session (FR-28, NG-7)", (secret) => {
     expect(JSON.stringify(read)).not.toContain(secret);
+  });
+
+  it("redacts structured and command credentials in tool inputs", () => {
+    const apiKey = "sk-12345678901234567890";
+    const password = "database-password";
+    const uriPassword = "uri-supersecret";
+    const userPassword = "curl-supersecret";
+    const read = readSessionText(
+      textOf([
+        assistantToolUseEntry(CTX, uuidFor(10), "2026-08-01T09:14:06.000Z", "secret-tool", "Bash", {
+          command:
+            `OPENAI_API_KEY=${apiKey} curl -u alice:${userPassword} ` +
+            `https://alice:${uriPassword}@example.com/api`,
+          env: { DATABASE_PASSWORD: password },
+          path: "fixtures/token-refresh.json",
+        }),
+      ]),
+    );
+    const canonical = JSON.stringify(read.turns);
+
+    expect(canonical).not.toContain(apiKey);
+    expect(canonical).not.toContain(password);
+    expect(canonical).not.toContain(uriPassword);
+    expect(canonical).not.toContain(userPassword);
+    expect(canonical).toContain("fixtures/token-refresh.json");
+    expect(canonical).toContain("[REDACTED]");
+  });
+
+  it("excludes non-meta local command stdout carriers", () => {
+    const secret = "LOCAL-COMMAND-SECRET";
+    const read = readSessionText(
+      textOf([
+        userEntry(
+          CTX,
+          uuidFor(11),
+          "2026-08-01T09:14:02.000Z",
+          `<local-command-stdout>${secret}</local-command-stdout>`,
+        ),
+        userEntry(CTX, uuidFor(12), "2026-08-01T09:14:03.000Z", "real request"),
+      ]),
+    );
+
+    expect(read.turns.map((turn) => turn.text)).toEqual(["real request"]);
+    expect(JSON.stringify(read)).not.toContain(secret);
+    expect(read.skipped).toBe(1);
   });
 });
 

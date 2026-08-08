@@ -66,6 +66,16 @@ interface CommitDistance {
 ```
 
 ```ts
+/** Process controls applied to every git command issued by one reader. */
+interface RepoReaderOptions {
+  /** Maximum duration of one git command. Defaults to a finite module-owned limit. */
+  timeoutMs?: number;
+  /** Cancels the current command and every later command issued by this reader. */
+  signal?: AbortSignal;
+}
+```
+
+```ts
 /** Reads git state. It never writes to the repository. */
 interface RepoReader {
   identify(cwd: string): Promise<RepoIdentity>;
@@ -101,6 +111,8 @@ Changes that require **only this module** to change:
   `known: false`; it is never interpolated into a shell.
 - **Results are read at the moment of the call.** No caching across calls, because the preview and
   the commit of one import may straddle a change in the tree, and the second call must see it.
+- **Every git subprocess has a finite timeout and supports cancellation.** A timeout or abort rejects
+  with a message that distinguishes it from an expected non-zero git exit.
 - **`known: false` implies `ahead` and `behind` are 0.** Callers must not read them as real numbers.
 
 ## Test Specification
@@ -188,3 +200,12 @@ user's repository.
 - Scenario: a source session recorded a commit from an unrelated repository.
 - Expected behavior: `known` false. The preview then says the source commit is not known here, rather
   than warning about a distance that has no meaning.
+
+**T-REP-17 — git execution is bounded**
+- Scenario: a git subprocess that waits for standard input, with a short `timeoutMs`.
+- Expected behavior: it is stopped and rejects with the configured duration in the message. The
+  factory rejects non-positive or non-finite timeout values.
+
+**T-REP-18 — git execution is cancellable**
+- Scenario: a reader created with an aborted `AbortSignal` attempts to identify a repository.
+- Expected behavior: it rejects with an abort message before returning repository facts.

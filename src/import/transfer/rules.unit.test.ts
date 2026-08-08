@@ -124,7 +124,7 @@ describe("T-TRA-3 every result body is dropped and marked", () => {
       agentMessage(1, "x".repeat(100)),
     ];
 
-    const plan = planOf(turns, 100, 1, 0);
+    const plan = planOf(turns, 104, 1, 0);
 
     expect(droppedIndexes(plan)).toEqual([0]);
     expect(plan.bodiesDropped).toBe(1);
@@ -174,7 +174,9 @@ describe("T-TRA-6 excluded content never crosses", () => {
     };
     const turns = [
       withExtras(userMessage(0, "Fix the bug."), excluded),
-      withExtras(agentMessage(1, "Fixed."), { thinking: "HIDDEN-CHAIN-OF-THOUGHT" }),
+      withExtras(agentMessage(1, "Fixed."), {
+        thinking: "HIDDEN-CHAIN-OF-THOUGHT",
+      }),
     ];
     const session = withExtras(sessionOf(turns, withExtras(provenanceOf(), excluded)), excluded);
 
@@ -224,7 +226,7 @@ describe("T-TRA-8 the first request is pinned", () => {
 
     expect(plan.pins).toContainEqual({ index: 0, reason: "first-request" });
     expect(droppedIndexes(plan)).not.toContain(0);
-    expect(keptIndexes(plan)).toEqual([0, 8, 9]);
+    expect(keptIndexes(plan)).toEqual([0, 9]);
   });
 });
 
@@ -255,7 +257,14 @@ describe("T-TRA-10 summaries and the changed-file list are pinned", () => {
       agentMessage(6, "Done."),
     ];
 
-    const plan = planOf(turns, 1_000_000, 1, 0);
+    const provenance = provenanceOf();
+    provenance.repo.changedPaths = ["a.ts", "b.ts", "c.ts"];
+    const plan = rules.apply(
+      sessionOf(turns, provenance),
+      targetOf(1_000_000),
+      configOf(1, 0),
+      charEstimator,
+    );
 
     expect(pinnedIndexes(plan.pins, "summary")).toEqual([1, 4]);
     expect(pinnedIndexes(plan.pins, "changed-files")).toEqual([2, 3, 5]);
@@ -269,9 +278,9 @@ describe("T-TRA-11 the oldest unpinned turns are dropped first", () => {
 
     const plan = planOf(turns, 600, 1, 0);
 
-    expect(droppedIndexes(plan)).toEqual([0, 1, 2, 3]);
-    expect(plan.estimatedTokens).toBe(600);
-    expect(keptIndexes(plan)).toEqual([4, 5, 6, 7, 8, 9]);
+    expect(droppedIndexes(plan)).toEqual([0, 1, 2, 3, 4]);
+    expect(plan.estimatedTokens).toBe(520);
+    expect(keptIndexes(plan)).toEqual([5, 6, 7, 8, 9]);
   });
 });
 
@@ -280,11 +289,11 @@ describe("T-TRA-12 a call and its result are never split", () => {
   const message = agentMessage(1, "x".repeat(100));
 
   test("when the budget cuts at the record it is dropped whole", () => {
-    const plan = planOf([call, message], 100, 1, 0);
+    const plan = planOf([call, message], 104, 1, 0);
 
     expect(droppedIndexes(plan)).toEqual([0]);
     expect(keptIndexes(plan)).toEqual([1]);
-    expect(plan.estimatedTokens).toBe(100);
+    expect(plan.estimatedTokens).toBe(104);
   });
 
   test("when the record is kept the outcome is kept with it", () => {
@@ -341,16 +350,32 @@ describe("T-TRA-14 pinned content over budget blocks", () => {
   });
 });
 
-describe("T-TRA-15 the changed-file list is derived from mutating calls", () => {
-  test("only the mutating calls contribute a path", () => {
+describe("T-TRA-15 the changed-file list comes from adapter provenance", () => {
+  test("recorded paths are deduplicated and arbitrary tool arguments are not parsed as paths", () => {
     const turns = [
-      toolTurn(0, "Edit", "'a.ts'", "Edit('a.ts') → 1 hunk", "mutating"),
-      toolTurn(1, "Write", "'b.ts'", "Write('b.ts') → 20 lines", "mutating"),
+      toolTurn(0, "Edit", '{"path":"junk-from-generic-parser"}', "1 hunk", "mutating"),
+      toolTurn(1, "Write", "not a path", "20 lines", "mutating"),
       toolTurn(2, "Read", "'c.ts'", "Read('c.ts') → 400 lines", "read-only"),
     ];
+    const provenance = provenanceOf();
+    provenance.repo.changedPaths = ["a.ts", "b.ts", "a.ts", "", "b.ts"];
 
-    const plan = planOf(turns, 1_000_000, 1, 5);
+    const plan = rules.apply(
+      sessionOf(turns, provenance),
+      targetOf(1_000_000),
+      configOf(1, 5),
+      charEstimator,
+    );
 
     expect(plan.provenance.repo.changedPaths).toEqual(["a.ts", "b.ts"]);
+  });
+});
+
+describe("T-TRA-33 every kept turn has a fixed framing cost", () => {
+  test("even empty visible text consumes positive budget", () => {
+    const plan = planOf([agentMessage(0, "")], 1_000_000, 1, 0);
+
+    expect(plan.estimatedTokens).toBeGreaterThan(0);
+    expect(plan.estimatedTokens).toBe(4);
   });
 });

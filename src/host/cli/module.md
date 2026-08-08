@@ -38,7 +38,7 @@ but the three-step shape is fixed by C-1 and FR-10.
 ## Encapsulated Knowledge
 
 - **The three-step invocation.** That `/resume-from` lists, `/resume-from <n>` previews, and
-  `/resume-from <n> --confirm` commits — and that these are three separate processes with no shared
+  `/resume-from <n> --confirm <token>` commits — and that these are three separate processes with no shared
   state, which is why the pipeline recomputes.
 - **The flag and argument grammar**, including how a row number is told apart from a session ID and
   a file path.
@@ -179,6 +179,8 @@ interface PreviewWarning {
 ```ts
 /** Everything the user sees before confirming (FR-16 to FR-21). */
 interface PreviewReport {
+  /** Opaque binding that must be returned unchanged to commit this exact preview (FR-20). */
+  confirmationToken: string;
   /** Source, target, and the turn counts that cross and are dropped (FR-17). */
   headerLines: string[];
   /** For example "Budget: 34k tokens of a 200k window" (FR-18). */
@@ -245,7 +247,11 @@ interface ImportPipeline {
   /** Writes nothing (FR-16). */
   preview(request: ImportRequest): Promise<PreviewReport>;
   /** Runs only after the user confirmed the preview (FR-20). */
-  commit(request: ImportRequest, runtime: AgentRuntime): Promise<LandingResult>;
+  commit(
+    request: ImportRequest,
+    runtime: AgentRuntime,
+    confirmationToken: string,
+  ): Promise<LandingResult>;
 }
 ```
 
@@ -379,7 +385,7 @@ is spawned and no terminal is required.
   the requirement's own FR-2 example.
 
 **T-CLI-7 — the confirmation flag commits**
-- Scenario: `argv` is `["3", "--confirm"]`.
+- Scenario: `argv` is `["3", "--confirm", "<token from preview>"]`.
 - Expected behavior: `commit` is called with the same request the preview used, and the runtime
   handle is `null`.
 
@@ -454,7 +460,7 @@ is spawned and no terminal is required.
 
 **T-CLI-21 — the FR-10 sequence**
 - Scenario: `/resume-from` prints ten rows; `/resume-from 3` opens the preview of row 3;
-  `/resume-from 3 --confirm` lands it — three separate runs of the runner with no shared state.
+  `/resume-from 3 --confirm <token>` lands it — three separate runs with no shared state.
 - Expected behavior: exactly the requirement's own test, and the session landed is the one shown on
   row 3.
 

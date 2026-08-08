@@ -98,7 +98,11 @@ interface SessionRef {
 /** One import, from listing to landing. Every host drives these three calls. */
 interface ImportPipeline {
   /** Runs only after the user confirmed the preview (FR-20). */
-  commit(request: ImportRequest, runtime: AgentRuntime): Promise<LandingResult>;
+  commit(
+    request: ImportRequest,
+    runtime: AgentRuntime,
+    confirmationToken: string,
+  ): Promise<LandingResult>;
 }
 ```
 
@@ -200,24 +204,24 @@ src/                            resume-from — the system
 
 ### What each submodule contributes
 
-| Submodule | Contribution |
-| --------- | ------------ |
-| `session/` | The one neutral vocabulary every rule runs on. Nothing else defines a turn. |
+| Submodule   | Contribution                                                                           |
+| ----------- | -------------------------------------------------------------------------------------- |
+| `session/`  | The one neutral vocabulary every rule runs on. Nothing else defines a turn.            |
 | `adapters/` | The port: read an agent's sessions, serialize into its format, declare what it can do. |
-| `import/` | The pipeline: list, preview, commit. It owns the order of the four stages. |
-| `host/` | The agent list and the two entry points. It is the composition root. |
-| `platform/` | Git, tokens, configuration, and the guarded write path. All replaceable. |
+| `import/`   | The pipeline: list, preview, commit. It owns the order of the four stages.             |
+| `host/`     | The agent list and the two entry points. It is the composition root.                   |
+| `platform/` | Git, tokens, configuration, and the guarded write path. All replaceable.               |
 
 ### The root's own files
 
 Two, and both are doors rather than machinery:
 
-| File | What it is |
-| ---- | ---------- |
-| `index.ts` | The package entry point. It re-exports `createHost`, the command-binary start and the Pi activation from `src/host/`, and builds nothing itself. |
-| `bin.ts` | The command binary. It reads the two facts only the caller knows — which agent it is running inside, and which home — and hands the rest to the host. |
+| File       | What it is                                                                                                                                            |
+| ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `index.ts` | The package entry point. It re-exports `createHost`, the command-binary start and the Pi activation from `src/host/`, and builds nothing itself.      |
+| `bin.ts`   | The command binary. It reads the two facts only the caller knows — which agent it is running inside, and which home — and hands the rest to the host. |
 
-`bin.ts` is here rather than in `src/host/cli/`, even though that module *is* the command binary,
+`bin.ts` is here rather than in `src/host/cli/`, even though that module _is_ the command binary,
 because a process entry point must reach the composition root and `src/host/cli/` may not: its own
 boundary rule allows a cross-module import only to a `contract.js` (T-CLI-20), and an import of its
 parent would make the module graph cyclic (T-HOS-17, T-ROO-7). The root is the one module the
@@ -250,62 +254,62 @@ those two points knows either name.
 
 ### Complete coupling assessment
 
-| Integration | Strength | LCA | Rank | Distance | Volatility | Balanced? | Action |
-| ----------- | -------- | --- | ---- | -------- | ---------- | --------- | ------ |
-| src → src/host | Contract | src | 1 | 1 | Moderate | Yes | — |
-| src/adapters → src/session | Model | src | 1 | 1 | High (core) | Yes | — |
-| src/adapters → src/platform/store | Contract | src | 2 | 2 | Low | Yes | — |
-| src/adapters/pi → src/session | Model | src | 2 | 2 | High (core) | Yes (at threshold) | — |
-| src/adapters/codex → src/session | Model | src | 2 | 2 | High (core) | Yes (at threshold) | — |
-| src/adapters/claude-code → src/session | Model | src | 2 | 2 | High (core) | Yes (at threshold) | — |
-| src/adapters/pi → src/adapters | Contract | src/adapters | 1 | 1 | High | Yes | — |
-| src/adapters/codex → src/adapters | Contract | src/adapters | 1 | 1 | High | Yes | — |
-| src/adapters/claude-code → src/adapters | Contract | src/adapters | 1 | 1 | High | Yes | — |
-| src/import → src/import/discovery | Contract | src/import | 1 | 1 | High | Yes | — |
-| src/import → src/import/transfer | Contract | src/import | 1 | 1 | High | Yes | — |
-| src/import → src/import/preview | Contract | src/import | 1 | 1 | High | Yes | — |
-| src/import → src/import/landing | Contract | src/import | 1 | 1 | High | Yes | — |
-| src/import → src/session | Model | src | 1 | 1 | High (core) | Yes | — |
-| src/import → src/adapters | Contract | src | 1 | 1 | High | Yes | — |
-| src/import → src/platform/config | Contract | src | 2 | 2 | Low | Yes | — |
-| src/import → src/platform/tokens | Contract | src | 2 | 2 | Low | Yes | — |
-| src/import → src/platform/store | Contract | src | 2 | 2 | Low | Yes | — |
-| src/import/discovery → src/session | Model | src | 2 | 2 | High (core) | Yes (at threshold) | — |
-| src/import/transfer → src/session | Model | src | 2 | 2 | High (core) | Yes (at threshold) | — |
-| src/import/preview → src/session | Model | src | 2 | 2 | High (core) | Yes (at threshold) | — |
-| src/import/landing → src/session | Model | src | 2 | 2 | High (core) | Yes (at threshold) | — |
-| src/import/preview → src/import/transfer | Model | src/import | 1 | 1 | High (core) | Yes | — |
-| src/import/landing → src/import/transfer | Model | src/import | 1 | 1 | High (core) | Yes | — |
-| src/import/discovery → src/adapters | Contract | src | 2 | 2 | High | Yes | — |
-| src/import/landing → src/adapters | Contract | src | 2 | 2 | High | Yes | — |
-| src/import/discovery → src/platform/repo | Contract | src | 2 | 2 | Low | Yes | — |
-| src/import/discovery → src/platform/config | Contract | src | 2 | 2 | Low | Yes | — |
-| src/import/transfer → src/platform/tokens | Contract | src | 2 | 2 | Low | Yes | — |
-| src/import/transfer → src/platform/config | Contract | src | 2 | 2 | Low | Yes | — |
-| src/import/preview → src/platform/repo | Contract | src | 2 | 2 | Low | Yes | — |
-| src/import/landing → src/platform/store | Contract | src | 2 | 2 | Low | Yes | — |
-| src/platform → src/platform/config | Contract | src/platform | 1 | 1 | Low | Yes | — |
-| src/platform → src/platform/repo | Contract | src/platform | 1 | 1 | Low | Yes | — |
-| src/platform → src/platform/tokens | Contract | src/platform | 1 | 1 | Low | Yes | — |
-| src/platform → src/platform/store | Contract | src/platform | 1 | 1 | Low | Yes | — |
-| src/platform/config → src/session | Model | src | 2 | 2 | Low | Yes (at threshold) | — |
-| src/host → src/adapters | Contract | src | 1 | 1 | High | Yes | — |
-| src/host → src/adapters/pi | Contract | src | 2 | 2 | High | Yes | — |
-| src/host → src/adapters/codex | Contract | src | 2 | 2 | High | Yes | — |
-| src/host → src/adapters/claude-code | Contract | src | 2 | 2 | High | Yes | — |
-| src/host → src/import | Contract | src | 1 | 1 | Moderate | Yes | — |
-| src/host → src/platform/config | Contract | src | 2 | 2 | Low | Yes | — |
-| src/host → src/platform/repo | Contract | src | 2 | 2 | Low | Yes | — |
-| src/host → src/platform/tokens | Contract | src | 2 | 2 | Low | Yes | — |
-| src/host → src/platform/store | Contract | src | 2 | 2 | Low | Yes | — |
-| src/host → src/session | Model | src | 1 | 1 | High (core) | Yes | — |
-| src/host → src/host/cli | Contract | src/host | 1 | 1 | Moderate | Yes | — |
-| src/host → src/host/pi-extension | Contract | src/host | 1 | 1 | Moderate | Yes | — |
-| src/host/cli → src/import | Contract | src | 2 | 2 | Moderate | Yes | — |
-| src/host/cli → src/session | Model | src | 2 | 2 | High (core) | Yes (at threshold) | — |
-| src/host/pi-extension → src/import | Contract | src | 2 | 2 | Moderate | Yes | — |
-| src/host/pi-extension → src/session | Model | src | 2 | 2 | High (core) | Yes (at threshold) | — |
-| src/host/pi-extension → src/adapters/pi | Contract | src | 2 | 2 | High | Yes | — |
+| Integration                                | Strength | LCA          | Rank | Distance | Volatility  | Balanced?          | Action |
+| ------------------------------------------ | -------- | ------------ | ---- | -------- | ----------- | ------------------ | ------ |
+| src → src/host                             | Contract | src          | 1    | 1        | Moderate    | Yes                | —      |
+| src/adapters → src/session                 | Model    | src          | 1    | 1        | High (core) | Yes                | —      |
+| src/adapters → src/platform/store          | Contract | src          | 2    | 2        | Low         | Yes                | —      |
+| src/adapters/pi → src/session              | Model    | src          | 2    | 2        | High (core) | Yes (at threshold) | —      |
+| src/adapters/codex → src/session           | Model    | src          | 2    | 2        | High (core) | Yes (at threshold) | —      |
+| src/adapters/claude-code → src/session     | Model    | src          | 2    | 2        | High (core) | Yes (at threshold) | —      |
+| src/adapters/pi → src/adapters             | Contract | src/adapters | 1    | 1        | High        | Yes                | —      |
+| src/adapters/codex → src/adapters          | Contract | src/adapters | 1    | 1        | High        | Yes                | —      |
+| src/adapters/claude-code → src/adapters    | Contract | src/adapters | 1    | 1        | High        | Yes                | —      |
+| src/import → src/import/discovery          | Contract | src/import   | 1    | 1        | High        | Yes                | —      |
+| src/import → src/import/transfer           | Contract | src/import   | 1    | 1        | High        | Yes                | —      |
+| src/import → src/import/preview            | Contract | src/import   | 1    | 1        | High        | Yes                | —      |
+| src/import → src/import/landing            | Contract | src/import   | 1    | 1        | High        | Yes                | —      |
+| src/import → src/session                   | Model    | src          | 1    | 1        | High (core) | Yes                | —      |
+| src/import → src/adapters                  | Contract | src          | 1    | 1        | High        | Yes                | —      |
+| src/import → src/platform/config           | Contract | src          | 2    | 2        | Low         | Yes                | —      |
+| src/import → src/platform/tokens           | Contract | src          | 2    | 2        | Low         | Yes                | —      |
+| src/import → src/platform/store            | Contract | src          | 2    | 2        | Low         | Yes                | —      |
+| src/import/discovery → src/session         | Model    | src          | 2    | 2        | High (core) | Yes (at threshold) | —      |
+| src/import/transfer → src/session          | Model    | src          | 2    | 2        | High (core) | Yes (at threshold) | —      |
+| src/import/preview → src/session           | Model    | src          | 2    | 2        | High (core) | Yes (at threshold) | —      |
+| src/import/landing → src/session           | Model    | src          | 2    | 2        | High (core) | Yes (at threshold) | —      |
+| src/import/preview → src/import/transfer   | Model    | src/import   | 1    | 1        | High (core) | Yes                | —      |
+| src/import/landing → src/import/transfer   | Model    | src/import   | 1    | 1        | High (core) | Yes                | —      |
+| src/import/discovery → src/adapters        | Contract | src          | 2    | 2        | High        | Yes                | —      |
+| src/import/landing → src/adapters          | Contract | src          | 2    | 2        | High        | Yes                | —      |
+| src/import/discovery → src/platform/repo   | Contract | src          | 2    | 2        | Low         | Yes                | —      |
+| src/import/discovery → src/platform/config | Contract | src          | 2    | 2        | Low         | Yes                | —      |
+| src/import/transfer → src/platform/tokens  | Contract | src          | 2    | 2        | Low         | Yes                | —      |
+| src/import/transfer → src/platform/config  | Contract | src          | 2    | 2        | Low         | Yes                | —      |
+| src/import/preview → src/platform/repo     | Contract | src          | 2    | 2        | Low         | Yes                | —      |
+| src/import/landing → src/platform/store    | Contract | src          | 2    | 2        | Low         | Yes                | —      |
+| src/platform → src/platform/config         | Contract | src/platform | 1    | 1        | Low         | Yes                | —      |
+| src/platform → src/platform/repo           | Contract | src/platform | 1    | 1        | Low         | Yes                | —      |
+| src/platform → src/platform/tokens         | Contract | src/platform | 1    | 1        | Low         | Yes                | —      |
+| src/platform → src/platform/store          | Contract | src/platform | 1    | 1        | Low         | Yes                | —      |
+| src/platform/config → src/session          | Model    | src          | 2    | 2        | Low         | Yes (at threshold) | —      |
+| src/host → src/adapters                    | Contract | src          | 1    | 1        | High        | Yes                | —      |
+| src/host → src/adapters/pi                 | Contract | src          | 2    | 2        | High        | Yes                | —      |
+| src/host → src/adapters/codex              | Contract | src          | 2    | 2        | High        | Yes                | —      |
+| src/host → src/adapters/claude-code        | Contract | src          | 2    | 2        | High        | Yes                | —      |
+| src/host → src/import                      | Contract | src          | 1    | 1        | Moderate    | Yes                | —      |
+| src/host → src/platform/config             | Contract | src          | 2    | 2        | Low         | Yes                | —      |
+| src/host → src/platform/repo               | Contract | src          | 2    | 2        | Low         | Yes                | —      |
+| src/host → src/platform/tokens             | Contract | src          | 2    | 2        | Low         | Yes                | —      |
+| src/host → src/platform/store              | Contract | src          | 2    | 2        | Low         | Yes                | —      |
+| src/host → src/session                     | Model    | src          | 1    | 1        | High (core) | Yes                | —      |
+| src/host → src/host/cli                    | Contract | src/host     | 1    | 1        | Moderate    | Yes                | —      |
+| src/host → src/host/pi-extension           | Contract | src/host     | 1    | 1        | Moderate    | Yes                | —      |
+| src/host/cli → src/import                  | Contract | src          | 2    | 2        | Moderate    | Yes                | —      |
+| src/host/cli → src/session                 | Model    | src          | 2    | 2        | High (core) | Yes (at threshold) | —      |
+| src/host/pi-extension → src/import         | Contract | src          | 2    | 2        | Moderate    | Yes                | —      |
+| src/host/pi-extension → src/session        | Model    | src          | 2    | 2        | High (core) | Yes (at threshold) | —      |
+| src/host/pi-extension → src/adapters/pi    | Contract | src          | 2    | 2        | High        | Yes                | —      |
 
 Each edge appears once, in the direction of the dependency: a parent-and-submodule pair is listed as
 `child → parent` where the child implements the parent's contract, and as `parent → child` where the
@@ -331,7 +335,7 @@ neutral model, owned by `src/session/`. Sharing a domain model is **model coupli
 balanced distance is 2. Every module holding canonical types therefore sits at rank 2 or less from
 `src/session/`, which caps the tree at depth 2.
 
-*Trade-off:* `src/import/transfer/` carries FR-22 to FR-35 and FR-54 in a single module. Splitting it
+_Trade-off:_ `src/import/transfer/` carries FR-22 to FR-35 and FR-54 in a single module. Splitting it
 into `transfer/content/` and `transfer/budget/` would put both at depth 3, giving distance 3 against
 a model-coupled, high-volatility counterpart — a Critical imbalance. The module stays whole. It is
 one coherent decision (what crosses over, and how much), and the pinning rules of FR-32 cannot be
@@ -344,7 +348,7 @@ result body") holds because there is nowhere to put one. The same reasoning give
 path: they return files, and `src/import/landing/` commits them through `src/platform/store/`, so
 FR-49 (add only) and FR-53 (all or nothing) are enforced once for every present and future agent.
 
-*Trade-off:* an adapter that genuinely needed to write a lock file or a sidecar index would have to
+_Trade-off:_ an adapter that genuinely needed to write a lock file or a sidecar index would have to
 route it through the same committer, or the port would have to grow. That is the intended cost.
 
 **Decision 3 — the agent list lives in the host, not in `adapters/`.**
@@ -353,7 +357,7 @@ graph would cycle: list → pi → import → adapter port. Putting the list in 
 the cycle. FR-57 still reads literally: one new folder under `src/adapters/`, one line in
 `src/host/`.
 
-*Trade-off:* "one new adapter file" is one new *folder* with a `module.md`, not one loose file.
+_Trade-off:_ "one new adapter file" is one new _folder_ with a `module.md`, not one loose file.
 
 **Decision 4 — hosts are separated from adapters.**
 Reading and writing an agent's session files is data work; hosting `/resume-from` inside that agent
@@ -462,9 +466,10 @@ important: these are the tests that fail when the architecture erodes.
   real parent and the real submodules.
 
 **T-ROO-5 — every restatement matches its normative home**
-- Scenario: the fractal-design validator runs in tree mode over `src/`.
-- Expected behavior: exit code 0. Every restated contract block is verbatim or a declared subset of
-  the block it cites, and every restated block carries a marker.
+- Scenario: the project-owned TypeScript validator reads every contract marker in the design tree.
+- Expected behavior: every marker immediately precedes its code fence, resolves its owner, and names
+  declarations that are verbatim or a declared subset of the declarations it cites. Failures name
+  the document, line and declaration without relying on a personal plugin, Python, or a subprocess.
 
 **T-ROO-6 — the coupling assessment is still true**
 - Scenario: for every integration documented in any `module.md`, the lowest common ancestor, the rank
@@ -551,8 +556,9 @@ important: these are the tests that fail when the architecture erodes.
 - Scenario: every host, every direction, cancelled at every cancellation point.
 - Expected behavior: no new session exists in any target home, in any case (FR-16, FR-20).
 
-**T-ROO-22 — a platform service can be replaced without touching a consumer** *(moved from
-`src/platform/`, was the end-to-end half of T-PLA-9)*
+**T-ROO-22 — a platform service can be replaced without touching a consumer** _(moved from
+`src/platform/`, was the end-to-end half of T-PLA-9)_
+
 - Scenario: parameterized over the four services of `src/platform/`. Each is replaced by a stub with
   different behaviour: a fixed token count, a repository reader that reports nothing known, a
   committer that records calls instead of writing, a loader returning non-default settings.

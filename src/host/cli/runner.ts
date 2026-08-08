@@ -11,6 +11,7 @@ import type {
   ListRequest,
   TargetProfile,
 } from "./contract.js";
+import { safeLines, safeText } from "./presentation.js";
 import { renderLanding, renderListing } from "./render.js";
 
 /**
@@ -41,7 +42,7 @@ async function run(
     return { stdout: [], stderr: [parsed.problem, USAGE], exitCode: 2 };
   }
 
-  const { selection, onlyAgent, onlyHome, confirm } = parsed.args;
+  const { selection, onlyAgent, onlyHome, confirmationToken } = parsed.args;
   const target: TargetProfile = {
     // The shim states the agent. The binary never guesses it.
     agent: invocation.targetAgent,
@@ -58,7 +59,11 @@ async function run(
     };
     try {
       const listing = await pipeline.list(request);
-      return { stdout: renderListing(listing, invocation.cwd), stderr: [], exitCode: 0 };
+      return {
+        stdout: renderListing(listing, invocation.cwd),
+        stderr: [],
+        exitCode: 0,
+      };
     } catch (error) {
       return failure(
         `The listing failed: ${messageOf(error)}`,
@@ -90,15 +95,21 @@ async function run(
   const report = preview.report;
   if (report.blocked) {
     return {
-      stdout: report.lines,
-      stderr: [`The import cannot run: ${report.blockedReason ?? "the preview did not say why."}`],
+      stdout: safeLines(report.lines),
+      stderr: [
+        `The import cannot run: ${safeText(report.blockedReason ?? "the preview did not say why.")}`,
+      ],
       exitCode: 1,
     };
   }
 
-  if (!confirm) {
+  if (confirmationToken === null) {
     return {
-      stdout: [...report.lines, "", `Run "${echo(invocation.argv, "--confirm")}" to import it.`],
+      stdout: [
+        ...safeLines(report.lines),
+        "",
+        `Run ${renderCommand([...invocation.argv, "--confirm", report.confirmationToken])} to import it.`,
+      ],
       stderr: [],
       exitCode: 0,
     };
@@ -106,12 +117,12 @@ async function run(
 
   try {
     // Neither Codex nor Claude Code can move the user, so there is no runtime (C-2).
-    const result = await pipeline.commit(request, null);
+    const result = await pipeline.commit(request, null, confirmationToken);
     return { stdout: renderLanding(result), stderr: [], exitCode: 0 };
   } catch (error) {
     return failure(
       `The import failed: ${messageOf(error)}`,
-      `Run "${echo(invocation.argv.filter((arg) => arg !== "--confirm"))}" to see the preview again.`,
+      `Run ${renderCommand(withoutConfirmation(invocation.argv))} to see the preview again.`,
     );
   }
 }
@@ -120,16 +131,25 @@ function failure(what: string, nextStep: string): CliOutcome {
   return { stdout: [], stderr: [what, nextStep], exitCode: 2 };
 }
 
-function echo(argv: string[], extra?: string): string {
-  const parts = extra === undefined ? argv : [...argv, extra];
-  return ["/resume-from", ...parts].join(" ");
+function withoutConfirmation(argv: string[]): string[] {
+  const index = argv.indexOf("--confirm");
+  return index < 0 ? argv : [...argv.slice(0, index), ...argv.slice(index + 2)];
+}
+
+function renderCommand(argv: string[]): string {
+  return ["/resume-from", ...argv].map(quoteArgument).join(" ");
+}
+
+function quoteArgument(argument: string): string {
+  if (/^[A-Za-z0-9_./:=+-]+$/.test(argument)) return argument;
+  return `'${argument.replaceAll("'", `'"'"'`)}'`;
 }
 
 function messageOf(error: unknown): string {
-  if (typeof error === "string") return error;
+  if (typeof error === "string") return safeText(error);
   if (typeof error === "object" && error !== null && "message" in error) {
     const message = (error as { message: unknown }).message;
-    if (typeof message === "string") return message;
+    if (typeof message === "string") return safeText(message);
   }
-  return String(error);
+  return safeText(String(error));
 }

@@ -114,7 +114,10 @@ describe("T-PLA-7 src/platform/store/ is the only writer in the tree", () => {
   it("no runtime file imports a test helper, so the scan cannot be side-stepped", () => {
     const smuggled = runtimeSources().flatMap((source) =>
       imports(source)
-        .map((record) => ({ record, target: resolveSpecifier(source.path, record.specifier) }))
+        .map((record) => ({
+          record,
+          target: resolveSpecifier(source.path, record.specifier),
+        }))
         .filter(({ target }) => target !== undefined && isTestFile(asSourceFile(target)))
         .map(({ record }) => `${source.path}: ${record.specifier}`),
     );
@@ -163,12 +166,20 @@ describe("T-PLA-8 no service holds shared mutable state", () => {
     };
 
     const work = {
-      first: { name: "first", dir: first, family: "gpt", text: "a".repeat(400), fileCount: 3 },
-      second: { name: "second", dir: second, family: "claude", text: "hello", fileCount: 2 },
+      first: {
+        name: "first",
+        dir: first,
+        family: "gpt",
+        text: "a".repeat(400),
+      },
+      second: { name: "second", dir: second, family: "claude", text: "hello" },
     } as const;
 
     const alone = {
-      first: await runImport(services, { ...work.first, dir: await temporaryDir("alone-first") }),
+      first: await runImport(services, {
+        ...work.first,
+        dir: await temporaryDir("alone-first"),
+      }),
       second: await runImport(services, {
         ...work.second,
         dir: await temporaryDir("alone-second"),
@@ -190,8 +201,8 @@ describe("T-PLA-8 no service holds shared mutable state", () => {
     expect(b.repoRoot).toBeNull();
 
     // Isolated: each run created its own files, under its own directory, with its own bytes.
-    expect(a.handle.createdPaths).toHaveLength(3);
-    expect(b.handle.createdPaths).toHaveLength(2);
+    expect(a.handle.createdPaths).toHaveLength(1);
+    expect(b.handle.createdPaths).toHaveLength(1);
     expect(a.handle.createdPaths.every((path) => isInside(path, first))).toBe(true);
     expect(b.handle.createdPaths.every((path) => isInside(path, second))).toBe(true);
     for (const path of a.handle.createdPaths) {
@@ -204,9 +215,9 @@ describe("T-PLA-8 no service holds shared mutable state", () => {
     expect(b.extraHomes).toEqual([]);
     expect((await services.config.load()).extraHomes).toEqual([]);
 
-    // Rolling one back removes exactly its own files.
-    await a.handle.rollback();
-    for (const path of a.handle.createdPaths) expect(await exists(path)).toBe(false);
+    // The handle reports its paths but deliberately exposes no pathname deletion operation.
+    expect("rollback" in a.handle).toBe(false);
+    for (const path of a.handle.createdPaths) expect(await exists(path)).toBe(true);
     for (const path of b.handle.createdPaths) expect(await exists(path)).toBe(true);
   });
 

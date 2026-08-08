@@ -93,7 +93,7 @@ type ToolEffect = "read-only" | "mutating" | "unknown";
 interface ToolCallRecord {
   /** The original tool name. Never translated (FR-27). */
   toolName: string;
-  /** The arguments as the source recorded them. */
+  /** The source arguments after deterministic credential redaction. */
   argumentsText: string;
   /** Exactly one line about the outcome (FR-23). */
   outcomeLine: string;
@@ -256,6 +256,8 @@ interface PreviewWarning {
 ```ts
 /** Everything the user sees before confirming (FR-16 to FR-21). */
 interface PreviewReport {
+  /** Opaque binding that must be returned unchanged to commit this exact preview (FR-20). */
+  confirmationToken: string;
   /** Source, target, and the turn counts that cross and are dropped (FR-17). */
   headerLines: string[];
   /** For example "Budget: 34k tokens of a 200k window" (FR-18). */
@@ -272,9 +274,12 @@ interface PreviewReport {
   lines: string[];
 }
 
+/** Preview content before the pipeline binds it to a confirmation token. */
+type PreviewContent = Omit<PreviewReport, "confirmationToken">;
+
 /** Builds the preview from a plan and the current repository state. */
 interface PreviewBuilder {
-  build(plan: TransferPlan): Promise<PreviewReport>;
+  build(plan: TransferPlan): Promise<PreviewContent>;
 }
 ```
 

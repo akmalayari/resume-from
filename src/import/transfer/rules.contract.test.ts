@@ -98,7 +98,7 @@ describe("T-TRA-18 indexes are source indexes", () => {
       agentMessage(9, "x".repeat(100)),
     ];
 
-    const plan = rules.apply(sessionOf(turns), targetOf(700), configOf(1, 4), charEstimator);
+    const plan = rules.apply(sessionOf(turns), targetOf(728), configOf(1, 4), charEstimator);
 
     expect(droppedIndexes(plan)).toEqual([3, 4, 5]);
     expect(keptIndexes(plan)).toEqual([0, 1, 2, 6, 7, 8, 9]);

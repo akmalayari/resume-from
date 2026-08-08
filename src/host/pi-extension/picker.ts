@@ -1,4 +1,5 @@
 import type { Listing, PickResult, SessionDescriptor, SessionPicker } from "./contract.js";
+import { safeText } from "./presentation.js";
 import type { PiUi } from "./ui.js";
 
 /** The keys the picker understands (FR-9). */
@@ -18,7 +19,7 @@ const HEADER = "Select a session — up/down to move, Enter to select, Escape to
 
 /** One row of the picker: agent, home, time, title and turn count (FR-11). */
 export function formatRow(row: SessionDescriptor): string {
-  return `${row.ref.agent}  ${row.updatedAt}  ${row.title}  (${row.turnCount} turns)  ${row.ref.home}`;
+  return `${safeText(row.ref.agent)}  ${safeText(row.updatedAt)}  ${safeText(row.title)}  (${row.turnCount} turns)  ${safeText(row.ref.home)}`;
 }
 
 function render(listing: Listing, cursor: number): string[] {

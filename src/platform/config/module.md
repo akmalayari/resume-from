@@ -94,7 +94,7 @@ interface ConfigError {
 
 /** Loads configuration and fills every missing field with its default. */
 interface ConfigLoader {
-  /** Rejects with a ConfigError when a present value is invalid. A missing file is not an error. */
+  /** Rejects for invalid values or unreadable paths. A genuinely missing file is not an error. */
   load(): Promise<ImportConfig>;
 }
 ```
@@ -122,8 +122,9 @@ Changes that require **only this module** to change:
 
 ## Constraints and Invariants
 
-- **A missing configuration file is not an error.** It yields the defaults. Only a present but
-  invalid value rejects.
+- **A missing configuration file is not an error.** It yields the defaults. A present invalid file
+  or an unreadable path rejects. A path obstructed by a non-directory component is unreadable, not
+  missing, and rejects instead of silently using defaults.
 - **An empty file is a missing file.** A file that holds only whitespace sets nothing, so it yields
   the defaults. It is not a parse error — T-CFG-6 lists an empty file among the cases that must return
   every field, and T-CFG-9 is about a file that says something the loader cannot read.
@@ -197,10 +198,10 @@ Changes that require **only this module** to change:
 ### Boundary Tests
 
 **T-CFG-9 — a malformed file rejects**
-- Scenario: a file that is not parsable.
-- Expected behavior: rejects with a `ConfigError` naming the file and the parse problem. It does not
-  fall back to defaults, because a file the user wrote and that the tool ignored is worse than an
-  error.
+- Scenario: a file that is not parsable, or a configuration path obstructed by a file where a
+  directory is required.
+- Expected behavior: rejects with a `ConfigError` naming the path and the parse or read problem. It
+  does not fall back to defaults, because a configuration the tool ignored is worse than an error.
 
 **T-CFG-10 — `budgetShare` of exactly 1 is accepted**
 - Scenario: `budgetShare` set to 1.
@@ -227,6 +228,6 @@ Changes that require **only this module** to change:
 - Expected behavior: the whole test suite still passes except the assertions that name the number,
   and the budget of every import changes. Nothing outside this module is edited.
 
-*T-CFG-15 was moved to `src/import/` as T-IMP-27. It asserts that both Claude Code profiles appear in
+_T-CFG-15 was moved to `src/import/` as T-IMP-27. It asserts that both Claude Code profiles appear in
 one listing, which needs the finder and an adapter — both compose above this module. What stays here
-is that the setting is read and resolved correctly (T-CFG-3, T-CFG-4).*
+is that the setting is read and resolved correctly (T-CFG-3, T-CFG-4)._

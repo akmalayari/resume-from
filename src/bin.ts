@@ -17,9 +17,10 @@ import { runCommandBinary } from "./index.js";
 
 const TARGET_AGENT = "--target-agent";
 const TARGET_HOME = "--target-home";
+const USER_ARGUMENTS = "--";
 
 const USAGE =
-  `Usage: resume-from ${TARGET_AGENT} <agent> [${TARGET_HOME} <path>] ` +
+  `Usage: resume-from ${TARGET_AGENT} <agent> [${TARGET_HOME} <path>] ${USER_ARGUMENTS} ` +
   "[<source-agent>] [<row> | <session-id> | <file-path>] [options]";
 
 export const HELP_TEXT = `${USAGE}
@@ -33,16 +34,16 @@ Selectors:
 Options:
   --agent <name>    Filter source sessions: pi, codex, claude, or claude-code.
   --home <path>     Filter source sessions to one agent home.
-  --confirm         Import the selection after reviewing its preview.
+  --confirm <token> Import the exact selection and preview identified by the token.
   --target-agent    Target host ID; normally supplied by the installed plugin.
   --target-home     Target agent home; omit to use that agent's default.
   -h, --help        Show this help.
 
 Examples:
-  resume-from --target-agent codex
-  resume-from --target-agent codex claude 2
-  resume-from --target-agent claude-code session-id --confirm
-  resume-from --target-agent codex ~/sessions/session.jsonl`;
+  resume-from --target-agent codex --
+  resume-from --target-agent codex -- claude 2
+  resume-from --target-agent claude-code -- session-id
+  resume-from --target-agent codex -- ~/sessions/session.jsonl`;
 
 /** The invocation split in two: what the shim states, and what the user typed. */
 export interface ShimArgs {
@@ -54,37 +55,67 @@ export interface ShimArgs {
   rest: string[];
 }
 
+export type ShimArgsResult = { ok: true; value: ShimArgs } | { ok: false; problem: string };
+
 /**
  * Both forms of both flags are accepted (`--flag value` and `--flag=value`) because a shim is a
  * text file a user edits. A flag with no value is left for the caller to report rather than
  * silently swallowing the argument that follows it.
  */
-export function readShimArgs(argv: string[]): ShimArgs {
+export function readShimArgs(argv: string[]): ShimArgsResult {
   let targetAgent: string | null = null;
   let targetHome: string | null = null;
-  const rest: string[] = [];
+  const separator = argv.indexOf(USER_ARGUMENTS);
+  if (separator < 0) {
+    return {
+      ok: false,
+      problem: `${USER_ARGUMENTS} is missing after the shim-owned target flags.`,
+    };
+  }
 
-  for (let index = 0; index < argv.length; index += 1) {
-    const arg = argv[index];
+  const trusted = argv.slice(0, separator);
+  const rest = argv.slice(separator + 1);
+
+  for (let index = 0; index < trusted.length; index += 1) {
+    const arg = trusted[index];
     if (arg === undefined) continue;
 
     const named = [TARGET_AGENT, TARGET_HOME].find(
       (flag) => arg === flag || arg.startsWith(`${flag}=`),
     );
     if (named === undefined) {
-      rest.push(arg);
-      continue;
+      return {
+        ok: false,
+        problem: `Unexpected shim argument before ${USER_ARGUMENTS}: ${arg}.`,
+      };
     }
 
     const inline = arg.startsWith(`${named}=`);
-    const value = inline ? arg.slice(named.length + 1) : argv[index + 1];
-    if (value === undefined || value === "" || value.startsWith("-")) continue;
+    const value = inline ? arg.slice(named.length + 1) : trusted[index + 1];
+    if (value === undefined || value === "" || value.startsWith("-")) {
+      return { ok: false, problem: `${named} needs one non-empty value.` };
+    }
     if (!inline) index += 1;
-    if (named === TARGET_AGENT) targetAgent = value;
-    else targetHome = value;
+    if (named === TARGET_AGENT) {
+      if (targetAgent !== null) {
+        return {
+          ok: false,
+          problem: `${TARGET_AGENT} was given twice by the shim.`,
+        };
+      }
+      targetAgent = value;
+    } else {
+      if (targetHome !== null) {
+        return {
+          ok: false,
+          problem: `${TARGET_HOME} was given twice by the shim.`,
+        };
+      }
+      targetHome = value;
+    }
   }
 
-  return { targetAgent, targetHome, rest };
+  return { ok: true, value: { targetAgent, targetHome, rest } };
 }
 
 export async function main(argv: string[], cwd: string): Promise<number> {
@@ -93,7 +124,12 @@ export async function main(argv: string[], cwd: string): Promise<number> {
     return 0;
   }
 
-  const { targetAgent, targetHome, rest } = readShimArgs(argv);
+  const parsed = readShimArgs(argv);
+  if (!parsed.ok) {
+    process.stderr.write(`${parsed.problem}\n${USAGE}\nRun resume-from --help for details.\n`);
+    return 2;
+  }
+  const { targetAgent, targetHome, rest } = parsed.value;
   if (targetAgent === null) {
     process.stderr.write(
       `${TARGET_AGENT} is missing: the shim that calls this binary states which agent it is ` +

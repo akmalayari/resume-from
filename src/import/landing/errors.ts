@@ -2,7 +2,6 @@ import type { LandingError, LandingStage, ValidationDefect } from "./contract.js
 
 interface FailureDetail {
   defects?: ValidationDefect[];
-  rolledBack?: boolean;
 }
 
 /**
@@ -12,13 +11,12 @@ interface FailureDetail {
 export class LandingFailure extends Error implements LandingError {
   readonly stage: LandingStage;
   readonly defects: ValidationDefect[];
-  readonly rolledBack: boolean;
+  readonly rolledBack = false;
 
   constructor(stage: LandingStage, message: string, detail: FailureDetail = {}) {
     super(message);
     this.name = "LandingFailure";
     this.stage = stage;
     this.defects = detail.defects ?? [];
-    this.rolledBack = detail.rolledBack ?? false;
   }
 }

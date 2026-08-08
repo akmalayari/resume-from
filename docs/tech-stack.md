@@ -1,7 +1,7 @@
 # Tech stack — resume-from
 
 **Status:** normative. This file is the single home of every technology decision. The design tree
-(`src/**/module.md`) says *what* to build; this file says *what with*. Neither restates the other.
+(`src/**/module.md`) says _what_ to build; this file says _what with_. Neither restates the other.
 
 **Rule:** every implementer reads this file plus the one `module.md` of the module they are building.
 Nothing else. Any new stack decision — made while planning or while implementing — is written back
@@ -11,15 +11,15 @@ here immediately.
 
 ## Decided
 
-| Area | Choice | Why |
-| ---- | ------ | --- |
-| **Language** | TypeScript | Pi extensions are JavaScript/TypeScript, and the Claude Code and Codex shims call a Node binary. One language covers all three hosts. |
-| **Runtime** | Node.js | The tool runs inside three Node-based CLIs. |
-| **Code root** | `src/` | Root module's `module.md` sits at `src/module.md`. The design tree is the source tree. |
-| **Package manager** | pnpm | Strict about phantom dependencies, which the module-boundary tests rely on. |
-| **Test runner** | Vitest | TypeScript-native with no transpile step. `test.each` covers the many table-driven specs; temporary-directory and checksum tests need no extra tooling. |
-| **Lint + format** | Biome | One tool for both, no plugin stack. |
-| **Build** | `tsc` | Emits to `dist/`; `.gitignore` already excludes `dist/` and `*.tsbuildinfo`. |
+| Area                | Choice     | Why                                                                                                                                                     |
+| ------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Language**        | TypeScript | Pi extensions are JavaScript/TypeScript, and the Claude Code and Codex shims call a Node binary. One language covers all three hosts.                   |
+| **Runtime**         | Node.js    | The tool runs inside three Node-based CLIs.                                                                                                             |
+| **Code root**       | `src/`     | Root module's `module.md` sits at `src/module.md`. The design tree is the source tree.                                                                  |
+| **Package manager** | pnpm       | Strict about phantom dependencies, which the module-boundary tests rely on.                                                                             |
+| **Test runner**     | Vitest     | TypeScript-native with no transpile step. `test.each` covers the many table-driven specs; temporary-directory and checksum tests need no extra tooling. |
+| **Lint + format**   | Biome      | One tool for both, no plugin stack.                                                                                                                     |
+| **Build**           | `tsc`      | Emits to `dist/`; `.gitignore` already excludes `dist/` and `*.tsbuildinfo`.                                                                            |
 
 ## Delivery shape
 
@@ -65,7 +65,10 @@ invent an alternative.
 
 ```ts
 // in src/import/transfer/rules.ts
-import type { CanonicalSession, TargetProfile } from "../../session/contract.js";
+import type {
+  CanonicalSession,
+  TargetProfile,
+} from "../../session/contract.js";
 import type { TokenEstimator } from "../../platform/tokens/contract.js";
 ```
 
@@ -79,7 +82,7 @@ A module's own files import each other with plain relative paths and no restrict
 folder there is no boundary.
 
 **Factories, and who may import one.** A contract declares types, not constructors, so a module that
-must *build* a collaborator needs more than `contract.js`. Exactly two cases may import another
+must _build_ a collaborator needs more than `contract.js`. Exactly two cases may import another
 module's `index.js`:
 
 1. **A parent importing its own submodules.** That is the parent's Internal Design — `src/import/`
@@ -102,11 +105,11 @@ A module with **no** behaviour has no `index.ts`, because there is nothing to co
 
 So the complete rule for a cross-module import specifier:
 
-| Ends in | Who may write it |
-| ------- | ---------------- |
-| `/contract.js` | any module |
-| `/index.js` | a parent importing its own submodule; `src/host/` importing an adapter or a platform service |
-| anything else | nobody — it reaches into another module's internals |
+| Ends in        | Who may write it                                                                             |
+| -------------- | -------------------------------------------------------------------------------------------- |
+| `/contract.js` | any module                                                                                   |
+| `/index.js`    | a parent importing its own submodule; `src/host/` importing an adapter or a platform service |
+| anything else  | nobody — it reaches into another module's internals                                          |
 
 This is what the boundary tests assert. A test that forbids every non-`contract.js` import would make
 the composition root unimplementable, which is not what the design says.
@@ -128,7 +131,9 @@ throwaway home. Write it in full, then gate it so it does not run by default:
 
 ```ts
 const live = process.env.RESUME_FROM_LIVE === "1";
-describe.skipIf(!live)("live: Pi resume", () => { /* ... */ });
+describe.skipIf(!live)("live: Pi resume", () => {
+  /* ... */
+});
 ```
 
 Gated is not skipped: the test exists, is type-checked, and runs under
@@ -176,8 +181,8 @@ failing test cannot be. Biome's own rules may be added as a second, redundant gu
 
 ## Runtime dependencies
 
-| Package | Needed by | Why |
-| ------- | --------- | --- |
+| Package         | Needed by              | Why                                                                                                                                           |
+| --------------- | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
 | `gpt-tokenizer` | `src/platform/tokens/` | Pure JavaScript, no native binary and no wasm, so the tool stays loadable inside three other CLIs. Covers the `gpt` estimator family exactly. |
 
 That is the whole runtime dependency list. Adding to it is a decision recorded here first, with the
@@ -185,12 +190,12 @@ module that needs it and why.
 
 ## Closed — decisions made during build preflight
 
-- **Node version floor: 22.** Set in `package.json` `engines`. The tool runs inside three other Node
+- **Node version floor: 24.** Set in `package.json` `engines`. The tool runs inside three other Node
   CLIs, so the floor is deliberately conservative.
 - **Tokenizer for `src/platform/tokens/`:** `gpt-tokenizer` for the `gpt` family. There is no
   official JavaScript tokenizer for the Claude family, so `claude` and `generic` use a documented
   character-ratio heuristic, and the module states its margin. This is sound because FR-29 budgets a
-  *share* of the window rather than all of it — the margin is what the share pays for. The estimator
+  _share_ of the window rather than all of it — the margin is what the share pays for. The estimator
   is behind an interface, so replacing either half is local (T-IMP-26).
 - **Git access for `src/platform/repo/`:** spawn the `git` binary with `node:child_process`, always
   passing an **argument array, never a shell string**. No dependency, and it is what makes T-REP-11

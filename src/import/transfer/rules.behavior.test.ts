@@ -83,7 +83,9 @@ describe("T-TRA-30 the same rules for all nine directions", () => {
       summaryTurn(3, "We rewrote the redirect."),
       agentMessage(4, "The redirect now keeps the query string."),
     ];
-    return sessionOf(turns, provenanceOf(sourceAgent));
+    const provenance = provenanceOf(sourceAgent);
+    provenance.repo.changedPaths = ["src/auth.ts"];
+    return sessionOf(turns, provenance);
   }
 
   test("nine combinations give nine identical plans apart from target and provenance", () => {
@@ -125,7 +127,14 @@ describe("T-TRA-31 the thread survives the budget", () => {
       }
     }
 
-    const plan = rules.apply(sessionOf(turns), targetOf(100_000), configOf(0.2, 5), charEstimator);
+    const provenance = provenanceOf();
+    provenance.repo.changedPaths = ["src/auth.ts", "src/session.ts"];
+    const plan = rules.apply(
+      sessionOf(turns, provenance),
+      targetOf(100_000),
+      configOf(0.2, 5),
+      charEstimator,
+    );
 
     const kept = keptIndexes(plan);
     expect(plan.blockedReason).toBeNull();
@@ -159,7 +168,11 @@ describe("T-TRA-32 a same-agent move still drops bodies", () => {
 
     const plan = rules.apply(
       session,
-      { agent: "claude-code", home: "/homes/claude-code-team", windowTokens: 200_000 },
+      {
+        agent: "claude-code",
+        home: "/homes/claude-code-team",
+        windowTokens: 200_000,
+      },
       configOf(0.3, 5),
       charEstimator,
     );

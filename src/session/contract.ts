@@ -52,7 +52,7 @@ export type ToolEffect = "read-only" | "mutating" | "unknown";
 export interface ToolCallRecord {
   /** The original tool name. Never translated (FR-27). */
   toolName: string;
-  /** The arguments as the source recorded them. */
+  /** The source arguments after deterministic credential redaction. */
   argumentsText: string;
   /** Exactly one line about the outcome (FR-23). */
   outcomeLine: string;

@@ -2,8 +2,8 @@
 
 The project uses one source illustration and one rendered package image.
 
-| Asset | Purpose | Format |
-| --- | --- | --- |
+| Asset                         | Purpose                                             | Format          |
+| ----------------------------- | --------------------------------------------------- | --------------- |
 | `assets/resume-from-card.svg` | README front-page illustration and editable source. | 1600 × 1000 SVG |
 | `assets/resume-from-card.png` | Pi package gallery image and social-preview source. | 1600 × 1000 PNG |
 
@@ -23,15 +23,15 @@ The use-case chips name the primary reasons for a transfer: another model, harne
 
 ### Color roles
 
-| Role | Main color | Meaning |
-| --- | --- | --- |
-| Background | `#080D19` to `#10182B` | Neutral terminal surface. |
-| Cyan | `#38BDF8` | Source session and input flow. |
-| Violet | `#A78BFA` | Format conversion and safety boundary. |
-| Amber | `#FBBF24` | New target-native session. |
-| Green | `#34D399` | Source-preservation guarantee. |
-| Primary text | `#F8FAFC` | High-contrast headings. |
-| Secondary text | `#94A3B8` | Supporting descriptions. |
+| Role           | Main color             | Meaning                                |
+| -------------- | ---------------------- | -------------------------------------- |
+| Background     | `#080D19` to `#10182B` | Neutral terminal surface.              |
+| Cyan           | `#38BDF8`              | Source session and input flow.         |
+| Violet         | `#A78BFA`              | Format conversion and safety boundary. |
+| Amber          | `#FBBF24`              | New target-native session.             |
+| Green          | `#34D399`              | Source-preservation guarantee.         |
+| Primary text   | `#F8FAFC`              | High-contrast headings.                |
+| Secondary text | `#94A3B8`              | Supporting descriptions.               |
 
 The colors identify roles, not vendors. The illustration contains no vendor logos or copied interface elements.
 
@@ -81,10 +81,10 @@ Expected dimensions are `1600x1000`.
 The `pi.image` field in `package.json` points to the PNG:
 
 ```text
-https://raw.githubusercontent.com/alexei-led/resume-from/implement-resume-from/assets/resume-from-card.png
+https://raw.githubusercontent.com/alexei-led/resume-from/fa0bfa778b52c64accc53155f12f3b895476ea08/assets/resume-from-card.png
 ```
 
-Open that URL after the release commit reaches `implement-resume-from` and verify that it returns the updated PNG. If the release branch changes, update `pi.image` before publishing.
+The URL is pinned to a commit so the published package image remains stable. Update `pi.image` when the asset changes.
 
 ## GitHub social preview
 

@@ -116,7 +116,7 @@ type ToolEffect = "read-only" | "mutating" | "unknown";
 interface ToolCallRecord {
   /** The original tool name. Never translated (FR-27). */
   toolName: string;
-  /** The arguments as the source recorded them. */
+  /** The source arguments after deterministic credential redaction. */
   argumentsText: string;
   /** Exactly one line about the outcome (FR-23). */
   outcomeLine: string;
@@ -300,7 +300,11 @@ interface AgentAdapter {
   readBack(home: HomePath, sessionId: SessionId): Promise<StoredSessionFacts>;
 
   /** Target role, only when capabilities().landing is "create-and-switch" (FR-43, FR-44). */
-  switchTo(home: HomePath, sessionId: SessionId, runtime: AgentRuntime): Promise<SwitchOutcome>;
+  switchTo(
+    home: HomePath,
+    sessionId: SessionId,
+    runtime: AgentRuntime,
+  ): Promise<SwitchOutcome>;
 }
 ```
 
@@ -350,11 +354,11 @@ and exactly one as the target, and the two may be the same adapter with differen
 cells of the scope table, FR-4). Nothing in this folder chooses between them: `src/host/` holds the
 list and picks.
 
-| Submodule | Roles | Selection | Landing | Provenance | The fact that shapes it |
-| --------- | ----- | --------- | ------- | ---------- | ----------------------- |
-| `pi/` | source, target | interactive-picker | create-and-switch | out-of-context-entry | `ctx.switchSession` works from a command handler (C-10); a missing `usage` object crashes Pi (C-11) |
-| `codex/` | source, target | numbered-list | create-only | out-of-context-entry | the picker and the transcript are built from `event_msg` entries; injected items are invisible (C-7, C-8) |
-| `claude-code/` | source, target | numbered-list | create-only | out-of-context-entry | two entry types are enough, `user` and `assistant`; the store has ten and eight were unnecessary (C-3, C-9) |
+| Submodule      | Roles          | Selection          | Landing           | Provenance           | The fact that shapes it                                                                                     |
+| -------------- | -------------- | ------------------ | ----------------- | -------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `pi/`          | source, target | interactive-picker | create-and-switch | out-of-context-entry | `ctx.switchSession` works from a command handler (C-10); a missing `usage` object crashes Pi (C-11)         |
+| `codex/`       | source, target | numbered-list      | create-only       | out-of-context-entry | the picker and the transcript are built from `event_msg` entries; injected items are invisible (C-7, C-8)   |
+| `claude-code/` | source, target | numbered-list      | create-only       | out-of-context-entry | two entry types are enough, `user` and `assistant`; the store has ten and eight were unnecessary (C-3, C-9) |
 
 ### The order the port is called in
 
@@ -570,7 +574,7 @@ These run against every adapter in the list.
   a message naming the file, whether the listing flags the row as unreadable or leaves it out. The
   unknown entry type is not fatal: the session still lists and still loads, the strange entry
   produces no turn, and nothing it holds reaches the canonical session.
-- ⚠️ *Corrected while implementing this module.* The original text expected an unknown entry type to
+- ⚠️ _Corrected while implementing this module._ The original text expected an unknown entry type to
   be reported as unreadable as well. Every submodule's own document says the opposite and its tests
   assert it — T-PI-14, T-COD-14 and T-CC-15 all skip an entry type they do not know and count the
   skip so the preview can warn. Guessing is what this test forbids; skipping a strange entry and

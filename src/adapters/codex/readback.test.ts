@@ -1,5 +1,5 @@
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { REFERENCE_SESSION } from "../../../test/fixtures/reference-session.js";
 import type { ProvenanceMarker, SerializedSession, TargetProfile } from "./contract.js";
@@ -108,6 +108,75 @@ describe("T-COD-8 a missing thread reports rather than throws", () => {
     commit(serialized, (text) => text.slice(0, text.length - 30));
     const facts = await adapter.readBack(home, serialized.sessionId);
     expect(facts.openable).toBe(false);
+  });
+
+  it("matches the exact filename session id rather than a substring", async () => {
+    const home = tempHome();
+    const serialized = adapter.serialize(REFERENCE_SESSION, target(home), marker());
+    commit(serialized);
+
+    const partialId = serialized.sessionId.slice(0, 12);
+    expect(await adapter.readBack(home, partialId)).toEqual({
+      sessionId: partialId,
+      itemCount: 0,
+      openable: false,
+    });
+  });
+
+  it("rejects stored metadata whose identity differs from the filename", async () => {
+    const home = tempHome();
+    const serialized = adapter.serialize(REFERENCE_SESSION, target(home), marker());
+    commit(serialized, (text) =>
+      text.replaceAll(serialized.sessionId, "00000000-0000-4000-8000-000000000000"),
+    );
+
+    const facts = await adapter.readBack(home, serialized.sessionId);
+    expect(facts.openable).toBe(false);
+  });
+
+  it("rejects a stored rollout with an empty user preview", async () => {
+    const home = tempHome();
+    const serialized = adapter.serialize(REFERENCE_SESSION, target(home), marker());
+    commit(serialized, (text) => {
+      const lines = text.split("\n");
+      return lines
+        .map((line) => {
+          if (!line.includes('"user_message"')) return line;
+          const entry = JSON.parse(line) as { payload: { message: string } };
+          entry.payload.message = "   ";
+          return JSON.stringify(entry);
+        })
+        .join("\n");
+    });
+
+    const facts = await adapter.readBack(home, serialized.sessionId);
+    expect(facts.openable).toBe(false);
+  });
+
+  it("does not follow a symlinked sessions subtree", async () => {
+    const home = tempHome();
+    const outside = tempHome();
+    const serialized = adapter.serialize(REFERENCE_SESSION, target(outside), marker());
+    commit(serialized);
+    symlinkSync(join(outside, "sessions"), join(home, "sessions", "linked"));
+
+    const facts = await adapter.readBack(home, serialized.sessionId);
+    expect(facts).toEqual({
+      sessionId: serialized.sessionId,
+      itemCount: 0,
+      openable: false,
+    });
+  });
+
+  it("propagates a malformed sessions-root error", async () => {
+    const home = tempHome();
+    const root = join(home, "sessions");
+    rmSync(root, { recursive: true, force: true });
+    writeFileSync(root, "not a directory");
+
+    await expect(adapter.readBack(home, "00000000-0000-4000-8000-000000000000")).rejects.toThrow(
+      /not a directory/,
+    );
   });
 });
 

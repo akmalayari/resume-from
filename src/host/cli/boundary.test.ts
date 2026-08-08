@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { AgentId } from "./contract.js";
 import { createCliRunner } from "./index.js";
 import {
+  CONFIRMATION_TOKEN,
   descriptor,
   homeFailure,
   invocation,
@@ -20,7 +21,10 @@ const MODULE_DIR = fileURLToPath(new URL(".", import.meta.url));
 function moduleFiles(): { name: string; source: string }[] {
   return readdirSync(MODULE_DIR)
     .filter((name) => name.endsWith(".ts"))
-    .map((name) => ({ name, source: readFileSync(join(MODULE_DIR, name), "utf8") }));
+    .map((name) => ({
+      name,
+      source: readFileSync(join(MODULE_DIR, name), "utf8"),
+    }));
 }
 
 function importSpecifiers(source: string): string[] {
@@ -43,7 +47,9 @@ describe("T-CLI-13 nothing is written without the confirmation flag", () => {
   ];
 
   it.each(cases)("$name never commits", async ({ argv }) => {
-    const { pipeline, calls } = stubPipeline({ listing: listing({ rows: [descriptor()] }) });
+    const { pipeline, calls } = stubPipeline({
+      listing: listing({ rows: [descriptor()] }),
+    });
 
     await createCliRunner().run(invocation({ argv }), pipeline);
 
@@ -54,10 +60,16 @@ describe("T-CLI-13 nothing is written without the confirmation flag", () => {
 describe("T-CLI-14 a blocked preview cannot be confirmed", () => {
   it("exits 1 and commits nothing", async () => {
     const { pipeline, calls } = stubPipeline({
-      report: report({ blocked: true, blockedReason: "The target home is missing" }),
+      report: report({
+        blocked: true,
+        blockedReason: "The target home is missing",
+      }),
     });
 
-    const outcome = await createCliRunner().run(invocation({ argv: ["2", "--confirm"] }), pipeline);
+    const outcome = await createCliRunner().run(
+      invocation({ argv: ["2", "--confirm", CONFIRMATION_TOKEN] }),
+      pipeline,
+    );
 
     expect(calls.order).toEqual(["preview"]);
     expect(calls.commit).toHaveLength(0);
@@ -72,7 +84,11 @@ describe("T-CLI-15 malformed arguments fail with a usage message", () => {
     { name: "a fractional row", argv: ["3.5"], names: "whole number" },
     { name: "--home with no value", argv: ["--home"], names: "--home" },
     { name: "an unknown flag", argv: ["--verbose"], names: "--verbose" },
-    { name: "an unknown agent name", argv: ["--agent", "emacs"], names: "emacs" },
+    {
+      name: "an unknown agent name",
+      argv: ["--agent", "emacs"],
+      names: "emacs",
+    },
   ];
 
   it.each(cases)("$name exits 2 with a message naming the problem", async ({ argv, names }) => {
@@ -92,8 +108,16 @@ describe("T-CLI-16 skipped homes are printed", () => {
   it("prints both rows and all three failures", async () => {
     const rows = [descriptor({ title: "First" }), descriptor({ title: "Second" })];
     const failures = [
-      homeFailure({ home: "/Users/me/.pi", agent: "pi", message: "permission denied" }),
-      homeFailure({ home: "/Users/me/.codex", agent: "codex", message: "not a directory" }),
+      homeFailure({
+        home: "/Users/me/.pi",
+        agent: "pi",
+        message: "permission denied",
+      }),
+      homeFailure({
+        home: "/Users/me/.codex",
+        agent: "codex",
+        message: "not a directory",
+      }),
       homeFailure({
         home: "/Users/me/.claude-team",
         agent: "claude-code",
@@ -116,7 +140,9 @@ describe("T-CLI-16 skipped homes are printed", () => {
 
 describe("T-CLI-17 an empty listing says so", () => {
   it("exits 0 and names the repository", async () => {
-    const { pipeline } = stubPipeline({ listing: listing({ rows: [], failures: [] }) });
+    const { pipeline } = stubPipeline({
+      listing: listing({ rows: [], failures: [] }),
+    });
 
     const outcome = await createCliRunner().run(invocation(), pipeline);
 
@@ -155,9 +181,9 @@ describe("T-CLI-18 the target agent is never guessed", () => {
 
 describe("T-CLI-19 the runtime handle is always null", () => {
   const cases: string[][] = [
-    ["1", "--confirm"],
-    ["9f8e7d6c-4b2a", "--confirm"],
-    ["/Users/me/.codex/sessions/x.jsonl", "--confirm"],
+    ["1", "--confirm", CONFIRMATION_TOKEN],
+    ["9f8e7d6c-4b2a", "--confirm", CONFIRMATION_TOKEN],
+    ["/Users/me/.codex/sessions/x.jsonl", "--confirm", CONFIRMATION_TOKEN],
   ];
 
   it.each(cases)("commits %s with a null runtime", async (...argv) => {
@@ -175,6 +201,7 @@ describe("T-CLI-20 no rule lives here", () => {
     for (const file of moduleFiles()) {
       for (const specifier of importSpecifiers(file.source)) {
         if (!specifier.includes("../")) continue;
+        if (specifier === "../presentation.js") continue;
         expect(specifier, `${file.name} imports ${specifier}`).toMatch(/\/contract\.js$/);
       }
     }

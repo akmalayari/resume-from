@@ -1,3 +1,4 @@
+import { writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -25,6 +26,19 @@ describe("T-CFG-9 — a malformed file rejects", () => {
     expect(error.field).toBe(temp.path);
     expect(error.message).toContain(temp.path);
     expect(error.message.length).toBeGreaterThan(temp.path.length);
+  });
+
+  it("rejects when a path component is a file instead of a directory", async () => {
+    const temp = await emptyConfigDir();
+    const obstruction = resolve(temp.dir, "not-a-directory");
+    const configPath = resolve(obstruction, "config.json");
+    await writeFile(obstruction, "occupied", "utf8");
+
+    const error = await captureConfigError(createConfigLoader({ configPath }).load());
+
+    expect(error.field).toBe(configPath);
+    expect(error.message).toContain("cannot be read");
+    expect(error.message).toContain("not a directory");
   });
 });
 

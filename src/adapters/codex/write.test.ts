@@ -10,6 +10,7 @@ import {
   CODEX_EVENT_AGENT_MESSAGE,
   CODEX_EVENT_USER_MESSAGE,
   parseRolloutText,
+  stringifyRollout,
 } from "./rollout.js";
 
 const adapter = codexAdapterFactory.create();
@@ -38,7 +39,11 @@ function entriesOf(bytes: Buffer): RolloutEntry[] {
   return parsed.entries;
 }
 
-function serializeReference(): { entries: RolloutEntry[]; itemCount: number; sessionId: string } {
+function serializeReference(): {
+  entries: RolloutEntry[];
+  itemCount: number;
+  sessionId: string;
+} {
   const serialized = adapter.serialize(REFERENCE_SESSION, TARGET, MARKER);
   expect(serialized.files).toHaveLength(1);
   const file = serialized.files[0];
@@ -183,7 +188,10 @@ describe("validate", () => {
 
   it("reports a rollout whose preview would be empty (C-7)", () => {
     const serialized = adapter.serialize(
-      { ...REFERENCE_SESSION, turns: REFERENCE_SESSION.turns.filter((t) => t.role !== "user") },
+      {
+        ...REFERENCE_SESSION,
+        turns: REFERENCE_SESSION.turns.filter((t) => t.role !== "user"),
+      },
       TARGET,
       MARKER,
     );
@@ -194,7 +202,10 @@ describe("validate", () => {
 
   it("reports a mismatch between itemCount and the entries written (FR-52)", () => {
     const serialized = adapter.serialize(REFERENCE_SESSION, TARGET, MARKER);
-    const defects = adapter.validate({ ...serialized, itemCount: serialized.itemCount + 1 });
+    const defects = adapter.validate({
+      ...serialized,
+      itemCount: serialized.itemCount + 1,
+    });
     expect(defects.map((defect) => defect.path)).toContain("itemCount");
   });
 
@@ -210,8 +221,46 @@ describe("validate", () => {
       .join("");
     const defects = adapter.validate({
       ...serialized,
-      files: [{ absolutePath: file.absolutePath, bytes: Buffer.from(withoutMeta, "utf8") }],
+      files: [
+        {
+          absolutePath: file.absolutePath,
+          bytes: Buffer.from(withoutMeta, "utf8"),
+        },
+      ],
     });
     expect(defects.map((defect) => defect.message).join(" ")).toMatch(/session metadata/i);
+  });
+
+  it("reports a mismatch in either metadata id field", () => {
+    const serialized = adapter.serialize(REFERENCE_SESSION, TARGET, MARKER);
+    const file = serialized.files[0];
+    if (file === undefined) throw new Error("no file");
+    const entries = entriesOf(file.bytes);
+    const meta = entries[0];
+    if (meta === undefined) throw new Error("no metadata");
+    meta.payload.session_id = "00000000-0000-4000-8000-000000000000";
+
+    const defects = adapter.validate({
+      ...serialized,
+      files: [{ ...file, bytes: Buffer.from(stringifyRollout(entries), "utf8") }],
+    });
+    expect(defects.map((defect) => defect.message).join(" ")).toMatch(/different session/i);
+  });
+
+  it("reports a rollout filename that names another session", () => {
+    const serialized = adapter.serialize(REFERENCE_SESSION, TARGET, MARKER);
+    const file = serialized.files[0];
+    if (file === undefined) throw new Error("no file");
+    const wrongId = "00000000-0000-4000-8000-000000000000";
+    const defects = adapter.validate({
+      ...serialized,
+      files: [
+        {
+          ...file,
+          absolutePath: file.absolutePath.replace(serialized.sessionId, wrongId),
+        },
+      ],
+    });
+    expect(defects.map((defect) => defect.message).join(" ")).toMatch(/filename.*different/i);
   });
 });

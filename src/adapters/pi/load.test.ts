@@ -15,7 +15,7 @@ import {
   writeFixtureSession,
 } from "./fixtures.js";
 import { UNREADABLE_TITLE_PREFIX } from "./format.js";
-import { entriesToTurns } from "./parse.js";
+import { changedPathsFromEntries, entriesToTurns } from "./parse.js";
 
 const homes: string[] = [];
 
@@ -56,9 +56,9 @@ describe("T-PI-2 — a session file becomes canonical turns", () => {
 
     expect(session.turns.map((turn) => turn.index)).toEqual([0, 1, 2, 3, 4]);
     expect(session.turns.map((turn) => [turn.role, turn.kind])).toEqual([
+      ["agent", "summary"],
       ["user", "message"],
       ["agent", "message"],
-      ["agent", "summary"],
       ["agent", "tool-call"],
       ["agent", "tool-call"],
     ]);
@@ -66,7 +66,8 @@ describe("T-PI-2 — a session file becomes canonical turns", () => {
     expect(session.turns[3]?.toolCall?.effect).toBe("read-only");
     expect(session.turns[4]?.toolCall?.toolName).toBe("write");
     expect(session.turns[4]?.toolCall?.effect).toBe("mutating");
-    expect(session.turns[0]?.text).toBe("make the auth token refresh work");
+    expect(session.turns[0]?.text).toContain("refresh call never wrote");
+    expect(session.turns[1]?.text).toBe("make the auth token refresh work");
     expect(session.turns[3]?.text).toBe("");
   });
 
@@ -79,7 +80,11 @@ describe("T-PI-2 — a session file becomes canonical turns", () => {
     if (!descriptor) throw new Error("no descriptor listed");
     const session = await adapter.loadSession(descriptor);
 
-    expect(session.provenance.ref).toEqual({ agent: "pi", home, id: written.sessionId });
+    expect(session.provenance.ref).toEqual({
+      agent: "pi",
+      home,
+      id: written.sessionId,
+    });
     expect(session.provenance.title).toBe("make the auth token refresh work");
     expect(descriptor.repoPath).toBe(CWD);
     expect(descriptor.filePath).toBe(written.filePath);
@@ -154,6 +159,120 @@ describe("T-PI-3 — tool results become one outcome line", () => {
       expect(serialized).not.toContain(line);
     }
   });
+
+  it("redacts tool credentials without losing a normal token-related path", () => {
+    const apiKey = "sk-12345678901234567890";
+    const password = "database-password";
+    const uriPassword = "uri-supersecret";
+    const userPassword = "curl-supersecret";
+    const built = piSessionText([
+      piToolCallDraft("call-secret", "write", {
+        path: "src/token-refresh.ts",
+        api_key: apiKey,
+        command:
+          `DATABASE_PASSWORD=${password} curl -u alice:${userPassword} ` +
+          `https://alice:${uriPassword}@example.com/api`,
+      }),
+    ]);
+    const loaded = entriesToTurns(built.entries);
+    const canonical = JSON.stringify(loaded.turns);
+
+    expect(changedPathsFromEntries(built.entries)).toEqual(["src/token-refresh.ts"]);
+    expect(canonical).not.toContain(apiKey);
+    expect(canonical).not.toContain(password);
+    expect(canonical).not.toContain(uriPassword);
+    expect(canonical).not.toContain(userPassword);
+    expect(canonical).toContain("[REDACTED]");
+  });
+
+  it("marks a non-text result as dropped", () => {
+    const built = piSessionText([
+      piToolCallDraft("call-image", "read", { path: "diagram.png" }),
+      piToolResultDraft("call-image", "read", ""),
+    ]);
+    const result = built.entries[1]?.message as Record<string, unknown>;
+    result.content = [{ type: "image", data: "base64-data", mimeType: "image/png" }];
+
+    const record = entriesToTurns(built.entries).turns[0]?.toolCall;
+    expect(record?.bodyDropped).toBe(true);
+    expect(record?.outcomeLine).toContain("result recorded");
+    expect(record?.outcomeLine).toContain("content dropped");
+    expect(JSON.stringify(record)).not.toContain("base64-data");
+  });
+});
+
+describe("Pi active branch and compaction projection", () => {
+  it("keeps only the last leaf's parent chain", () => {
+    const built = piSessionText([
+      piUserDraft("shared request"),
+      piAssistantTextDraft("abandoned answer"),
+      piAssistantTextDraft("active answer"),
+    ]);
+    const root = built.entries[0];
+    const active = built.entries[2];
+    if (!root || !active) throw new Error("fixture is incomplete");
+    active.parentId = root.id;
+
+    const loaded = entriesToTurns(built.entries);
+    expect(loaded.unreadable).toBeNull();
+    expect(loaded.turns.map((turn) => turn.text)).toEqual(["shared request", "active answer"]);
+    expect(JSON.stringify(loaded)).not.toContain("abandoned answer");
+  });
+
+  it("uses the latest compaction and its first kept entry", () => {
+    const built = piSessionText([
+      piUserDraft("old request"),
+      piCompactionDraft("older summary"),
+      piUserDraft("kept request"),
+      piCompactionDraft("latest summary"),
+      piAssistantTextDraft("new answer"),
+    ]);
+    const kept = built.entries[2];
+    const latest = built.entries[3];
+    if (!kept || !latest) throw new Error("fixture is incomplete");
+    latest.firstKeptEntryId = kept.id;
+
+    const loaded = entriesToTurns(built.entries);
+    expect(loaded.turns.map((turn) => turn.text)).toEqual([
+      "latest summary",
+      "kept request",
+      "new answer",
+    ]);
+    expect(JSON.stringify(loaded)).not.toContain("older summary");
+    expect(JSON.stringify(loaded)).not.toContain("old request");
+  });
+
+  it("prefers a materialized retained tail", () => {
+    const retained = piSessionText([
+      piUserDraft("retained request"),
+      piAssistantTextDraft("retained answer"),
+    ]).entries.map((entry) => entry.message as never);
+    const built = piSessionText([
+      piUserDraft("summarized request"),
+      piCompactionDraft("current summary", { retainedTail: retained }),
+      piUserDraft("post-compaction request"),
+    ]);
+
+    const loaded = entriesToTurns(built.entries);
+    expect(loaded.turns.map((turn) => turn.text)).toEqual([
+      "current summary",
+      "retained request",
+      "retained answer",
+      "post-compaction request",
+    ]);
+    expect(JSON.stringify(loaded)).not.toContain("summarized request");
+  });
+
+  it("reports a cycle instead of flattening it", () => {
+    const built = piSessionText([piUserDraft("root"), piAssistantTextDraft("loop")]);
+    const leaf = built.entries[1];
+    if (!leaf) throw new Error("fixture is incomplete");
+    leaf.parentId = leaf.id;
+
+    const loaded = entriesToTurns(built.entries);
+    expect(loaded.turns).toEqual([]);
+    expect(loaded.unreadable).toMatch(/cycle/);
+  });
 });
 
 describe("T-PI-13 — a truncated session file", () => {
@@ -180,6 +299,26 @@ describe("T-PI-13 — a truncated session file", () => {
     const [descriptor] = await adapter.listSessions(home);
     if (!descriptor) throw new Error("no descriptor listed");
     await expect(adapter.loadSession(descriptor)).rejects.toThrow();
+  });
+
+  it("lists a broken parent chain as unreadable", async () => {
+    const adapter = createPiAdapter();
+    const home = throwawayHome();
+    const written = writeFixtureSession(home, CWD, [
+      piUserDraft("root"),
+      piAssistantTextDraft("orphan"),
+    ]);
+    const lines = written.text.trim().split("\n");
+    const leaf = JSON.parse(lines[2] as string) as Record<string, unknown>;
+    leaf.parentId = "missing-parent";
+    lines[2] = JSON.stringify(leaf);
+    writeFileSync(written.filePath, `${lines.join("\n")}\n`, "utf8");
+
+    const [descriptor] = await adapter.listSessions(home);
+    if (!descriptor) throw new Error("no descriptor listed");
+    expect(descriptor.title.startsWith(UNREADABLE_TITLE_PREFIX)).toBe(true);
+    expect(descriptor.turnCount).toBe(0);
+    await expect(adapter.loadSession(descriptor)).rejects.toThrow(/cannot be read/);
   });
 });
 

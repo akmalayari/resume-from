@@ -33,13 +33,15 @@ The module applies the rules in this order. The order matters and is part of the
    (FR-32).
 5. **Stop if the pinned content alone exceeds the budget.** Set `blockedReason` and write nothing
    (FR-33).
-6. **Drop to fit.** While the estimate exceeds the budget, drop the oldest unpinned turn (FR-31).
+6. **Drop to fit.** Charge each turn a fixed positive framing cost in addition to its visible
+   content. While the estimate exceeds the budget, drop the oldest unpinned turn (FR-31).
    Never drop one half of a call and its result — drop both or keep both (FR-34).
 7. **Report.** Record every drop with its reason, the counts, and the token arithmetic, so the
    preview can state what the budget removed (FR-17, FR-18, FR-35).
 
-It also derives `RepoSnapshot.changedPaths` from the source session's mutating tool calls, because no
-agent records the dirty file list FR-36 asks for.
+It trusts the adapter-produced `RepoSnapshot.changedPaths`, because only an adapter understands its
+native structured tool arguments. This module removes empty entries and duplicates without guessing
+paths from arbitrary argument text.
 
 ## Subdomain Classification
 
@@ -65,8 +67,8 @@ Critical integration.
   what that line says when the source recorded no outcome.
 - **The drop marker text.** That a dropped body is marked in text the model can read, in the form
   `(content dropped: imported session, may be stale)` (FR-25).
-- **How the changed-file list is derived.** That it comes from the mutating tool calls of the source
-  session, because FR-36's dirty list is not recorded by any agent.
+- **How the changed-file list is normalized.** Adapter-derived paths keep their source order; empty
+  entries and later duplicates are removed.
 - **That the rules are pure.** No clock, no file access, no randomness — because the preview and the
   commit of one request must produce the same plan.
 
@@ -110,7 +112,7 @@ type ToolEffect = "read-only" | "mutating" | "unknown";
 interface ToolCallRecord {
   /** The original tool name. Never translated (FR-27). */
   toolName: string;
-  /** The arguments as the source recorded them. */
+  /** The source arguments after deterministic credential redaction. */
   argumentsText: string;
   /** Exactly one line about the outcome (FR-23). */
   outcomeLine: string;
@@ -305,7 +307,7 @@ interface TransferRules {
 Changes that require **only this module** to change:
 
 - The answer to Q-1 or Q-2 changes the **default**, which lives in `src/platform/config/`; changing
-  how the share is *applied* — for example a floor in absolute tokens — changes only this module.
+  how the share is _applied_ — for example a floor in absolute tokens — changes only this module.
 - The pin set grows or shrinks: a new `PinReason`, or dropping "recent turns" in favour of a
   relevance rule.
 - The drop order changes: oldest-first becomes lowest-value-first.
@@ -430,10 +432,16 @@ is the largest and most detailed suite in the tree, because these rules are the 
 - Expected behavior: `blockedReason` is set and states what to change; no pin is dropped to make it
   fit (FR-32, FR-33).
 
-**T-TRA-15 — the changed-file list is derived from mutating calls**
-- Scenario: a session with `Edit('a.ts')`, `Write('b.ts')`, `Read('c.ts')`.
-- Expected behavior: `provenance.repo.changedPaths` holds `a.ts` and `b.ts`, and not `c.ts`. This is
-  the documented FR-36 derivation.
+**T-TRA-15 — the changed-file list comes from adapter provenance**
+- Scenario: adapter provenance records `a.ts`, `b.ts`, duplicates and an empty entry, while arbitrary
+  mutating tool arguments contain other strings.
+- Expected behavior: `provenance.repo.changedPaths` holds only `a.ts` and `b.ts`, in order. Argument
+  text is not parsed as a path.
+
+**T-TRA-33 — every kept turn has a fixed framing cost**
+- Scenario: one agent message whose visible text is empty.
+- Expected behavior: `estimatedTokens` is positive because target formats add delimiters and message
+  framing even when the content estimator returns zero.
 
 ### Integration Contract Tests
 

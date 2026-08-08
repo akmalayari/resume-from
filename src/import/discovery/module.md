@@ -23,7 +23,8 @@ It is the whole source side of the tool. Everything downstream — the rules, th
 - Keep only sessions that ran in the current repository (FR-13, NG-9).
 - Order the result newest first, across agents and homes together (FR-14, FR-15).
 - Resolve the user's choice: a row number of that same ordering, a session ID, or a file path
-  (FR-10, FR-12).
+  (FR-10, FR-12). Reject an ID that matches more than one agent or home and tell the user how to
+  disambiguate it.
 - Load the chosen session into the canonical vocabulary through its source adapter.
 - Survive a home that is missing, unreadable, or holds a corrupt session file, without losing the
   rest of the listing.
@@ -109,7 +110,7 @@ type ToolEffect = "read-only" | "mutating" | "unknown";
 interface ToolCallRecord {
   /** The original tool name. Never translated (FR-27). */
   toolName: string;
-  /** The arguments as the source recorded them. */
+  /** The source arguments after deterministic credential redaction. */
   argumentsText: string;
   /** Exactly one line about the outcome (FR-23). */
   outcomeLine: string;
@@ -293,7 +294,10 @@ interface SessionFinder {
   /** Newest first (FR-14), only sessions of the current repository (FR-13). */
   list(scope: SearchScope): Promise<Listing>;
   /** Resolves a choice against the same ordering list() produced. Rejects with SelectionError. */
-  resolve(scope: SearchScope, input: SelectionInput): Promise<SessionDescriptor>;
+  resolve(
+    scope: SearchScope,
+    input: SelectionInput,
+  ): Promise<SessionDescriptor>;
   /** Reads one session into the neutral vocabulary, through its source adapter. */
   load(descriptor: SessionDescriptor): Promise<CanonicalSession>;
 }
@@ -366,6 +370,9 @@ Changes that require **only this module** to change:
   ordering is therefore a pure function of the descriptors, with a deterministic tie-break on
   `SessionRef` when two sessions share `updatedAt`.
 - **Row numbers are 1-based**, because they are shown to a user (FR-10).
+- **A session ID must resolve uniquely in the current search scope.** When the same ID appears in
+  more than one agent or home, `resolve` rejects and lists the matching locations. The user can then
+  select a numbered row or exact file path, or narrow the search by agent and home.
 - **A session from another repository is never listed and never resolvable** (FR-13, NG-9), including
   when the user names it by session ID or by file path. Selection by path is a convenience, not a way
   around the filter.
@@ -434,7 +441,7 @@ Every test uses stub adapters over fixture homes. No agent needs to be installed
 
 **T-DIS-11 — rows are 1-based and match what was listed**
 - Scenario: `list` then `resolve` with each row number from 1 to the length.
-- Expected behavior: row *n* resolves to the *n*-th row of the listing, and row 0 fails.
+- Expected behavior: row _n_ resolves to the _n_-th row of the listing, and row 0 fails.
 
 **T-DIS-12 — resolve after a re-listing agrees**
 - Scenario: `list` is called, the finder is rebuilt from scratch, and `resolve` with row 3 runs on
@@ -445,6 +452,11 @@ Every test uses stub adapters over fixture homes. No agent needs to be installed
 **T-DIS-13 — load returns exactly what the adapter produced**
 - Scenario: a stub adapter returns a known canonical session.
 - Expected behavior: `load` returns it unchanged. No rule of section D or E runs here.
+
+**T-DIS-24 — a duplicate exact session ID must be disambiguated**
+- Scenario: the same ID appears in two Pi homes and one Codex home in the current repository.
+- Expected behavior: selection by ID rejects, names every matching location, and recommends a
+  numbered row, exact file path, or narrower agent/home scope.
 
 ### Boundary Tests
 

@@ -30,7 +30,7 @@ This module implements no behaviour. It is types and the invariants that go with
 
 ## Subdomain Classification
 
-**Core.** The shape of these types *is* the transfer policy. What has a field crosses over; what has
+**Core.** The shape of these types _is_ the transfer policy. What has a field crosses over; what has
 no field cannot. Volatility is **high**: every change to what a session carries lands here first, and
 the agent list in `AgentId` grows with every new adapter (FR-57).
 
@@ -114,7 +114,7 @@ type ToolEffect = "read-only" | "mutating" | "unknown";
 interface ToolCallRecord {
   /** The original tool name. Never translated (FR-27). */
   toolName: string;
-  /** The arguments as the source recorded them. */
+  /** The source arguments after deterministic credential redaction. */
   argumentsText: string;
   /** Exactly one line about the outcome (FR-23). */
   outcomeLine: string;
@@ -225,6 +225,10 @@ The changes this boundary is designed to absorb:
   line and is validated as one line.
 - **No field may hold a secret.** There is no field for tokens, passwords, environment values,
   hidden reasoning, system prompts or vendor state, and none may be added (FR-28, NG-7, NG-8).
+  Adapters preserve their own parsing rules, but pass tool inputs through their local pure redactor
+  before constructing `argumentsText` or `outcomeLine`. Sensitive keys and environment maps are
+  redacted structurally; recognizable command assignments, auth headers, tokens and private keys
+  are redacted in text. Path extraction uses the raw adapter input before this boundary.
 - **`CanonicalTurn.index` is the source position, not the position after filtering.** The rules
   report drops by source index (FR-35), so the index must survive filtering unchanged.
 - **`CanonicalTurn.text` is empty when `kind` is `"tool-call"`, and `toolCall` is null otherwise.**
@@ -248,7 +252,7 @@ every module's tests, so the whole tree exercises the same vocabulary.
 
 The fixtures are **not** shipped by this module. They live in `test/fixtures/`, outside `src/`, so
 they add no module to the design tree and no module reaches into another's folder to use them. This
-module owns the *invariants* the fixtures must satisfy, and asserts them.
+module owns the _invariants_ the fixtures must satisfy, and asserts them.
 
 ### Unit Tests
 
@@ -330,6 +334,6 @@ module owns the *invariants* the fixtures must satisfy, and asserts them.
   populated for one agent only. A reader of a canonical session cannot tell which agent produced it
   except through `provenance.ref.agent`.
 
-*T-SES-16 was moved to `src/import/` as T-IMP-25. It passes the fixture through the rules, the
+_T-SES-16 was moved to `src/import/` as T-IMP-25. It passes the fixture through the rules, the
 preview and an adapter's serialize, all of which compose above this module — a module cannot own a
-test of collaborators that do not exist when it is implemented.*
+test of collaborators that do not exist when it is implemented._

@@ -127,7 +127,10 @@ function jsonlBytes(entries: Record<string, unknown>[]): Buffer {
 function withBytes(serialized: SerializedSession, bytes: Buffer): SerializedSession {
   const first = serialized.files[0];
   if (first === undefined) throw new Error("the serialized session holds no file to damage");
-  return { ...serialized, files: [{ absolutePath: first.absolutePath, bytes }] };
+  return {
+    ...serialized,
+    files: [{ absolutePath: first.absolutePath, bytes }],
+  };
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -145,14 +148,29 @@ function asRecord(value: unknown): Record<string, unknown> | null {
  * The body is shaped like all three agents' result shapes simultaneously. If any reader ever
  * starts recognising one of them, this line is what fires.
  */
-function probeLine(secrets: string[], sessionId: string): Record<string, unknown> {
+function lastGraphId(entries: Record<string, unknown>[], field: "id" | "uuid"): string | null {
+  for (let index = entries.length - 1; index >= 0; index--) {
+    const entry = entries[index];
+    if (entry?.type === "session") continue;
+    const value = entry?.[field];
+    if (typeof value === "string" && value.length > 0) return value;
+  }
+  return null;
+}
+
+function probeLine(
+  secrets: string[],
+  sessionId: string,
+  parentId: string | null,
+  parentUuid: string | null,
+): Record<string, unknown> {
   const body = secrets.join(" | ");
   return {
     type: "resume_from_probe",
     id: "probe-0001",
-    parentId: null,
+    parentId,
     uuid: "00000000-0000-4000-8000-00000000ffff",
-    parentUuid: null,
+    parentUuid,
     sessionId,
     timestamp: "2026-08-01T09:16:09.000Z",
     payload: { type: "function_call_output", call_id: "probe", output: body },
@@ -161,7 +179,10 @@ function probeLine(secrets: string[], sessionId: string): Record<string, unknown
       content: [{ type: "tool_result", tool_use_id: "probe", content: body }],
     },
     toolUseResult: { stdout: body },
-    reasoning: { encrypted_content: body, summary: [{ type: "summary_text", text: body }] },
+    reasoning: {
+      encrypted_content: body,
+      summary: [{ type: "summary_text", text: body }],
+    },
     systemPrompt: body,
     env: { OPENAI_API_KEY: body },
     telemetry: { event: body },
@@ -171,7 +192,10 @@ function probeLine(secrets: string[], sessionId: string): Record<string, unknown
 function appendProbe(bytes: Buffer, secrets: string[]): Buffer {
   const entries = jsonlLines(bytes);
   const sessionId = String(entries[0]?.sessionId ?? entries[0]?.id ?? "probe-session");
-  return jsonlBytes([...entries, probeLine(secrets, sessionId)]);
+  return jsonlBytes([
+    ...entries,
+    probeLine(secrets, sessionId, lastGraphId(entries, "id"), lastGraphId(entries, "uuid")),
+  ]);
 }
 
 function appendUnknownEntry(bytes: Buffer): Buffer {
@@ -181,9 +205,9 @@ function appendUnknownEntry(bytes: Buffer): Buffer {
     {
       type: "resume_from_unknown_entry",
       id: "unknown-0001",
-      parentId: null,
+      parentId: lastGraphId(entries, "id"),
       uuid: "00000000-0000-4000-8000-00000000fffe",
-      parentUuid: null,
+      parentUuid: lastGraphId(entries, "uuid"),
       timestamp: "2026-08-01T09:16:10.000Z",
       payload: { type: "sparkle", note: UNKNOWN_MARKER },
       note: UNKNOWN_MARKER,
@@ -272,7 +296,9 @@ export const FIXTURE_CASE: AdapterCase = {
   damage: (serialized, count) => {
     const first = serialized.files[0];
     if (first === undefined) throw new Error("nothing to damage");
-    const document = JSON.parse(first.bytes.toString("utf8")) as { exchanges: FixtureExchange[] };
+    const document = JSON.parse(first.bytes.toString("utf8")) as {
+      exchanges: FixtureExchange[];
+    };
     for (const exchange of document.exchanges.slice(0, count)) {
       delete (exchange as Partial<FixtureExchange>).stamp;
     }
@@ -376,7 +402,14 @@ export async function land(
 /** Create files through the only module allowed to create them (FR-49, FR-53). */
 export async function commit(files: PendingFile[]): Promise<string[]> {
   for (const file of files) await assertThrowaway(file.absolutePath);
-  const handle = await committer.commit(files);
+  const first = files[0];
+  if (first === undefined) return [];
+  const root = roots.find((candidate) => {
+    const fromRoot = path.relative(candidate, first.absolutePath);
+    return fromRoot !== ".." && !fromRoot.startsWith(`..${path.sep}`) && !path.isAbsolute(fromRoot);
+  });
+  if (root === undefined) throw new Error(`no throwaway home owns ${first.absolutePath}`);
+  const handle = await committer.commit(root, files);
   return handle.createdPaths;
 }
 
@@ -435,11 +468,18 @@ export function markerFor(
 
 export function targetProfile(adapter: AgentAdapter, home: string): TargetProfile {
   const capabilities = adapter.capabilities();
-  return { agent: capabilities.agent, home, windowTokens: capabilities.defaultWindowTokens };
+  return {
+    agent: capabilities.agent,
+    home,
+    windowTokens: capabilities.defaultWindowTokens,
+  };
 }
 
 function turn(
-  partial: Partial<CanonicalTurn> & { index: number; role: CanonicalTurn["role"] },
+  partial: Partial<CanonicalTurn> & {
+    index: number;
+    role: CanonicalTurn["role"];
+  },
 ): CanonicalTurn {
   return {
     kind: "message",
@@ -456,7 +496,11 @@ function turn(
  */
 export const TOOL_SESSION: CanonicalSession = {
   provenance: {
-    ref: { agent: "codex" as AgentId, home: "/home/testuser/.codex", id: "tools-0001" },
+    ref: {
+      agent: "codex" as AgentId,
+      home: "/home/testuser/.codex",
+      id: "tools-0001",
+    },
     title: "make the auth token refresh work",
     startedAt: "2026-08-01T09:14:02Z",
     updatedAt: "2026-08-01T09:16:08Z",
@@ -527,7 +571,11 @@ export const TOOL_SESSION: CanonicalSession = {
       text: "So far: the refresh never persisted the new token. Fixed and tested.",
       timestamp: "2026-08-01T09:15:50Z",
     }),
-    turn({ index: 6, role: "user", text: "inject the clock, don't mock the whole module" }),
+    turn({
+      index: 6,
+      role: "user",
+      text: "inject the clock, don't mock the whole module",
+    }),
   ],
 };
 

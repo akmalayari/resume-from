@@ -115,7 +115,7 @@ type ToolEffect = "read-only" | "mutating" | "unknown";
 interface ToolCallRecord {
   /** The original tool name. Never translated (FR-27). */
   toolName: string;
-  /** The arguments as the source recorded them. */
+  /** The source arguments after deterministic credential redaction. */
   argumentsText: string;
   /** Exactly one line about the outcome (FR-23). */
   outcomeLine: string;
@@ -301,7 +301,11 @@ interface AgentAdapter {
   readBack(home: HomePath, sessionId: SessionId): Promise<StoredSessionFacts>;
 
   /** Target role, only when capabilities().landing is "create-and-switch" (FR-43, FR-44). */
-  switchTo(home: HomePath, sessionId: SessionId, runtime: AgentRuntime): Promise<SwitchOutcome>;
+  switchTo(
+    home: HomePath,
+    sessionId: SessionId,
+    runtime: AgentRuntime,
+  ): Promise<SwitchOutcome>;
 }
 ```
 
@@ -324,7 +328,10 @@ interface PiSwitchResult {
  * supplies it as the AgentRuntime handle; nothing else may construct one (C-10).
  */
 interface PiSwitchContext {
-  switchSession(path: string, options: PiSwitchOptions): Promise<PiSwitchResult>;
+  switchSession(
+    path: string,
+    options: PiSwitchOptions,
+  ): Promise<PiSwitchResult>;
 }
 ```
 
@@ -405,6 +412,11 @@ None of these touch a rule, a preview, another adapter, or the host.
 - **This module never opens a Pi source session for writing** (NG-1, AC-4).
 - **This module never calls Pi's model, and never opens a network connection** (FR-8).
 - **Tool names cross unchanged** (FR-27).
+- **Only Pi's active branch crosses.** The last persisted entry is the active leaf; its `parentId`
+  chain is resolved before turns, titles or changed paths are derived. A broken active graph makes
+  the session unreadable instead of exposing sibling branches.
+- **The latest active compaction defines model history.** Its summary is followed by `retainedTail`
+  when present, otherwise by entries from `firstKeptEntryId`, and then by later active descendants.
 - **No result body is carried into `CanonicalTurn`** (FR-24). `loadSession` sets
   `ToolCallRecord.bodyDropped` and writes one outcome line instead (FR-23, FR-25).
 - **No hidden reasoning, system prompt, token, password, environment value or vendor state is read

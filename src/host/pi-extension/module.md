@@ -142,7 +142,10 @@ interface PiSwitchResult {
  * supplies it as the AgentRuntime handle; nothing else may construct one (C-10).
  */
 interface PiSwitchContext {
-  switchSession(path: string, options: PiSwitchOptions): Promise<PiSwitchResult>;
+  switchSession(
+    path: string,
+    options: PiSwitchOptions,
+  ): Promise<PiSwitchResult>;
 }
 ```
 
@@ -265,7 +268,11 @@ interface ImportPipeline {
   /** Writes nothing (FR-16). */
   preview(request: ImportRequest): Promise<PreviewReport>;
   /** Runs only after the user confirmed the preview (FR-20). */
-  commit(request: ImportRequest, runtime: AgentRuntime): Promise<LandingResult>;
+  commit(
+    request: ImportRequest,
+    runtime: AgentRuntime,
+    confirmationToken: string,
+  ): Promise<LandingResult>;
 }
 ```
 
@@ -304,7 +311,11 @@ interface PiResumeFromCommand {
    * Pi calls this when the user types /resume-from.
    * It is a command handler, which is the only call site C-10 proved safe for switchSession.
    */
-  run(ctx: PiCommandContext, args: string[], pipeline: ImportPipeline): Promise<void>;
+  run(
+    ctx: PiCommandContext,
+    args: string[],
+    pipeline: ImportPipeline,
+  ): Promise<void>;
 }
 ```
 
@@ -490,7 +501,7 @@ picker. Tests marked **live** need an installed Pi and a throwaway session direc
 - Expected behavior: the user is told the session exists and how to open it — the same outcome a
   create-only agent gives (FR-45). Nothing is retried and nothing is discarded.
 
-*The live end-to-end scenario that was T-PIX-19 and T-PIX-20's acceptance case is owned by the root
+_The live end-to-end scenario that was T-PIX-19 and T-PIX-20's acceptance case is owned by the root
 as T-ROO-13. It needs a real Pi, a real Codex session, and the whole composed system — none of which
 exist when this module is implemented. What stays here is the interaction: the picker, the
-confirmation, the handle, and the silence afterwards.*
+confirmation, the handle, and the silence afterwards._

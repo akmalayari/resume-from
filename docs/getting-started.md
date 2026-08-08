@@ -51,7 +51,7 @@ Pi creates and opens the new session in the current process. It leaves the promp
 
 1. Run `/resume-from` to list matching sessions.
 2. Run `/resume-from <row>` to preview one session.
-3. Run `/resume-from <row> --confirm` to create the target session.
+3. Run the token-bearing `/resume-from <row> --confirm <token>` command printed by the preview.
 4. Run the native landing command printed by the tool.
 
 Claude Code prints:

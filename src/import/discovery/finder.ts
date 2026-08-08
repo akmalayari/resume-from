@@ -105,11 +105,22 @@ export function createSessionFinder(deps: DiscoveryDeps): SessionFinder {
         case "row":
           return await resolveRow(rows, input.row);
         case "session-id": {
-          const found = rows.find((row) => row.ref.id === input.id);
+          const matches = rows.filter((row) => row.ref.id === input.id);
+          const found = matches[0];
           if (!found) {
             throw new SessionSelectionError(
               input.id,
               `No session "${input.id}" belongs to this repository. ${NEXT_STEP}`,
+            );
+          }
+          if (matches.length > 1) {
+            const locations = matches
+              .map((row) => `${row.ref.agent} at "${row.ref.home}" (${row.filePath})`)
+              .join("; ");
+            throw new SessionSelectionError(
+              input.id,
+              `Session ID "${input.id}" matches ${matches.length} sessions: ${locations}. ` +
+                "Select a numbered row or exact file path, or narrow the search with an agent and --home.",
             );
           }
           return found;

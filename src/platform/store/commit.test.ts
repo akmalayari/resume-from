@@ -1,7 +1,7 @@
 // T-STO-1 .. T-STO-12, T-STO-14, T-STO-16.
 // Every test runs against a temporary directory. No test touches a real agent home.
 
-import { chmod, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, stat, symlink, unlink, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CommitError, FileCommitter, PendingFile } from "./contract.js";
@@ -10,12 +10,15 @@ import { entriesOf, exists, isRoot, makeHome, removeHome, snapshot } from "./tes
 
 // The filesystem is watched, and on request made to fail. Watching `open` lets a refusal be shown
 // to write nothing at all — a checksum alone cannot tell "never wrote" from "wrote, then cleaned up
-// perfectly". Failing a chosen `link` is the only way to make a file fail *after* earlier files are
-// already on disk, which is what a part-way failure means.
+// perfectly". Watching `lstat` proves a cardinality refusal happens before filesystem inspection.
 const fs = vi.hoisted(() => ({
   openedForWriting: [] as string[],
-  placed: [] as string[],
-  failPlacementOf: null as string | null,
+  inspected: [] as string[],
+  swapBeforeOpen: null as null | {
+    parent: string;
+    outside: string;
+    moved: string;
+  },
 }));
 
 vi.mock("node:fs/promises", async (importOriginal) => {
@@ -23,15 +26,18 @@ vi.mock("node:fs/promises", async (importOriginal) => {
   return {
     ...actual,
     open: async (path: string, flags?: string | number, mode?: string | number) => {
+      const pendingSwap = fs.swapBeforeOpen;
+      if (pendingSwap !== null && String(path).startsWith(`${pendingSwap.parent}/.resume-from-`)) {
+        fs.swapBeforeOpen = null;
+        await actual.rename(pendingSwap.parent, pendingSwap.moved);
+        await actual.symlink(pendingSwap.outside, pendingSwap.parent);
+      }
       if (flags !== undefined && flags !== "r") fs.openedForWriting.push(String(path));
       return await actual.open(path, flags, mode);
     },
-    link: async (source: string, destination: string) => {
-      if (fs.failPlacementOf === destination) {
-        throw Object.assign(new Error("simulated device failure"), { code: "EIO" });
-      }
-      await actual.link(source, destination);
-      fs.placed.push(destination);
+    lstat: async (path: string) => {
+      fs.inspected.push(String(path));
+      return await actual.lstat(path);
     },
   };
 });
@@ -43,8 +49,8 @@ beforeEach(async () => {
   home = await makeHome();
   committer = createFileCommitter();
   fs.openedForWriting = [];
-  fs.placed = [];
-  fs.failPlacementOf = null;
+  fs.inspected = [];
+  fs.swapBeforeOpen = null;
 });
 
 afterEach(async () => {
@@ -52,7 +58,10 @@ afterEach(async () => {
 });
 
 function file(absolutePath: string, content: string | Buffer): PendingFile {
-  return { absolutePath, bytes: Buffer.isBuffer(content) ? content : Buffer.from(content) };
+  return {
+    absolutePath,
+    bytes: Buffer.isBuffer(content) ? content : Buffer.from(content),
+  };
 }
 
 /** Awaits a commit that must be refused and returns the refusal. */
@@ -66,59 +75,53 @@ async function refusalOf(commit: Promise<unknown>): Promise<CommitError> {
 }
 
 describe("unit", () => {
-  it("T-STO-1 — a commit creates every file", async () => {
-    const one = join(home, "one.txt");
-    const two = join(home, "two.txt");
-    const three = join(home, "three.txt");
+  it("T-STO-1 — a commit creates its file", async () => {
+    const destination = join(home, "session.jsonl");
 
-    const handle = await committer.commit([
-      file(one, "alpha"),
-      file(two, "beta"),
-      file(three, "gamma"),
-    ]);
+    const handle = await committer.commit(home, [file(destination, "alpha")]);
 
-    expect(handle.createdPaths).toEqual([one, two, three]);
-    await expect(readFile(one, "utf8")).resolves.toBe("alpha");
-    await expect(readFile(two, "utf8")).resolves.toBe("beta");
-    await expect(readFile(three, "utf8")).resolves.toBe("gamma");
+    expect(handle.createdPaths).toEqual([destination]);
+    await expect(readFile(destination, "utf8")).resolves.toBe("alpha");
   });
 
   it("T-STO-2 — missing parent directories are created", async () => {
     const deep = join(home, "projects", "abc", "sessions", "s1.jsonl");
 
-    const handle = await committer.commit([file(deep, "line")]);
+    const handle = await committer.commit(home, [file(deep, "line")]);
 
     expect(handle.createdPaths).toEqual([deep]);
     await expect(readFile(deep, "utf8")).resolves.toBe("line");
   });
 
-  it("T-STO-3 — an existing path refuses the whole commit", async () => {
-    const first = join(home, "first.txt");
-    const second = join(home, "second.txt");
-    const third = join(home, "third.txt");
-    await writeFile(second, "already here");
+  it("creates a missing target root privately and reports the published file", async () => {
+    const root = join(home, "new-target", "profile");
+    const destination = join(root, "sessions", "session.jsonl");
 
-    const refusal = await refusalOf(
-      committer.commit([file(first, "a"), file(second, "b"), file(third, "c")]),
-    );
+    const handle = await committer.commit(root, [file(destination, "line")]);
+
+    expect((await stat(root)).mode & 0o777).toBe(0o700);
+    await expect(readFile(destination, "utf8")).resolves.toBe("line");
+    expect(handle.createdPaths).toEqual([destination]);
+  });
+
+  it("T-STO-3 — an existing path refuses the commit", async () => {
+    const destination = join(home, "session.jsonl");
+    await writeFile(destination, "already here");
+
+    const refusal = await refusalOf(committer.commit(home, [file(destination, "new")]));
 
     expect(refusal.refusal).toBe("path-exists");
-    expect(refusal.path).toBe(second);
-    await expect(exists(first)).resolves.toBe(false);
-    await expect(exists(third)).resolves.toBe(false);
-    await expect(readFile(second, "utf8")).resolves.toBe("already here");
+    expect(refusal.path).toBe(destination);
+    await expect(readFile(destination, "utf8")).resolves.toBe("already here");
   });
 
   it("T-STO-4 — a refusal writes nothing at all", async () => {
-    const first = join(home, "first.txt");
-    const second = join(home, "second.txt");
-    const third = join(home, "nested", "third.txt");
-    await writeFile(second, "already here");
+    const destination = join(home, "session.jsonl");
+    await writeFile(destination, "already here");
     const before = await snapshot(home);
+    fs.inspected = [];
 
-    const refusal = await refusalOf(
-      committer.commit([file(first, "a"), file(second, "b"), file(third, "c")]),
-    );
+    const refusal = await refusalOf(committer.commit(home, [file(destination, "new")]));
 
     expect(refusal.refusal).toBe("path-exists");
     expect(await snapshot(home)).toEqual(before);
@@ -126,57 +129,64 @@ describe("unit", () => {
     expect(fs.openedForWriting).toEqual([]);
   });
 
-  it("T-STO-5 — a failure part-way through removes what was created", async () => {
+  it("T-STO-5 — more than one file is refused before filesystem access", async () => {
     const first = join(home, "first.txt");
     const second = join(home, "second.txt");
-    const third = join(home, "third.txt");
     const before = await snapshot(home);
-    fs.failPlacementOf = third; // the destination fails once the first two are on disk
+    fs.inspected = [];
 
-    const refusal = await refusalOf(
-      committer.commit([file(first, "a"), file(second, "b"), file(third, "c")]),
-    );
+    const refusal = await refusalOf(committer.commit(home, [file(first, "a"), file(second, "b")]));
 
     expect(refusal.refusal).toBe("write-failed");
-    // The first two really reached the disk, and were then removed again.
-    expect(fs.placed).toEqual([first, second]);
+    expect(refusal.path).toBeNull();
+    expect(refusal.message).toMatch(/one file|atomic/i);
+    expect(fs.inspected).toEqual([]);
+    expect(fs.openedForWriting).toEqual([]);
     await expect(exists(first)).resolves.toBe(false);
     await expect(exists(second)).resolves.toBe(false);
-    await expect(exists(third)).resolves.toBe(false);
     expect(await snapshot(home)).toEqual(before);
   });
 
-  it("T-STO-6 — rollback removes exactly what the commit created", async () => {
+  it("T-STO-6 — a handle reports the published path without a removal operation", async () => {
     const kept = join(home, "kept.txt");
     await writeFile(kept, "untouched");
     const existingDir = join(home, "existing");
     await mkdir(existingDir);
-    const inExisting = join(existingDir, "new.txt");
     const inFreshDir = join(home, "fresh", "deeper", "new.txt");
 
-    const handle = await committer.commit([file(inExisting, "a"), file(inFreshDir, "b")]);
-    await handle.rollback();
-
-    await expect(exists(inExisting)).resolves.toBe(false);
-    await expect(exists(inFreshDir)).resolves.toBe(false);
-    await expect(exists(join(home, "fresh", "deeper"))).resolves.toBe(false);
-    await expect(exists(join(home, "fresh"))).resolves.toBe(false);
+    const handle = await committer.commit(home, [file(inFreshDir, "b")]);
+    expect(handle).toEqual({ createdPaths: [inFreshDir] });
+    expect("rollback" in handle).toBe(false);
+    await expect(readFile(inFreshDir, "utf8")).resolves.toBe("b");
     await expect(exists(existingDir)).resolves.toBe(true);
     await expect(readFile(kept, "utf8")).resolves.toBe("untouched");
   });
 
-  it("T-STO-7 — rollback is idempotent", async () => {
-    const one = join(home, "dir", "one.txt");
-    const two = join(home, "dir", "two.txt");
-    const handle = await committer.commit([file(one, "a"), file(two, "b")]);
+  it("T-STO-7 — an empty commit has no rollback operation", async () => {
+    const empty = await committer.commit(home, []);
+    expect(empty).toEqual({ createdPaths: [] });
+    expect("rollback" in empty).toBe(false);
+  });
 
-    await expect(handle.rollback()).resolves.toBeUndefined();
-    await expect(handle.rollback()).resolves.toBeUndefined();
+  it("creates files and directories with private modes", async () => {
+    const directory = join(home, "private", "nested");
+    const destination = join(directory, "session.jsonl");
 
-    const second = await committer.commit([file(one, "a"), file(two, "b")]);
-    await rm(one); // deleted by hand, behind the handle's back
-    await expect(second.rollback()).resolves.toBeUndefined();
-    await expect(exists(two)).resolves.toBe(false);
+    await committer.commit(home, [file(destination, "secret")]);
+
+    expect((await stat(destination)).mode & 0o777).toBe(0o600);
+    expect((await stat(directory)).mode & 0o777).toBe(0o700);
+    expect((await stat(join(home, "private"))).mode & 0o777).toBe(0o700);
+  });
+
+  it("does not expose an unlink operation that could delete a replacement", async () => {
+    const destination = join(home, "session.jsonl");
+    const handle = await committer.commit(home, [file(destination, "created")]);
+    await unlink(destination);
+    await writeFile(destination, "replacement");
+    expect(handle.createdPaths).toEqual([destination]);
+    expect("rollback" in handle).toBe(false);
+    await expect(readFile(destination, "utf8")).resolves.toBe("replacement");
   });
 });
 
@@ -190,29 +200,28 @@ describe("integration contract", () => {
   it.each(outcomes)(
     "T-STO-8 — a commit handle is returned only on full success ($name)",
     async ({ refusal }) => {
-      const first = join(home, "first.txt");
-      let second = join(home, "second.txt");
+      let destination = join(home, "session.jsonl");
       if (refusal === "path-exists") {
-        await writeFile(second, "already here");
+        await writeFile(destination, "already here");
       }
       if (refusal === "write-failed") {
         const blocker = join(home, "blocker.txt");
         await writeFile(blocker, "not a directory");
-        second = join(blocker, "second.txt");
+        destination = join(blocker, "session.jsonl");
       }
-      const files = [file(first, "a"), file(second, "b")];
+      const files = [file(destination, "bytes")];
 
       if (refusal === null) {
-        const handle = await committer.commit(files);
-        expect(handle.createdPaths).toEqual([first, second]);
-        expect(typeof handle.rollback).toBe("function");
+        const handle = await committer.commit(home, files);
+        expect(handle.createdPaths).toEqual([destination]);
+        expect("rollback" in handle).toBe(false);
         return;
       }
 
-      const error = await refusalOf(committer.commit(files));
+      const error = await refusalOf(committer.commit(home, files));
       expect(error.refusal).toBe(refusal);
-      expect(error.path).toBe(second);
-      expect(error.message).toContain(second);
+      expect(error.path).toBe(destination);
+      expect(error.message).toContain(destination);
       // FR-56: the message says what the user can do next.
       expect(error.message).toMatch(/remove|rename|choose|check|free|pass/i);
     },
@@ -220,15 +229,18 @@ describe("integration contract", () => {
 
   it("T-STO-9 — bytes are written unchanged", async () => {
     const cases = [
-      { name: "invalid-utf8.bin", bytes: Buffer.from([0xff, 0xfe, 0x80, 0x00, 0xc3]) },
+      {
+        name: "invalid-utf8.bin",
+        bytes: Buffer.from([0xff, 0xfe, 0x80, 0x00, 0xc3]),
+      },
       { name: "lone-cr.txt", bytes: Buffer.from("first\rsecond\r") },
-      { name: "trailing-null.txt", bytes: Buffer.from([0x74, 0x61, 0x69, 0x6c, 0x00]) },
+      {
+        name: "trailing-null.txt",
+        bytes: Buffer.from([0x74, 0x61, 0x69, 0x6c, 0x00]),
+      },
     ];
-    const files = cases.map((one) => file(join(home, one.name), one.bytes));
-
-    await committer.commit(files);
-
     for (const one of cases) {
+      await committer.commit(home, [file(join(home, one.name), one.bytes)]);
       const written = await readFile(join(home, one.name));
       expect(Buffer.compare(written, one.bytes)).toBe(0);
     }
@@ -237,10 +249,10 @@ describe("integration contract", () => {
   it("T-STO-10 — an empty commit succeeds and does nothing", async () => {
     const before = await snapshot(home);
 
-    const handle = await committer.commit([]);
+    const handle = await committer.commit(home, []);
 
     expect(handle.createdPaths).toEqual([]);
-    await expect(handle.rollback()).resolves.toBeUndefined();
+    expect("rollback" in handle).toBe(false);
     expect(await snapshot(home)).toEqual(before);
   });
 });
@@ -249,7 +261,7 @@ describe("boundary", () => {
   it("T-STO-11 — a relative path is refused", async () => {
     const relativePath = join("relative-store-test", "file.txt");
 
-    const refusal = await refusalOf(committer.commit([file(relativePath, "a")]));
+    const refusal = await refusalOf(committer.commit(home, [file(relativePath, "a")]));
 
     expect(refusal.path).toBe(relativePath);
     expect(refusal.message).toContain(relativePath);
@@ -259,20 +271,73 @@ describe("boundary", () => {
     await expect(exists(resolve(process.cwd(), "relative-store-test"))).resolves.toBe(false);
   });
 
-  it("T-STO-12 — two files with the same path in one commit are refused", async () => {
-    const twice = join(home, "same.txt");
+  it("T-STO-12 — any two files in one commit are refused", async () => {
+    const first = join(home, "first.txt");
+    const second = join(home, "second.txt");
     const before = await snapshot(home);
+    fs.inspected = [];
 
     const refusal = await refusalOf(
-      committer.commit([file(twice, "first"), file(twice, "second")]),
+      committer.commit(home, [file(first, "first"), file(second, "second")]),
     );
 
-    expect(refusal.path).toBe(twice);
-    // Named as a duplicate, not reported as a file the user already had.
-    expect(refusal.message).toMatch(/twice/i);
-    await expect(exists(twice)).resolves.toBe(false);
+    expect(refusal.path).toBeNull();
+    expect(refusal.message).toMatch(/one file|atomic/i);
+    expect(fs.inspected).toEqual([]);
+    await expect(exists(first)).resolves.toBe(false);
+    await expect(exists(second)).resolves.toBe(false);
     expect(await snapshot(home)).toEqual(before);
     expect(fs.openedForWriting).toEqual([]);
+  });
+
+  it("refuses lexical paths outside the target root", async () => {
+    const outside = join(home, "..", `${home.split("/").at(-1)}-outside.jsonl`);
+
+    const refusal = await refusalOf(committer.commit(home, [file(outside, "secret")]));
+
+    expect(refusal.path).toBe(outside);
+    expect(refusal.message).toMatch(/outside the target root/i);
+    expect(fs.openedForWriting).toEqual([]);
+  });
+
+  it("refuses an existing symlink that escapes the target root", async () => {
+    const outside = await makeHome();
+    const linked = join(home, "linked");
+    await symlink(outside, linked);
+    try {
+      const destination = join(linked, "session.jsonl");
+
+      const refusal = await refusalOf(committer.commit(home, [file(destination, "secret")]));
+
+      expect(refusal.path).toBe(linked);
+      expect(refusal.message).toMatch(/outside the target root/i);
+      await expect(exists(join(outside, "session.jsonl"))).resolves.toBe(false);
+      expect(fs.openedForWriting).toEqual([]);
+    } finally {
+      await removeHome(outside);
+    }
+  });
+
+  it("refuses a parent swapped outside the root before staging any session byte", async () => {
+    const outside = await makeHome();
+    const parent = join(home, "sessions");
+    const moved = join(home, "sessions-before-swap");
+    await mkdir(parent);
+    fs.swapBeforeOpen = { parent, outside, moved };
+    try {
+      const destination = join(parent, "session.jsonl");
+
+      const refusal = await refusalOf(
+        committer.commit(home, [file(destination, "secret session bytes")]),
+      );
+
+      expect(refusal.refusal).toBe("write-failed");
+      expect(refusal.message).toMatch(/outside the target root/i);
+      expect(await snapshot(outside)).toEqual(new Map());
+      await expect(entriesOf(moved)).resolves.toEqual([]);
+    } finally {
+      await removeHome(outside);
+    }
   });
 
   it.skipIf(isRoot)("T-STO-14 — a destination directory that is not writable", async () => {
@@ -280,7 +345,7 @@ describe("boundary", () => {
     await mkdir(locked);
     await chmod(locked, 0o555);
 
-    const refusal = await refusalOf(committer.commit([file(join(locked, "new.txt"), "a")]));
+    const refusal = await refusalOf(committer.commit(home, [file(join(locked, "new.txt"), "a")]));
 
     expect(refusal.refusal).toBe("not-writable");
     expect(refusal.message).toContain(locked);
@@ -296,14 +361,14 @@ describe("behavior", () => {
     }
     const before = await snapshot(home);
 
-    const added = [join(home, "added-one.txt"), join(home, "added-two.txt")];
-    await committer.commit(added.map((path) => file(path, `bytes of ${path}`)));
+    const added = join(home, "added.txt");
+    await committer.commit(home, [file(added, `bytes of ${added}`)]);
 
     const after = await snapshot(home);
     for (const [path, checksum] of before) {
       expect(after.get(path)).toBe(checksum);
     }
     const fresh = [...after.keys()].filter((path) => !before.has(path)).sort();
-    expect(fresh).toEqual(["added-one.txt", "added-two.txt"]);
+    expect(fresh).toEqual(["added.txt"]);
   });
 });

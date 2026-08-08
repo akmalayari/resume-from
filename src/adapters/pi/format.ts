@@ -112,6 +112,12 @@ export interface PiThinkingBlock {
   thinkingSignature?: string;
 }
 
+export interface PiImageBlock {
+  type: "image";
+  data: string;
+  mimeType: string;
+}
+
 export interface PiToolCallBlock {
   type: "toolCall";
   id: string;
@@ -119,7 +125,7 @@ export interface PiToolCallBlock {
   arguments: Record<string, unknown>;
 }
 
-export type PiContentBlock = PiTextBlock | PiThinkingBlock | PiToolCallBlock;
+export type PiContentBlock = PiTextBlock | PiThinkingBlock | PiToolCallBlock | PiImageBlock;
 
 /** The six numbers Pi dereferences without a guard. Missing any of them is C-11. */
 export interface PiUsage {
@@ -174,7 +180,8 @@ export interface PiMessageEntry extends PiEntryBase {
 export interface PiCompactionEntry extends PiEntryBase {
   type: "compaction";
   summary: string;
-  firstKeptEntryId: string;
+  firstKeptEntryId?: string;
+  retainedTail?: PiMessage[];
   tokensBefore: number;
 }
 

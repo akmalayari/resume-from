@@ -47,7 +47,7 @@ async function readConfigFile(configPath: string): Promise<string | undefined> {
     return await readFile(configPath, "utf8");
   } catch (cause) {
     const code = (cause as NodeJS.ErrnoException).code;
-    if (code === "ENOENT" || code === "ENOTDIR") return undefined;
+    if (code === "ENOENT") return undefined;
     throw new ConfigLoadError(
       configPath,
       `${configPath} cannot be read: ${reason(cause)}. Check the path and its permissions.`,

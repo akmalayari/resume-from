@@ -16,6 +16,7 @@ import type {
 } from "./contract.js";
 
 export const REPO_ROOT = "/repo/demo";
+export const CONFIRMATION_TOKEN = `v1-sha256-${"0".repeat(64)}`;
 
 export function descriptor(overrides: Partial<SessionDescriptor> = {}): SessionDescriptor {
   return {
@@ -57,6 +58,7 @@ export function marker(overrides: Partial<ProvenanceMarker> = {}): ProvenanceMar
 
 export function report(overrides: Partial<PreviewReport> = {}): PreviewReport {
   return {
+    confirmationToken: CONFIRMATION_TOKEN,
     headerLines: ["From codex sess-1", "To claude-code"],
     budgetLine: "Budget: 34k tokens of a 200k window",
     warnings: [{ kind: "repo-state", line: "The repository moved 3 commits ahead" }],
@@ -76,9 +78,16 @@ export function report(overrides: Partial<PreviewReport> = {}): PreviewReport {
 
 export function landing(overrides: Partial<LandingResult> = {}): LandingResult {
   return {
-    ref: { agent: "claude-code", home: "/Users/me/.claude", id: "new-session-7" },
+    ref: {
+      agent: "claude-code",
+      home: "/Users/me/.claude",
+      id: "new-session-7",
+    },
     switched: false,
-    handover: { sessionId: "new-session-7", command: "claude --resume new-session-7" },
+    handover: {
+      sessionId: "new-session-7",
+      command: "claude --resume new-session-7",
+    },
     itemsSent: 0,
     itemsStored: 24,
     marker: marker(),
@@ -99,7 +108,11 @@ export function invocation(overrides: Partial<CliInvocation> = {}): CliInvocatio
 export interface PipelineCalls {
   list: ListRequest[];
   preview: ImportRequest[];
-  commit: { request: ImportRequest; runtime: AgentRuntime }[];
+  commit: {
+    request: ImportRequest;
+    runtime: AgentRuntime;
+    confirmationToken: string;
+  }[];
   /** The call names in the order they were made. */
   order: ("list" | "preview" | "commit")[];
 }
@@ -133,8 +146,8 @@ export function stubPipeline(options: StubOptions = {}): StubPipeline {
       if (options.previewRejects !== undefined) return Promise.reject(options.previewRejects);
       return Promise.resolve(options.report ?? report());
     },
-    commit(request, runtime) {
-      calls.commit.push({ request, runtime });
+    commit(request, runtime, confirmationToken) {
+      calls.commit.push({ request, runtime, confirmationToken });
       calls.order.push("commit");
       if (options.commitRejects !== undefined) return Promise.reject(options.commitRejects);
       return Promise.resolve(options.landing ?? landing());

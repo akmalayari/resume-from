@@ -40,6 +40,6 @@ export interface ConfigError {
 
 /** Loads configuration and fills every missing field with its default. */
 export interface ConfigLoader {
-  /** Rejects with a ConfigError when a present value is invalid. A missing file is not an error. */
+  /** Rejects for invalid values or unreadable paths. A genuinely missing file is not an error. */
   load(): Promise<ImportConfig>;
 }

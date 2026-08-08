@@ -24,6 +24,7 @@ import {
   toolEffectFor,
   visibleText,
 } from "./format.js";
+import { redactSensitiveStructure, redactSensitiveText } from "./redaction.js";
 
 export interface ParsedSessionFile {
   header: PiSessionHeader | null;
@@ -37,6 +38,16 @@ export interface LoadedTurns {
   /** Entry types this adapter does not know. Visible so the preview can warn (T-PI-14). */
   skippedEntryTypes: string[];
   skippedCount: number;
+  /** Set when the append-only entry graph cannot produce one trustworthy active branch. */
+  unreadable: string | null;
+}
+
+export interface ResolvedPiEntries {
+  /** The active leaf's complete parent chain, before compaction is applied. */
+  activePath: PiEntry[];
+  /** The entries Pi would put in model context after applying its latest compaction. */
+  contextEntries: PiEntry[];
+  unreadable: string | null;
 }
 
 export function parseSessionText(text: string): ParsedSessionFile {
@@ -65,9 +76,118 @@ export function parseSessionText(text: string): ParsedSessionFile {
   return { header, entries, truncated };
 }
 
+function retainedTailEntries(compaction: PiEntry): PiEntry[] {
+  if (!Array.isArray(compaction.retainedTail)) return [];
+  return compaction.retainedTail.flatMap((message, index) => {
+    if (!isRecord(message)) return [];
+    return [
+      {
+        type: "message",
+        id: `${compaction.id}:retained:${index}`,
+        parentId: null,
+        timestamp: compaction.timestamp,
+        message,
+      },
+    ];
+  });
+}
+
+/** Resolve Pi's active leaf and reproduce its compaction-aware context projection. */
+export function resolveActiveEntries(entries: PiEntry[]): ResolvedPiEntries {
+  if (entries.length === 0) {
+    return { activePath: [], contextEntries: [], unreadable: null };
+  }
+
+  const byId = new Map<string, PiEntry>();
+  for (const entry of entries) {
+    if (typeof entry.id !== "string" || entry.id.length === 0) {
+      return {
+        activePath: [],
+        contextEntries: [],
+        unreadable: `entry ${entry.type} has no id`,
+      };
+    }
+    if (byId.has(entry.id)) {
+      return {
+        activePath: [],
+        contextEntries: [],
+        unreadable: `duplicate entry id ${entry.id}`,
+      };
+    }
+    if (entry.parentId !== null && typeof entry.parentId !== "string") {
+      return {
+        activePath: [],
+        contextEntries: [],
+        unreadable: `entry ${entry.id} has a malformed parentId`,
+      };
+    }
+    byId.set(entry.id, entry);
+  }
+
+  const reversed: PiEntry[] = [];
+  const visited = new Set<string>();
+  let current: PiEntry | undefined = entries[entries.length - 1];
+  while (current !== undefined) {
+    if (visited.has(current.id)) {
+      return {
+        activePath: [],
+        contextEntries: [],
+        unreadable: `entry graph contains a cycle at ${current.id}`,
+      };
+    }
+    visited.add(current.id);
+    reversed.push(current);
+    if (current.parentId === null) break;
+    const parent: PiEntry | undefined = byId.get(current.parentId);
+    if (parent === undefined) {
+      return {
+        activePath: [],
+        contextEntries: [],
+        unreadable: `entry ${current.id} refers to missing parent ${current.parentId}`,
+      };
+    }
+    current = parent;
+  }
+
+  const activePath = reversed.reverse();
+  let compactionIndex = -1;
+  for (let index = 0; index < activePath.length; index++) {
+    if (activePath[index]?.type === "compaction") compactionIndex = index;
+  }
+  if (compactionIndex < 0) {
+    return { activePath, contextEntries: activePath, unreadable: null };
+  }
+
+  const compaction = activePath[compactionIndex] as PiEntry;
+  const afterCompaction = activePath.slice(compactionIndex + 1);
+  const retainedTail = retainedTailEntries(compaction);
+  if (retainedTail.length > 0) {
+    return {
+      activePath,
+      contextEntries: [compaction, ...retainedTail, ...afterCompaction],
+      unreadable: null,
+    };
+  }
+
+  const firstKeptId =
+    typeof compaction.firstKeptEntryId === "string" ? compaction.firstKeptEntryId : null;
+  const firstKeptIndex =
+    firstKeptId === null
+      ? -1
+      : activePath.findIndex((entry, index) => index < compactionIndex && entry.id === firstKeptId);
+  const keptBefore = firstKeptIndex < 0 ? [] : activePath.slice(firstKeptIndex, compactionIndex);
+  return {
+    activePath,
+    contextEntries: [compaction, ...keptBefore, ...afterCompaction],
+    unreadable: null,
+  };
+}
+
 /** The result bodies of a session, keyed by tool call id. Read once, never carried. */
-function indexToolResults(entries: PiEntry[]): Map<string, { body: string; isError: boolean }> {
-  const results = new Map<string, { body: string; isError: boolean }>();
+function indexToolResults(
+  entries: PiEntry[],
+): Map<string, { body: string; present: boolean; isError: boolean }> {
+  const results = new Map<string, { body: string; present: boolean; isError: boolean }>();
   for (const entry of entries) {
     const message = entryMessage(entry);
     if (message?.role !== "toolResult") continue;
@@ -75,19 +195,32 @@ function indexToolResults(entries: PiEntry[]): Map<string, { body: string; isErr
     if (callId.length === 0) continue;
     results.set(callId, {
       body: visibleText(message.content),
+      present:
+        (typeof message.content === "string" && message.content.length > 0) ||
+        (Array.isArray(message.content) && message.content.length > 0) ||
+        isRecord(message.content),
       isError: message.isError === true,
     });
   }
   return results;
 }
 
-function outcomeOf(result: { body: string; isError: boolean } | undefined): {
+function outcomeOf(result: { body: string; present: boolean; isError: boolean } | undefined): {
   outcome: string;
   bodyDropped: boolean;
 } {
   if (!result) return { outcome: "no result recorded", bodyDropped: false };
   if (result.body.trim().length === 0) {
-    return { outcome: result.isError ? "error" : "no output", bodyDropped: false };
+    if (result.present) {
+      return {
+        outcome: `${result.isError ? "error, result dropped" : "result recorded"} ${DROPPED_BODY_NOTE}`,
+        bodyDropped: true,
+      };
+    }
+    return {
+      outcome: result.isError ? "error" : "no output",
+      bodyDropped: false,
+    };
   }
   const lineCount = result.body.split("\n").length;
   const what = result.isError ? "error" : `${lineCount} ${lineCount === 1 ? "line" : "lines"}`;
@@ -97,20 +230,22 @@ function outcomeOf(result: { body: string; isError: boolean } | undefined): {
 function toolCallRecord(
   name: string,
   args: Record<string, unknown>,
-  result: { body: string; isError: boolean } | undefined,
+  result: { body: string; present: boolean; isError: boolean } | undefined,
 ): ToolCallRecord {
-  const argumentsText = JSON.stringify(args);
+  const argumentsText = JSON.stringify(redactSensitiveStructure(args));
   const { outcome, bodyDropped } = outcomeOf(result);
   return {
     toolName: name,
     argumentsText,
-    outcomeLine: oneLine(`${name}(${shortArguments(argumentsText)}) → ${outcome}`),
+    outcomeLine: redactSensitiveText(
+      oneLine(`${name}(${shortArguments(argumentsText)}) → ${outcome}`),
+    ),
     effect: toolEffectFor(name),
     bodyDropped,
   };
 }
 
-export function entriesToTurns(entries: PiEntry[]): LoadedTurns {
+function contextEntriesToTurns(entries: PiEntry[]): Omit<LoadedTurns, "unreadable"> {
   const results = indexToolResults(entries);
   const turns: CanonicalTurn[] = [];
   const skippedEntryTypes: string[] = [];
@@ -131,7 +266,13 @@ export function entriesToTurns(entries: PiEntry[]): LoadedTurns {
     if (entry.type === "compaction" || entry.type === "branch_summary") {
       const summary = typeof entry.summary === "string" ? entry.summary : "";
       if (summary.trim().length > 0) {
-        push({ role: "agent", kind: "summary", text: summary, toolCall: null, timestamp });
+        push({
+          role: "agent",
+          kind: "summary",
+          text: summary,
+          toolCall: null,
+          timestamp,
+        });
       }
       continue;
     }
@@ -147,7 +288,13 @@ export function entriesToTurns(entries: PiEntry[]): LoadedTurns {
       if (message.role === "user") {
         const text = visibleText(message.content);
         if (text.trim().length > 0) {
-          push({ role: "user", kind: "message", text, toolCall: null, timestamp });
+          push({
+            role: "user",
+            kind: "message",
+            text,
+            toolCall: null,
+            timestamp,
+          });
         }
         continue;
       }
@@ -160,7 +307,13 @@ export function entriesToTurns(entries: PiEntry[]): LoadedTurns {
             buffered = "";
             return;
           }
-          push({ role: "agent", kind: "message", text: buffered, toolCall: null, timestamp });
+          push({
+            role: "agent",
+            kind: "message",
+            text: buffered,
+            toolCall: null,
+            timestamp,
+          });
           buffered = "";
         };
         if (!Array.isArray(message.content)) {
@@ -201,6 +354,22 @@ export function entriesToTurns(entries: PiEntry[]): LoadedTurns {
   return { turns, skippedEntryTypes, skippedCount };
 }
 
+export function entriesToTurns(entries: PiEntry[]): LoadedTurns {
+  const resolved = resolveActiveEntries(entries);
+  if (resolved.unreadable !== null) {
+    return {
+      turns: [],
+      skippedEntryTypes: [],
+      skippedCount: 0,
+      unreadable: resolved.unreadable,
+    };
+  }
+  return {
+    ...contextEntriesToTurns(resolved.contextEntries),
+    unreadable: null,
+  };
+}
+
 /** Short human title: the session's own name, else its first user message. */
 export function titleFromEntries(entries: PiEntry[]): string | null {
   for (const entry of entries) {
@@ -219,24 +388,24 @@ export function titleFromEntries(entries: PiEntry[]): string | null {
 /** Keys Pi's mutating tools name their target with. */
 const PATH_ARGUMENT_KEYS = ["path", "file_path", "filePath", "file", "target"];
 
-/** Files the mutating tool calls of a session touched (FR-36). */
-export function changedPathsFrom(turns: CanonicalTurn[]): string[] {
+function changedPathOf(toolName: string, args: Record<string, unknown>): string | null {
+  if (toolEffectFor(toolName) !== "mutating") return null;
+  for (const key of PATH_ARGUMENT_KEYS) {
+    const value = args[key];
+    if (typeof value === "string" && value.trim().length > 0) return value;
+  }
+  return null;
+}
+
+/** Files named by raw Pi tool inputs, before canonical credential redaction. */
+export function changedPathsFromEntries(entries: PiEntry[]): string[] {
   const paths = new Set<string>();
-  for (const turn of turns) {
-    if (turn.toolCall?.effect !== "mutating") continue;
-    let args: unknown;
-    try {
-      args = JSON.parse(turn.toolCall.argumentsText);
-    } catch {
-      continue;
-    }
-    if (!isRecord(args)) continue;
-    for (const key of PATH_ARGUMENT_KEYS) {
-      const value = args[key];
-      if (typeof value === "string" && value.trim().length > 0) {
-        paths.add(value);
-        break;
-      }
+  for (const entry of entries) {
+    const message = entryMessage(entry);
+    if (message?.role !== "assistant") continue;
+    for (const call of toolCallBlocks(message.content)) {
+      const path = changedPathOf(call.name, call.arguments);
+      if (path !== null) paths.add(path);
     }
   }
   return [...paths];

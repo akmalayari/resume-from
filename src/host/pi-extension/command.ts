@@ -80,7 +80,7 @@ async function runResumeFrom(
   }
 
   // Pi's own context is the runtime handle the Pi adapter switches with (FR-44).
-  const landing = await pipeline.commit(request, ctx);
+  const landing = await pipeline.commit(request, ctx, report.confirmationToken);
   if (!landing.switched) present(deps.ui, landing);
 }
 

@@ -1,8 +1,8 @@
 // The only place in the system that creates files. It adds files to a target home, never touches a
-// file that already exists (FR-49), and either creates all of them or none (FR-53).
+// file that already exists (FR-49), and atomically publishes at most one file (FR-53).
 //
-// Strategy: stage every file under a temporary name in its destination directory, then place them
-// all with `link`, which fails rather than overwrites. Staging first is what makes an interrupted
+// Strategy: stage the file under a temporary name in its destination directory, then place it with
+// `link`, which fails rather than overwrites. Staging first is what makes an interrupted
 // commit leave no destination file at all; `link` instead of `rename` is what makes the check-then-
 // place race fail the commit instead of destroying a file that appeared (C-3).
 //
@@ -11,8 +11,8 @@
 
 import { randomBytes } from "node:crypto";
 import { constants } from "node:fs";
-import { access, link, lstat, mkdir, open, rmdir, stat, unlink } from "node:fs/promises";
-import { dirname, isAbsolute, join, resolve } from "node:path";
+import { access, link, lstat, mkdir, open, realpath, stat, unlink } from "node:fs/promises";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import type {
   CommitError,
   CommitHandle,
@@ -28,17 +28,34 @@ const TEMPORARY_SUFFIX = ".tmp";
 interface Staged {
   temporary: string;
   destination: string;
+  identity: FileIdentity;
+}
+
+interface FileIdentity {
+  dev: number;
+  ino: number;
+}
+
+interface OwnedPath extends FileIdentity {
+  path: string;
 }
 
 class CommitFailure extends Error implements CommitError {
   readonly refusal: CommitRefusal;
   readonly path: string | null;
+  readonly remainingPaths?: string[];
 
-  constructor(refusal: CommitRefusal, path: string | null, message: string) {
+  constructor(
+    refusal: CommitRefusal,
+    path: string | null,
+    message: string,
+    remainingPaths?: string[],
+  ) {
     super(message);
     this.name = "CommitError";
     this.refusal = refusal;
     this.path = path;
+    if (remainingPaths !== undefined) this.remainingPaths = remainingPaths;
   }
 }
 
@@ -47,38 +64,116 @@ export function createFileCommitter(): FileCommitter {
   return { commit };
 }
 
-async function commit(files: PendingFile[]): Promise<CommitHandle> {
-  checkPaths(files);
-  await checkDestinations(files);
-
-  const createdDirs: string[] = [];
-  const createdFiles: string[] = [];
+async function commit(root: string, files: PendingFile[]): Promise<CommitHandle> {
+  checkCardinality(files);
+  checkPaths(root, files);
+  const createdDirs: OwnedPath[] = [];
+  const createdFiles: OwnedPath[] = [];
   const staged: Staged[] = [];
+  if (files.length === 0) {
+    return { createdPaths: [] };
+  }
+
+  let resolvedRoot: string;
+  try {
+    await createTargetRoot(root, createdDirs);
+    await verifyOwnedDirectories(createdDirs);
+    resolvedRoot = await checkDestinations(root, files);
+    await verifyOwnedDirectories(createdDirs);
+  } catch (error) {
+    const remainingPaths = [
+      ...remainingFrom(error),
+      ...createdPathNames(createdFiles, createdDirs),
+    ];
+    throw asCommitFailure(error, remainingPaths);
+  }
+
   try {
     for (const file of files) {
-      await createParents(dirname(file.absolutePath), createdDirs);
-      staged.push(await stage(file));
+      await createParents(dirname(file.absolutePath), resolvedRoot, createdDirs);
+      await checkResolvedInside(resolvedRoot, dirname(file.absolutePath));
+      staged.push(await stage(file, resolvedRoot));
     }
     for (const item of staged) {
       await place(item);
-      createdFiles.push(item.destination);
+      createdFiles.push({ path: item.destination, ...item.identity });
     }
   } catch (error) {
-    await discard(staged);
-    await removeCreated(createdFiles, createdDirs);
-    throw asCommitFailure(error);
+    const temporaryPaths = await discard(staged);
+    const remainingPaths = [
+      ...remainingFrom(error),
+      ...temporaryPaths,
+      ...createdPathNames(createdFiles, createdDirs),
+    ];
+    throw asCommitFailure(error, remainingPaths);
   }
 
-  return {
-    createdPaths: [...createdFiles],
-    rollback: async () => {
-      await removeCreated(createdFiles, createdDirs);
-    },
-  };
+  const remainingTemporaryPaths = await discard(staged);
+  if (remainingTemporaryPaths.length > 0) {
+    const remainingPaths = [
+      ...remainingTemporaryPaths,
+      ...createdPathNames(createdFiles, createdDirs),
+    ];
+    throw cleanupFailure(remainingPaths);
+  }
+
+  return { createdPaths: createdFiles.map(({ path }) => path) };
+}
+
+function checkCardinality(files: PendingFile[]): void {
+  if (files.length <= 1) return;
+  throw new CommitFailure(
+    "write-failed",
+    null,
+    `Refused to create ${files.length} files in one commit. A session must serialize to one file so placement is atomic across process interruption.`,
+  );
+}
+
+/** Creates a missing target root as part of this commit and records it for failure reporting. */
+async function createTargetRoot(root: string, createdDirs: OwnedPath[]): Promise<void> {
+  const missing: string[] = [];
+  let current = root;
+  while (!(await exists(current))) {
+    missing.push(current);
+    const parent = dirname(current);
+    if (parent === current) break;
+    current = parent;
+  }
+  for (const missingDir of missing.reverse()) {
+    try {
+      await mkdir(missingDir, { mode: 0o700 });
+      const info = await lstat(missingDir);
+      createdDirs.push({ path: missingDir, dev: info.dev, ino: info.ino });
+    } catch (error) {
+      if (codeOf(error) === "EEXIST") continue;
+      throw new CommitFailure("write-failed", missingDir, writeFailed(missingDir, error));
+    }
+  }
+}
+
+async function verifyOwnedDirectories(directories: OwnedPath[]): Promise<void> {
+  for (const owned of directories) {
+    const info = await lstat(owned.path).catch(() => null);
+    if (info === null || !info.isDirectory() || !sameIdentity(owned, info)) {
+      throw new CommitFailure(
+        "write-failed",
+        owned.path,
+        `Refused to use target root "${owned.path}": it changed while it was being created.`,
+      );
+    }
+  }
 }
 
 /** Refuses what no filesystem call could tell us: a relative path, or the same path listed twice. */
-function checkPaths(files: PendingFile[]): void {
+function checkPaths(root: string, files: PendingFile[]): void {
+  if (!isAbsolute(root)) {
+    throw new CommitFailure(
+      "write-failed",
+      root,
+      `Refused to use target root "${root}": the root is not absolute.`,
+    );
+  }
+  const normalizedRoot = resolve(root);
   const seen = new Set<string>();
   for (const file of files) {
     const path = file.absolutePath;
@@ -90,6 +185,13 @@ function checkPaths(files: PendingFile[]): void {
       );
     }
     const key = resolve(path);
+    if (!isInside(normalizedRoot, key)) {
+      throw new CommitFailure(
+        "write-failed",
+        path,
+        `Refused to write "${path}": it is outside the target root "${root}".`,
+      );
+    }
     if (seen.has(key)) {
       throw new CommitFailure(
         "write-failed",
@@ -102,7 +204,22 @@ function checkPaths(files: PendingFile[]): void {
 }
 
 /** Runs before the first byte is written: nothing may exist, and every destination must be reachable. */
-async function checkDestinations(files: PendingFile[]): Promise<void> {
+async function checkDestinations(root: string, files: PendingFile[]): Promise<string> {
+  let resolvedRoot: string;
+  try {
+    const rootInfo = await stat(root);
+    if (!rootInfo.isDirectory()) {
+      throw new CommitFailure(
+        "not-writable",
+        root,
+        `Refused to use target root "${root}": it is not a directory.`,
+      );
+    }
+    resolvedRoot = await realpath(root);
+  } catch (error) {
+    if (error instanceof CommitFailure) throw error;
+    throw new CommitFailure("not-writable", root, notWritable(root));
+  }
   for (const file of files) {
     if (await exists(file.absolutePath)) {
       throw new CommitFailure("path-exists", file.absolutePath, alreadyExists(file.absolutePath));
@@ -117,36 +234,78 @@ async function checkDestinations(files: PendingFile[]): Promise<void> {
     // No ancestor at all, or an ancestor that is not a directory: only the write can say what is
     // wrong there, and it reports it as a failed write.
     if (anchor === null || !anchor.isDirectory) continue;
+    await checkResolvedInside(resolvedRoot, anchor.path);
     try {
       await access(anchor.path, constants.W_OK | constants.X_OK);
     } catch {
       throw new CommitFailure("not-writable", anchor.path, notWritable(anchor.path));
     }
   }
+  return resolvedRoot;
 }
 
-/** Writes the bytes under a temporary name in the destination directory. */
-async function stage(file: PendingFile): Promise<Staged> {
+/** Opens an empty temporary file, proves where its inode lives, then writes through the stable FD. */
+async function stage(file: PendingFile, resolvedRoot: string): Promise<Staged> {
   const destination = file.absolutePath;
   const temporary = join(
     dirname(destination),
     `${TEMPORARY_PREFIX}${randomBytes(8).toString("hex")}${TEMPORARY_SUFFIX}`,
   );
+  let identity: FileIdentity | null = null;
   try {
-    const handle = await open(temporary, "wx");
+    const handle = await open(temporary, "wx", 0o600);
     try {
+      const info = await handle.stat();
+      identity = { dev: info.dev, ino: info.ino };
+      await verifyFileInside(resolvedRoot, temporary, identity);
       await handle.writeFile(file.bytes);
+      return {
+        temporary,
+        destination,
+        identity,
+      };
     } finally {
       await handle.close();
     }
   } catch (error) {
-    await unlink(temporary).catch(() => undefined);
+    if (identity !== null && !(await removeOwnedFile({ path: temporary, ...identity }))) {
+      throw new CommitFailure(
+        "write-failed",
+        destination,
+        `${writeFailed(destination, error)} Cleanup was incomplete. This path may still exist; inspect it before retrying: ${temporary}.`,
+        [temporary],
+      );
+    }
     throw new CommitFailure("write-failed", destination, writeFailed(destination, error));
   }
-  return { temporary, destination };
 }
 
-/** Moves a staged file to its destination. Never overwrites: `link` fails when the path exists. */
+async function verifyFileInside(
+  resolvedRoot: string,
+  path: string,
+  identity: FileIdentity,
+): Promise<void> {
+  const resolvedPath = await realpath(path).catch((error: unknown) => {
+    throw new CommitFailure("write-failed", path, writeFailed(path, error));
+  });
+  const current = await lstat(path).catch(() => null);
+  if (current === null || !current.isFile() || !sameIdentity(identity, current)) {
+    throw new CommitFailure(
+      "write-failed",
+      path,
+      `Refused to stage through "${path}": it changed after the file was opened.`,
+    );
+  }
+  if (!isInside(resolvedRoot, resolvedPath)) {
+    throw new CommitFailure(
+      "write-failed",
+      path,
+      `Refused to stage through "${path}": it resolves outside the target root.`,
+    );
+  }
+}
+
+/** Publishes a staged file at its destination. Never overwrites: `link` fails if the path exists. */
 async function place({ temporary, destination }: Staged): Promise<void> {
   try {
     await link(temporary, destination);
@@ -156,11 +315,14 @@ async function place({ temporary, destination }: Staged): Promise<void> {
     }
     throw new CommitFailure("write-failed", destination, writeFailed(destination, error));
   }
-  await unlink(temporary).catch(() => undefined);
 }
 
 /** Creates the missing directories of a chain, recording only the ones this commit created. */
-async function createParents(directory: string, createdDirs: string[]): Promise<void> {
+async function createParents(
+  directory: string,
+  resolvedRoot: string,
+  createdDirs: OwnedPath[],
+): Promise<void> {
   const missing: string[] = [];
   let current = directory;
   while (!(await exists(current))) {
@@ -171,8 +333,10 @@ async function createParents(directory: string, createdDirs: string[]): Promise<
   }
   for (const missingDir of missing.reverse()) {
     try {
-      await mkdir(missingDir);
-      createdDirs.push(missingDir);
+      await mkdir(missingDir, { mode: 0o700 });
+      await checkResolvedInside(resolvedRoot, missingDir);
+      const info = await lstat(missingDir);
+      createdDirs.push({ path: missingDir, dev: info.dev, ino: info.ino });
     } catch (error) {
       if (codeOf(error) === "EEXIST") continue; // someone else created it; not ours to remove
       throw new CommitFailure("write-failed", missingDir, writeFailed(missingDir, error));
@@ -180,24 +344,66 @@ async function createParents(directory: string, createdDirs: string[]): Promise<
   }
 }
 
-/** Removes leftover staged files. Best effort: a leftover must never fail a commit. */
-async function discard(staged: Staged[]): Promise<void> {
+/** Removes leftover staged files and returns the exact paths that could not be removed. */
+async function discard(staged: Staged[]): Promise<string[]> {
+  const remaining: string[] = [];
   for (const item of staged) {
-    await unlink(item.temporary).catch(() => undefined);
+    const owned = { path: item.temporary, ...item.identity };
+    if (!(await removeOwnedFile(owned))) remaining.push(item.temporary);
+  }
+  return remaining;
+}
+
+/** Lists paths created by the commit, with directories ordered deepest first. */
+function createdPathNames(files: OwnedPath[], directories: OwnedPath[]): string[] {
+  return [...files.map(({ path }) => path), ...[...directories].reverse().map(({ path }) => path)];
+}
+
+async function removeOwnedFile(owned: OwnedPath): Promise<boolean> {
+  const current = await identityAt(owned.path);
+  if (current === null) return true;
+  if (!sameIdentity(owned, current)) return false;
+  try {
+    await unlink(owned.path);
+    return true;
+  } catch (error) {
+    return isAbsent(error);
   }
 }
 
-/**
- * Removes exactly what a commit created, deepest first, and nothing else. Every failure is ignored,
- * which is what makes rollback idempotent and safe after a manual deletion.
- */
-async function removeCreated(files: string[], directories: string[]): Promise<void> {
-  for (const file of files) {
-    await unlink(file).catch(() => undefined);
+async function identityAt(path: string): Promise<FileIdentity | null> {
+  try {
+    const info = await lstat(path);
+    return { dev: info.dev, ino: info.ino };
+  } catch (error) {
+    if (isAbsent(error)) return null;
+    return { dev: Number.NaN, ino: Number.NaN };
   }
-  for (const directory of [...directories].reverse()) {
-    await rmdir(directory).catch(() => undefined); // silently keeps a directory that is not empty
+}
+
+function sameIdentity(left: FileIdentity, right: FileIdentity): boolean {
+  return left.dev === right.dev && left.ino === right.ino;
+}
+
+async function checkResolvedInside(resolvedRoot: string, path: string): Promise<void> {
+  const resolvedPath = await realpath(path).catch((error: unknown) => {
+    throw new CommitFailure("not-writable", path, writeFailed(path, error));
+  });
+  if (!isInside(resolvedRoot, resolvedPath)) {
+    throw new CommitFailure(
+      "write-failed",
+      path,
+      `Refused to write through "${path}": it resolves outside the target root.`,
+    );
   }
+}
+
+function isInside(root: string, path: string): boolean {
+  const fromRoot = relative(root, path);
+  return (
+    fromRoot === "" ||
+    (!isAbsolute(fromRoot) && !fromRoot.startsWith(`..${sep}`) && fromRoot !== "..")
+  );
 }
 
 /** True when the path is taken, symlinks included — a dangling symlink is still a taken path. */
@@ -226,12 +432,42 @@ async function nearestExisting(
   }
 }
 
-function asCommitFailure(error: unknown): CommitError {
+function asCommitFailure(error: unknown, remainingPaths: string[]): CommitError {
+  if (remainingPaths.length > 0) {
+    const original = error instanceof Error ? `${error.message} ` : "";
+    return new CommitFailure(
+      "write-failed",
+      null,
+      `${original}Cleanup was incomplete. These paths were retained or may still exist; inspect them before retrying: ${remainingPaths.join(", ")}.`,
+      remainingPaths,
+    );
+  }
   if (error instanceof CommitFailure) return error;
   return new CommitFailure(
     "write-failed",
     null,
-    `Failed to write the requested files: ${reasonOf(error)}. Nothing was left behind — every file this commit created was removed. Check the target and the free space, then run the command again.`,
+    `Failed to write the requested file: ${reasonOf(error)}. No destination was published. Check the target and the free space, then run the command again.`,
+  );
+}
+
+function remainingFrom(error: unknown): string[] {
+  if (
+    typeof error !== "object" ||
+    error === null ||
+    !("remainingPaths" in error) ||
+    !Array.isArray(error.remainingPaths)
+  ) {
+    return [];
+  }
+  return error.remainingPaths.filter((path): path is string => typeof path === "string");
+}
+
+function cleanupFailure(remainingPaths: string[]): CommitFailure {
+  return new CommitFailure(
+    "write-failed",
+    null,
+    `Cleanup was incomplete. These paths were retained or may still exist; inspect them before retrying: ${remainingPaths.join(", ")}.`,
+    remainingPaths,
   );
 }
 
@@ -244,7 +480,7 @@ function notWritable(directory: string): string {
 }
 
 function writeFailed(path: string, cause: unknown): string {
-  return `Failed to write "${path}": ${reasonOf(cause)}. Nothing was left behind — every file this commit created was removed. Check the path and the free space, then run the command again.`;
+  return `Failed to write "${path}": ${reasonOf(cause)}. Check the path and the free space, then run the command again.`;
 }
 
 function codeOf(error: unknown): string {
@@ -252,6 +488,11 @@ function codeOf(error: unknown): string {
     return String((error as { code: unknown }).code);
   }
   return "";
+}
+
+function isAbsent(error: unknown): boolean {
+  const code = codeOf(error);
+  return code === "ENOENT" || code === "ENOTDIR";
 }
 
 function reasonOf(error: unknown): string {

@@ -278,7 +278,12 @@ export function interfaceMembers(source: Source): TypeMember[] {
     for (const member of statement.members) {
       const name = member.name === undefined ? "" : member.name.getText(source.ast);
       if (ts.isMethodSignature(member)) {
-        members.push({ owner: statement.name.text, name, type: "", isMethod: true });
+        members.push({
+          owner: statement.name.text,
+          name,
+          type: "",
+          isMethod: true,
+        });
       } else if (ts.isPropertySignature(member)) {
         members.push({
           owner: statement.name.text,
@@ -382,6 +387,344 @@ export function section(text: string, name: string): string | null {
   return next === -1 ? text.slice(from) : text.slice(from, from + next);
 }
 
+// ---------------------------------------------------------------------------
+// Contract restatement validation
+// ---------------------------------------------------------------------------
+
+/** One module document supplied to the project-owned restatement validator. */
+export interface ModuleDocument {
+  /** Repository-relative path, for example `src/host/module.md`. */
+  path: string;
+  text: string;
+}
+
+/** One actionable defect in a contract restatement. */
+export interface RestatementDefect {
+  document: string;
+  line: number;
+  type: string;
+  message: string;
+}
+
+interface ContractMarker {
+  document: string;
+  line: number;
+  types: string[];
+  owner: string;
+  subset: boolean;
+  fence: ContractFence;
+}
+
+interface ContractFence {
+  document: string;
+  openLine: number;
+  code: string;
+}
+
+interface ContractDeclaration {
+  document: string;
+  line: number;
+  name: string;
+  lines: string[];
+}
+
+const CONTRACT_MARKER =
+  /^<!--\s*contract:\s*(.+?)\s+(?:—|–|-{1,2})\s+restated from\s+(\S+?)(?:\s+\(\s*subset:\s*([^)]*?)\s*\))?\s*-->$/u;
+const CONTRACT_MARKER_START = "<!-- contract:";
+const CODE_FENCE = /^```[^`\s]*\s*$/u;
+
+/**
+ * Checks every contract marker without a personal plugin, Python, or a subprocess.
+ * Exact restatements match declaration-for-declaration. A marker that explicitly
+ * declares a subset may omit owner lines, but may not add or rewrite them.
+ */
+export function validateContractRestatements(
+  documents: readonly ModuleDocument[],
+): RestatementDefect[] {
+  const defects: RestatementDefect[] = [];
+  const byPath = new Map(
+    documents.map((document) => [normalizeDocumentPath(document.path), document]),
+  );
+  const ownerDeclarations = new Map<string, Map<string, ContractDeclaration[]>>();
+  const markers = documents.flatMap((document) => markersOf(document, defects));
+
+  for (const marker of markers) {
+    const actual = declarationsOf(marker.fence);
+    const actualNames = [...actual.keys()].sort();
+    const markerNames = [...marker.types].sort();
+    if (!sameStrings(actualNames, markerNames)) {
+      defects.push({
+        document: marker.document,
+        line: marker.line,
+        type: "marker",
+        message:
+          `marker names [${markerNames.join(", ")}] but its fence declares ` +
+          `[${actualNames.join(", ")}]`,
+      });
+    }
+
+    const ownerPath = normalizeDocumentPath(marker.owner);
+    const owner = byPath.get(ownerPath);
+    if (owner === undefined) {
+      defects.push({
+        document: marker.document,
+        line: marker.line,
+        type: "owner",
+        message: `owner ${marker.owner} does not exist in the design tree`,
+      });
+      continue;
+    }
+
+    let available = ownerDeclarations.get(ownerPath);
+    if (available === undefined) {
+      available = publicDeclarationsOf(owner, defects);
+      ownerDeclarations.set(ownerPath, available);
+    }
+
+    for (const type of marker.types) {
+      const candidate = actual.get(type);
+      if (candidate === undefined) continue;
+      const owners = available.get(type) ?? [];
+      if (owners.length !== 1) {
+        defects.push({
+          document: marker.document,
+          line: marker.line,
+          type,
+          message:
+            owners.length === 0
+              ? `${marker.owner} does not declare ${type} in its Public Contract`
+              : `${marker.owner} declares ${type} ${owners.length} times in its Public Contract`,
+        });
+        continue;
+      }
+
+      const expected = owners[0];
+      if (expected === undefined) continue;
+      const matches = marker.subset
+        ? isLineSubsequence(candidate.lines, expected.lines)
+        : sameStrings(candidate.lines, expected.lines);
+      if (matches) continue;
+
+      defects.push({
+        document: marker.document,
+        line: candidate.line,
+        type,
+        message:
+          `${marker.subset ? "declared subset" : "restatement"} differs from ` +
+          `${marker.owner}:${expected.line}; ${differenceOf(candidate.lines, expected.lines, marker.subset)}`,
+      });
+    }
+  }
+
+  return defects;
+}
+
+/** Stable, readable output for one Vitest assertion. */
+export function formatRestatementDefects(defects: readonly RestatementDefect[]): string {
+  return defects
+    .map((defect) => `${defect.document}:${defect.line} [${defect.type}] ${defect.message}`)
+    .join("\n");
+}
+
+function markersOf(document: ModuleDocument, defects: RestatementDefect[]): ContractMarker[] {
+  const lines = document.text.split(/\r?\n/u);
+  const markers: ContractMarker[] = [];
+  let insideFence = false;
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index] ?? "";
+    if (line.startsWith("```")) {
+      insideFence = !insideFence;
+      continue;
+    }
+    if (insideFence || !line.includes(CONTRACT_MARKER_START)) continue;
+
+    const parsed = CONTRACT_MARKER.exec(line);
+    if (parsed === null) {
+      defects.push({
+        document: document.path,
+        line: index + 1,
+        type: "marker",
+        message: "malformed contract restatement marker",
+      });
+      continue;
+    }
+
+    const next = lines[index + 1] ?? "";
+    if (!CODE_FENCE.test(next)) {
+      defects.push({
+        document: document.path,
+        line: index + 1,
+        type: "marker",
+        message: "marker must be immediately followed by a code fence",
+      });
+      continue;
+    }
+
+    const close = closingFence(lines, index + 1);
+    if (close === null) {
+      defects.push({
+        document: document.path,
+        line: index + 2,
+        type: "marker",
+        message: "contract code fence is not closed",
+      });
+      continue;
+    }
+
+    const types = (parsed[1] ?? "")
+      .split(",")
+      .map((type) => type.trim())
+      .filter((type) => type.length > 0);
+    markers.push({
+      document: document.path,
+      line: index + 1,
+      types,
+      owner: parsed[2] ?? "",
+      subset: parsed[3] !== undefined,
+      fence: {
+        document: document.path,
+        openLine: index + 2,
+        code: lines.slice(index + 2, close).join("\n"),
+      },
+    });
+  }
+
+  return markers;
+}
+
+function publicDeclarationsOf(
+  document: ModuleDocument,
+  defects: RestatementDefect[],
+): Map<string, ContractDeclaration[]> {
+  const lines = document.text.split(/\r?\n/u);
+  const start = lines.findIndex((line) => line.trim() === "## Public Contract");
+  if (start === -1) return new Map();
+  const nextSection = lines.findIndex((line, index) => index > start && line.startsWith("## "));
+  const end = nextSection === -1 ? lines.length : nextSection;
+  const declarations = new Map<string, ContractDeclaration[]>();
+
+  for (let index = start + 1; index < end; index += 1) {
+    if (!CODE_FENCE.test(lines[index] ?? "")) continue;
+    const close = closingFence(lines, index);
+    if (close === null || close > end) {
+      defects.push({
+        document: document.path,
+        line: index + 1,
+        type: "owner",
+        message: "Public Contract code fence is not closed",
+      });
+      break;
+    }
+    const fence: ContractFence = {
+      document: document.path,
+      openLine: index + 1,
+      code: lines.slice(index + 1, close).join("\n"),
+    };
+    for (const [name, declaration] of declarationsOf(fence)) {
+      const existing = declarations.get(name) ?? [];
+      existing.push(declaration);
+      declarations.set(name, existing);
+    }
+    index = close;
+  }
+
+  return declarations;
+}
+
+function declarationsOf(fence: ContractFence): Map<string, ContractDeclaration> {
+  const source = ts.createSourceFile(
+    fence.document,
+    fence.code,
+    ts.ScriptTarget.ES2023,
+    true,
+    ts.ScriptKind.TS,
+  );
+  const declarations = new Map<string, ContractDeclaration>();
+  for (const statement of source.statements) {
+    const name = declarationName(statement);
+    if (name === null) continue;
+    const { line } = source.getLineAndCharacterOfPosition(statement.getStart(source));
+    declarations.set(name, {
+      document: fence.document,
+      line: fence.openLine + line + 1,
+      name,
+      lines: normalizedDeclaration(statement.getFullText(source)),
+    });
+  }
+  return declarations;
+}
+
+function declarationName(statement: ts.Statement): string | null {
+  if (
+    ts.isInterfaceDeclaration(statement) ||
+    ts.isTypeAliasDeclaration(statement) ||
+    ts.isClassDeclaration(statement) ||
+    ts.isEnumDeclaration(statement) ||
+    ts.isFunctionDeclaration(statement)
+  ) {
+    return statement.name?.text ?? null;
+  }
+  return null;
+}
+
+function normalizedDeclaration(text: string): string[] {
+  return text
+    .trim()
+    .split(/\r?\n/u)
+    .map((line) => line.trimEnd())
+    .filter((line) => line.trim().length > 0);
+}
+
+function closingFence(lines: readonly string[], open: number): number | null {
+  for (let index = open + 1; index < lines.length; index += 1) {
+    if ((lines[index] ?? "").startsWith("```")) return index;
+  }
+  return null;
+}
+
+function normalizeDocumentPath(path: string): string {
+  return path.replaceAll("\\", "/").replace(/^\.\//u, "").replace(/\/+$/u, "");
+}
+
+function sameStrings(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
+}
+
+function isLineSubsequence(actual: readonly string[], expected: readonly string[]): boolean {
+  let cursor = 0;
+  for (const line of actual) {
+    while (cursor < expected.length && expected[cursor] !== line) cursor += 1;
+    if (cursor === expected.length) return false;
+    cursor += 1;
+  }
+  return true;
+}
+
+function differenceOf(
+  actual: readonly string[],
+  expected: readonly string[],
+  subset: boolean,
+): string {
+  if (subset) {
+    let cursor = 0;
+    for (const line of actual) {
+      while (cursor < expected.length && expected[cursor] !== line) cursor += 1;
+      if (cursor === expected.length) return `unexpected line ${JSON.stringify(line)}`;
+      cursor += 1;
+    }
+  }
+  const count = Math.max(actual.length, expected.length);
+  for (let index = 0; index < count; index += 1) {
+    if (actual[index] === expected[index]) continue;
+    return (
+      `first difference at declaration line ${index + 1}: expected ` +
+      `${JSON.stringify(expected[index] ?? "<end>")}, got ${JSON.stringify(actual[index] ?? "<end>")}`
+    );
+  }
+  return "declarations differ";
+}
+
 /** A module path as the documents write it: backticks off, trailing slash off. */
 export const normalizePath = (raw: string): string =>
   raw.replace(/`/g, "").trim().replace(/\/+$/, "");
@@ -440,7 +783,13 @@ export const rankOf = (left: string, right: string): number =>
   Math.max(depthOf(left), depthOf(right)) - depthOf(lcaOf(left, right));
 
 /** The Fibonacci distance scale of the fractal-design model. */
-const DISTANCE_BY_RANK: Record<number, number> = { 0: 0, 1: 1, 2: 2, 3: 3, 4: 5 };
+const DISTANCE_BY_RANK: Record<number, number> = {
+  0: 0,
+  1: 1,
+  2: 2,
+  3: 3,
+  4: 5,
+};
 
 export const distanceOf = (rank: number): number => DISTANCE_BY_RANK[rank] ?? 8;
 
@@ -761,7 +1110,11 @@ export async function bench(options: BenchOptions = {}): Promise<Bench> {
     ? [
         ...AGENTS,
         {
-          create: () => createFixtureAgentAdapter({ defaultHome: fixtureHome, cwd: REPO_ROOT }),
+          create: () =>
+            createFixtureAgentAdapter({
+              defaultHome: fixtureHome,
+              cwd: REPO_ROOT,
+            }),
           family: "generic",
         },
       ]

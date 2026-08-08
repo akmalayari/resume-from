@@ -128,7 +128,11 @@ function workedSession(): CanonicalSession {
       title: FIRST_REQUEST,
       startedAt: "2026-08-01T09:00:00Z",
       updatedAt: "2026-08-01T09:30:00Z",
-      repo: { commit: null, branch: "main", changedPaths: ["src/auth/token-1.ts"] },
+      repo: {
+        commit: null,
+        branch: "main",
+        changedPaths: ["src/auth/token-1.ts"],
+      },
     },
     turns,
   };
@@ -180,7 +184,10 @@ async function codexAppServer(
         buffer = buffer.slice(cut + 1);
         cut = buffer.indexOf("\n");
         if (line === "") continue;
-        const message = JSON.parse(line) as { id?: number; result?: Record<string, unknown> };
+        const message = JSON.parse(line) as {
+          id?: number;
+          result?: Record<string, unknown>;
+        };
         if (typeof message.id === "number" && wanted.has(message.id)) {
           results.set(message.id, message.result ?? {});
           wanted.delete(message.id);
@@ -209,7 +216,9 @@ async function codexAppServer(
 /** The installed Pi package root, found through the `pi` binary on PATH. */
 function findPiPackage(): string | null {
   try {
-    const binary = execFileSync("/usr/bin/env", ["which", "pi"], { encoding: "utf8" }).trim();
+    const binary = execFileSync("/usr/bin/env", ["which", "pi"], {
+      encoding: "utf8",
+    }).trim();
     if (binary === "") return null;
     // <package>/dist/cli.js
     return resolve(dirname(realpathSync(binary)), "..");
@@ -224,7 +233,9 @@ interface PiSessionManagerModule {
       path: string,
       sessionDir?: string,
       cwdOverride?: string,
-    ): { buildSessionContext(): { messages: { role: string; content: unknown }[] } };
+    ): {
+      buildSessionContext(): { messages: { role: string; content: unknown }[] };
+    };
     list(cwd: string, sessionDir?: string): Promise<{ path: string; id: string }[]>;
   };
 }
@@ -275,7 +286,9 @@ describe.skipIf(!live)("T-ROO-13 — live: the acceptance test", () => {
     interface Thread {
       id: string;
       preview: string;
-      turns: { items: { type: string; text?: string; content?: { text: string }[] }[] }[];
+      turns: {
+        items: { type: string; text?: string; content?: { text: string }[] }[];
+      }[];
     }
     const threads = (answers.get(1)?.data ?? []) as Thread[];
     const listed = threads.find((thread) => thread.id === sourceId);
@@ -325,7 +338,11 @@ describe.skipIf(!live)("T-ROO-13 — live: the acceptance test", () => {
     expect(report.lines.join("\n")).toContain(FIRST_REQUEST);
 
     // The preview is confirmed. Only now is anything written (FR-20).
-    const result = await pipeline.commit(request, fakePiRuntime(REPO_ROOT, profile.home));
+    const result = await pipeline.commit(
+      request,
+      fakePiRuntime(REPO_ROOT, profile.home),
+      report.confirmationToken,
+    );
     expect(result.itemsStored).toBe(result.itemsSent);
 
     const piPackage = findPiPackage();

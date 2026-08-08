@@ -107,7 +107,7 @@ describe("T-TRA-27 no input or output", () => {
 
   test("the tight, the blocked, the broken and the empty cases all work", () => {
     const plans = sealed(() => ({
-      tight: rules.apply(sessionOf(richSession()), targetOf(2000), configOf(1, 5), charEstimator),
+      tight: rules.apply(sessionOf(richSession()), targetOf(3000), configOf(1, 5), charEstimator),
       blocked: rules.apply(
         sessionOf([userMessage(0, "x".repeat(5000))]),
         targetOf(1000),

@@ -8,11 +8,17 @@
 
 import { readFile } from "node:fs/promises";
 import type { HomePath, SessionId, StoredSessionFacts } from "./contract.js";
-import { parseJsonl, WRITTEN_ENTRY_TYPES } from "./entries.js";
+import { parseJsonl } from "./entries.js";
 import { findSessionFile } from "./layout.js";
+import { readSessionText } from "./reader.js";
+import { isStructurallyOpenable } from "./validation.js";
 
 export async function readBack(home: HomePath, sessionId: SessionId): Promise<StoredSessionFacts> {
-  const absent: StoredSessionFacts = { sessionId, itemCount: 0, openable: false };
+  const absent: StoredSessionFacts = {
+    sessionId,
+    itemCount: 0,
+    openable: false,
+  };
 
   const file = await findSessionFile(home, sessionId);
   if (file === null) return absent;
@@ -25,13 +31,14 @@ export async function readBack(home: HomePath, sessionId: SessionId): Promise<St
   }
 
   const { entries, unreadable } = parseJsonl(text);
-  const turns = entries.filter(
-    (entry) => typeof entry.type === "string" && WRITTEN_ENTRY_TYPES.includes(entry.type),
-  );
+  const read = unreadable === null ? readSessionText(text) : null;
   return {
     sessionId,
     itemCount: entries.length,
-    // The session sits where the resume list looks, it parses, and it holds turns to show.
-    openable: unreadable === null && turns.length > 0,
+    openable:
+      unreadable === null &&
+      read?.unreadable === null &&
+      read.turns.length > 0 &&
+      isStructurallyOpenable(entries, sessionId),
   };
 }

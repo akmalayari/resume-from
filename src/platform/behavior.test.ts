@@ -48,7 +48,9 @@ const exists = async (path: string): Promise<boolean> =>
 
 /** A fixed count, whatever the text. */
 const STUB_TOKENS = 7;
-const stubEstimators: EstimatorFactory = { forFamily: () => ({ estimate: () => STUB_TOKENS }) };
+const stubEstimators: EstimatorFactory = {
+  forFamily: () => ({ estimate: () => STUB_TOKENS }),
+};
 
 /** A repository reader that knows nothing: no root, no head, no distance. */
 const stubRepo: RepoReader = {
@@ -69,14 +71,16 @@ const stubConfig: ConfigLoader = {
 };
 
 /** A committer that records what it was asked to create, and creates nothing. */
-function recordingCommitter(): { store: FileCommitter; asked: PendingFile[][] } {
+function recordingCommitter(): {
+  store: FileCommitter;
+  asked: PendingFile[][];
+} {
   const asked: PendingFile[][] = [];
   const store: FileCommitter = {
-    commit: (files: PendingFile[]): Promise<CommitHandle> => {
+    commit: (_root: string, files: PendingFile[]): Promise<CommitHandle> => {
       asked.push(files);
       return Promise.resolve({
         createdPaths: files.map((file) => file.absolutePath),
-        rollback: () => Promise.resolve(),
       });
     },
   };
@@ -106,7 +110,12 @@ afterAll(async () => {
 });
 
 const work = (dir: string) =>
-  ({ name: "run", dir, family: "gpt", text: "some text worth counting", fileCount: 2 }) as const;
+  ({
+    name: "run",
+    dir,
+    family: "gpt",
+    text: "some text worth counting",
+  }) as const;
 
 /** A fresh working directory inside the repository, so every run lands somewhere of its own. */
 async function repoWorkdir(name: string): Promise<string> {
@@ -163,7 +172,7 @@ describe("T-PLA-9 every service is reachable through its interface alone", () =>
       service: "store",
       swap: () => ({ ...real, store: recordingCommitter().store }),
       check: async (outcome) => {
-        expect(outcome.handle.createdPaths).toHaveLength(2);
+        expect(outcome.handle.createdPaths).toHaveLength(1);
         for (const path of outcome.handle.createdPaths) expect(await exists(path)).toBe(false);
       },
     },
@@ -182,10 +191,7 @@ describe("T-PLA-9 every service is reachable through its interface alone", () =>
     await runImport({ ...real, store }, work(dir));
 
     expect(asked).toHaveLength(1);
-    expect(asked[0]?.map((file) => file.absolutePath)).toEqual([
-      join(dir, "landed", "run-0.json"),
-      join(dir, "landed", "run-1.json"),
-    ]);
+    expect(asked[0]?.map((file) => file.absolutePath)).toEqual([join(dir, "landed", "run.json")]);
     expect(await exists(join(dir, "landed"))).toBe(false);
   });
 
@@ -199,7 +205,10 @@ describe("T-PLA-9 every service is reachable through its interface alone", () =>
 
     const outside = own.flatMap((source) =>
       imports(source)
-        .map((record) => ({ record, target: resolveSpecifier(source.path, record.specifier) }))
+        .map((record) => ({
+          record,
+          target: resolveSpecifier(source.path, record.specifier),
+        }))
         .filter(({ target }) => target !== undefined && !isInside(target, PLATFORM_DIR))
         .map(({ record }) => `${source.path}: ${record.specifier}`),
     );

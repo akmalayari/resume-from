@@ -53,12 +53,13 @@ export type { HandoverInstruction, LandingError, LandingResult, LandingStage, Se
 
 import type {
   PreviewBuilder,
+  PreviewContent,
   PreviewReport,
   PreviewWarning,
   WarningKind,
 } from "./preview/contract.js";
 
-export type { PreviewBuilder, PreviewReport, PreviewWarning, WarningKind };
+export type { PreviewBuilder, PreviewContent, PreviewReport, PreviewWarning, WarningKind };
 
 import type {
   DropReason,
@@ -149,5 +150,9 @@ export interface ImportPipeline {
   /** Writes nothing (FR-16). */
   preview(request: ImportRequest): Promise<PreviewReport>;
   /** Runs only after the user confirmed the preview (FR-20). */
-  commit(request: ImportRequest, runtime: AgentRuntime): Promise<LandingResult>;
+  commit(
+    request: ImportRequest,
+    runtime: AgentRuntime,
+    confirmationToken: string,
+  ): Promise<LandingResult>;
 }

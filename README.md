@@ -39,19 +39,19 @@ The source session is never changed.
 
 Every source-to-target direction is supported, including transfers within the same agent:
 
-| Source \ Target | Pi | Claude Code | Codex |
-| --- | :---: | :---: | :---: |
-| **Pi** | ✓ | ✓ | ✓ |
-| **Claude Code** | ✓ | ✓ | ✓ |
-| **Codex** | ✓ | ✓ | ✓ |
+| Source \ Target | Pi  | Claude Code | Codex |
+| --------------- | :-: | :---------: | :---: |
+| **Pi**          |  ✓  |      ✓      |   ✓   |
+| **Claude Code** |  ✓  |      ✓      |   ✓   |
+| **Codex**       |  ✓  |      ✓      |   ✓   |
 
 The landing behavior depends on the target:
 
-| Target | After confirmation |
-| --- | --- |
-| **Pi** | Writes and opens the imported session in the current Pi process. |
-| **Claude Code** | Writes the session and prints `claude --resume <session-id>`. |
-| **Codex** | Writes the thread and prints `codex resume <thread-id>`. |
+| Target          | After confirmation                                               |
+| --------------- | ---------------------------------------------------------------- |
+| **Pi**          | Writes and opens the imported session in the current Pi process. |
+| **Claude Code** | Writes the session and prints `claude --resume <session-id>`.    |
+| **Codex**       | Writes the thread and prints `codex resume <thread-id>`.         |
 
 ## What crosses the boundary
 
@@ -120,7 +120,7 @@ Pi opens the imported session with an empty prompt. You decide when to continue.
 
 1. Run `/resume-from` to list matching sessions.
 2. Run `/resume-from <row>` to preview one.
-3. Run `/resume-from <row> --confirm` to import it.
+3. Run the token-bearing `/resume-from <row> --confirm <token>` command printed by the preview.
 4. Run the native resume command printed by the tool.
 
 You can also select an exact session ID or file path. Selection by path does not bypass the current-repository check.

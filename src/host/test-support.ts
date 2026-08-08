@@ -429,7 +429,7 @@ export async function seedSession(
     windowTokens: adapter.capabilities().defaultWindowTokens,
   };
   const serialized = adapter.serialize(session, target, markerFor(session));
-  await createFileCommitter().commit(serialized.files);
+  await createFileCommitter().commit(home, serialized.files);
   return serialized.sessionId;
 }
 

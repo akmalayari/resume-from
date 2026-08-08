@@ -127,7 +127,7 @@ describe.each(cases)(
         markerFor(REFERENCE_SESSION),
       );
 
-      expect(serialized.files.length).toBeGreaterThanOrEqual(1);
+      expect(serialized.files).toHaveLength(1);
       expect(serialized.itemCount).toBeGreaterThan(0);
       expect(serialized.sessionId.length).toBeGreaterThan(0);
       for (const file of serialized.files) {

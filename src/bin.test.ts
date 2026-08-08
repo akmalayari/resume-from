@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { HELP_TEXT, main } from "./bin.js";
+import { HELP_TEXT, main, readShimArgs } from "./bin.js";
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -31,5 +31,37 @@ describe("command help", () => {
     expect(exitCode).toBe(2);
     expect(stdout).not.toHaveBeenCalled();
     expect(stderr).toHaveBeenCalledWith(expect.stringContaining("resume-from --help"));
+  });
+});
+
+describe("trusted shim arguments", () => {
+  it("keeps every user argument after the delimiter untouched", () => {
+    expect(
+      readShimArgs([
+        "--target-agent",
+        "codex",
+        "--target-home",
+        "/home/with space",
+        "--",
+        "1",
+        "--target-agent",
+        "claude-code",
+      ]),
+    ).toEqual({
+      ok: true,
+      value: {
+        targetAgent: "codex",
+        targetHome: "/home/with space",
+        rest: ["1", "--target-agent", "claude-code"],
+      },
+    });
+  });
+
+  it.each([
+    ["missing delimiter", ["--target-agent", "codex"]],
+    ["duplicate target", ["--target-agent", "codex", "--target-agent", "pi", "--"]],
+    ["missing value", ["--target-agent", "--"]],
+  ])("rejects %s", (_name, argv) => {
+    expect(readShimArgs(argv)).toMatchObject({ ok: false });
   });
 });

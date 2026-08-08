@@ -55,6 +55,9 @@ function listing(rows: SessionDescriptor[], failures: HomeFailure[] = []): Listi
 
 function report(over: Partial<PreviewReport> = {}): PreviewReport {
   return {
+    confirmationToken:
+      over.confirmationToken ??
+      "v1-sha256-0000000000000000000000000000000000000000000000000000000000000000",
     headerLines: over.headerLines ?? ["From codex, into pi"],
     budgetLine: over.budgetLine ?? "Budget: 34k tokens of a 200k window",
     warnings: over.warnings ?? [],
@@ -89,7 +92,11 @@ interface PipelineStub {
   pipeline: ImportPipeline;
   listCalls: ListRequest[];
   previewCalls: ImportRequest[];
-  commitCalls: { request: ImportRequest; runtime: AgentRuntime }[];
+  commitCalls: {
+    request: ImportRequest;
+    runtime: AgentRuntime;
+    confirmationToken: string;
+  }[];
   order: string[];
 }
 
@@ -98,7 +105,7 @@ function stubPipeline(
     listing?: Listing;
     preview?: PreviewReport;
     landing?: LandingResult;
-    onCommit?: (request: ImportRequest, runtime: AgentRuntime) => void;
+    onCommit?: (request: ImportRequest, runtime: AgentRuntime, confirmationToken: string) => void;
   } = {},
 ): PipelineStub {
   const stub: PipelineStub = {
@@ -117,10 +124,10 @@ function stubPipeline(
         stub.order.push("preview");
         return opts.preview ?? report();
       },
-      async commit(request, runtime) {
-        stub.commitCalls.push({ request, runtime });
+      async commit(request, runtime, confirmationToken) {
+        stub.commitCalls.push({ request, runtime, confirmationToken });
         stub.order.push("commit");
-        opts.onCommit?.(request, runtime);
+        opts.onCommit?.(request, runtime, confirmationToken);
         return opts.landing ?? landing();
       },
     },
@@ -128,7 +135,11 @@ function stubPipeline(
   return stub;
 }
 
-function stubUi(answers: UserChoice[] = []): { ui: PiUi; blocks: string[][]; asked: string[] } {
+function stubUi(answers: UserChoice[] = []): {
+  ui: PiUi;
+  blocks: string[][];
+  asked: string[];
+} {
   const blocks: string[][] = [];
   const asked: string[] = [];
   const queue = [...answers];
@@ -147,7 +158,10 @@ function stubUi(answers: UserChoice[] = []): { ui: PiUi; blocks: string[][]; ask
   };
 }
 
-function stubPicker(result: PickResult): { picker: SessionPicker; calls: Listing[] } {
+function stubPicker(result: PickResult): {
+  picker: SessionPicker;
+  calls: Listing[];
+} {
   const calls: Listing[] = [];
   return {
     calls,
@@ -202,7 +216,11 @@ function stubContext(over: { cwd?: string; home?: string } = {}): ContextStub {
 }
 
 function deps(over: Partial<ResumeFromDeps> & { picker: SessionPicker; ui: PiUi }): ResumeFromDeps {
-  return { picker: over.picker, ui: over.ui, windowTokens: over.windowTokens ?? PI_WINDOW };
+  return {
+    picker: over.picker,
+    ui: over.ui,
+    windowTokens: over.windowTokens ?? PI_WINDOW,
+  };
 }
 
 // ---------------------------------------------------------------- unit tests
@@ -263,12 +281,23 @@ describe("T-PIX-4 — Escape cancels", () => {
 });
 
 describe("T-PIX-5 — an argument skips the picker", () => {
-  const cases: { name: string; argument: string; selection: ImportRequest["selection"] }[] = [
-    { name: "a session ID", argument: "cx-1", selection: { by: "session-id", id: "cx-1" } },
+  const cases: {
+    name: string;
+    argument: string;
+    selection: ImportRequest["selection"];
+  }[] = [
+    {
+      name: "a session ID",
+      argument: "cx-1",
+      selection: { by: "session-id", id: "cx-1" },
+    },
     {
       name: "an absolute file path",
       argument: "/Users/me/.codex/sessions/cx-1.jsonl",
-      selection: { by: "file-path", path: "/Users/me/.codex/sessions/cx-1.jsonl" },
+      selection: {
+        by: "file-path",
+        path: "/Users/me/.codex/sessions/cx-1.jsonl",
+      },
     },
   ];
 
@@ -296,7 +325,10 @@ describe("T-PIX-6 — the target is the Pi home the user is in", () => {
     const pipeline = stubPipeline();
     const picked = stubPicker({ choice: "cancelled", selected: null });
     const ui = stubUi(["selected"]);
-    const { ctx } = stubContext({ home: "/Users/me/.pi-work", cwd: "/work/repo" });
+    const { ctx } = stubContext({
+      home: "/Users/me/.pi-work",
+      cwd: "/work/repo",
+    });
 
     await createResumeFromCommand(deps({ picker: picked.picker, ui: ui.ui })).run(
       ctx,
@@ -355,6 +387,9 @@ describe("T-PIX-8 — confirmation commits, cancellation does not", () => {
 
     expect(ui.asked).toHaveLength(1);
     expect(pipeline.commitCalls).toHaveLength(commits);
+    if (commits === 1) {
+      expect(pipeline.commitCalls[0]?.confirmationToken).toBe(report().confirmationToken);
+    }
   });
 });
 
@@ -412,7 +447,10 @@ describe("T-PIX-10 — landing presentation respects Pi's session lifecycle", ()
 
     await expect(
       createResumeFromCommand(
-        deps({ picker: stubPicker({ choice: "cancelled", selected: null }).picker, ui }),
+        deps({
+          picker: stubPicker({ choice: "cancelled", selected: null }).picker,
+          ui,
+        }),
       ).run(ctx, ["cx-1"], pipeline.pipeline),
     ).resolves.toBeUndefined();
   });
@@ -444,7 +482,10 @@ describe("T-PIX-10 — landing presentation respects Pi's session lifecycle", ()
 
 describe("T-PIX-11 — nothing is written on any cancel path", () => {
   async function checksum(dir: string): Promise<string> {
-    const entries = await readdir(dir, { withFileTypes: true, recursive: true });
+    const entries = await readdir(dir, {
+      withFileTypes: true,
+      recursive: true,
+    });
     const paths = entries
       .map((entry) => ({
         full: join(entry.parentPath, entry.name),
@@ -546,8 +587,16 @@ describe("T-PIX-13 — an empty listing does not open a picker", () => {
 describe("T-PIX-14 — skipped homes are shown", () => {
   it("shows every failure alongside the picker", async () => {
     const failures: HomeFailure[] = [
-      { home: "/Users/me/.codex", agent: "codex", message: "permission denied" },
-      { home: "/Users/me/.claude-team", agent: "claude-code", message: "not a directory" },
+      {
+        home: "/Users/me/.codex",
+        agent: "codex",
+        message: "permission denied",
+      },
+      {
+        home: "/Users/me/.claude-team",
+        agent: "claude-code",
+        message: "not a directory",
+      },
     ];
     const rows = [row("pi", "pi-1", "/Users/me/.pi")];
     const pipeline = stubPipeline({ listing: listing(rows, failures) });

@@ -1,4 +1,5 @@
-import { rmSync } from "node:fs";
+import { rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { SessionDescriptor } from "./contract.js";
 import { codexAdapterFactory } from "./index.js";
@@ -171,6 +172,65 @@ describe("T-COD-2 rollout to canonical turns", () => {
       session.turns.filter((t) => t.kind === "tool-call").map((t) => t.toolCall?.toolName),
     ).toEqual(["shell", "apply_patch"]);
   });
+
+  it("imports compacted.payload.message as one summary and ignores replacement_history", async () => {
+    const home = tempHome();
+    const id = "45454545-4545-4545-8545-454545454545";
+    writeRollout(home, id, [
+      metaEntry(id),
+      userEvent("original request"),
+      {
+        timestamp: "2026-08-01T09:15:00.000Z",
+        type: "compacted",
+        payload: {
+          message: "Work completed before compaction.",
+          replacement_history: [{ role: "user", content: "REPLACEMENT-HISTORY-MUST-NOT-CROSS" }],
+        },
+      },
+      agentEvent("continued after compaction"),
+    ]);
+
+    const session = await adapter.loadSession(await loadOnly(home));
+    expect(session.turns.map((turn) => [turn.kind, turn.text])).toEqual([
+      ["message", "original request"],
+      ["summary", "Work completed before compaction."],
+      ["message", "continued after compaction"],
+    ]);
+    expect(JSON.stringify(session)).not.toContain("REPLACEMENT-HISTORY-MUST-NOT-CROSS");
+  });
+
+  it("uses an absolute metadata cwd as repoPath even when git metadata is absent", async () => {
+    const home = tempHome();
+    const id = "46464646-4646-4646-8646-464646464646";
+    writeRollout(home, id, [
+      metaEntry(id, { cwd: "/repo/no-git", git: undefined }),
+      userEvent("go"),
+    ]);
+
+    const descriptor = await loadOnly(home);
+    expect(descriptor.repoPath).toBe("/repo/no-git");
+  });
+});
+
+describe("contained rollout discovery", () => {
+  it("does not follow a symlinked directory outside the sessions root", async () => {
+    const home = tempHome();
+    const outside = tempHome();
+    const id = "47474747-4747-4747-8747-474747474747";
+    writeRollout(outside, id, [metaEntry(id), userEvent("outside")]);
+    symlinkSync(join(outside, "sessions"), join(home, "sessions", "linked"));
+
+    expect(await adapter.listSessions(home)).toEqual([]);
+  });
+
+  it("propagates a malformed sessions-root error", async () => {
+    const home = tempHome();
+    const root = join(home, "sessions");
+    rmSync(root, { recursive: true, force: true });
+    writeFileSync(root, "not a directory");
+
+    await expect(adapter.listSessions(home)).rejects.toThrow(/not a directory/);
+  });
 });
 
 /** T-COD-3 — tool outputs become one outcome line. */
@@ -226,6 +286,63 @@ describe("T-COD-3 tool outputs become one outcome line", () => {
     const call = session.turns.find((turn) => turn.kind === "tool-call")?.toolCall;
     expect(call?.bodyDropped).toBe(false);
   });
+
+  it("redacts credentials before canonical and serialized data can carry them", async () => {
+    const home = tempHome();
+    const id = "78787878-7878-4878-8878-787878787878";
+    const apiKey = "sk-12345678901234567890";
+    const bearer = "header.payload.signature";
+    const uriPassword = "uri-supersecret";
+    const userPassword = "curl-supersecret";
+    writeRollout(home, id, [
+      metaEntry(id),
+      userEvent("update the token fixture"),
+      functionCall(
+        "apply_patch",
+        JSON.stringify({
+          path: "src/token-refresh.ts",
+          api_key: apiKey,
+          command:
+            `curl -H 'Authorization: Bearer ${bearer}' ` +
+            `-u alice:${userPassword} https://alice:${uriPassword}@example.com/api`,
+          env: { DATABASE_URL: "postgres://user:password@localhost/db" },
+        }),
+        "secret-call",
+      ),
+      functionCallOutput("secret-call", "done"),
+    ]);
+    const session = await adapter.loadSession(await loadOnly(home));
+    const canonical = JSON.stringify(session);
+
+    expect(session.provenance.repo.changedPaths).toEqual(["src/token-refresh.ts"]);
+    expect(canonical).not.toContain(apiKey);
+    expect(canonical).not.toContain(bearer);
+    expect(canonical).not.toContain(uriPassword);
+    expect(canonical).not.toContain(userPassword);
+    expect(canonical).not.toContain("postgres://user:password@localhost/db");
+    expect(canonical).toContain("[REDACTED]");
+
+    const serialized = adapter.serialize(
+      session,
+      { agent: "codex", home, windowTokens: 200_000 },
+      {
+        sourceAgent: "codex",
+        sourceHome: home,
+        sourceSessionId: id,
+        importedAt: "2026-08-01T10:00:00.000Z",
+        droppedSummary: "tool result bodies",
+        lines: ["Imported session"],
+      },
+    );
+    const bytes = serialized.files
+      .map((file) => Buffer.from(file.bytes).toString("utf8"))
+      .join("\n");
+    expect(bytes).not.toContain(apiKey);
+    expect(bytes).not.toContain(bearer);
+    expect(bytes).not.toContain(uriPassword);
+    expect(bytes).not.toContain(userPassword);
+    expect(bytes).not.toContain("postgres://user:password@localhost/db");
+  });
 });
 
 /** T-COD-13 — encrypted reasoning is never read. */
@@ -256,8 +373,14 @@ describe("T-COD-14 truncated or unknown-typed threads", () => {
   const whole = [metaEntry(id), userEvent("go"), agentEvent("a long enough answer to cut")];
 
   it.each([
-    { name: "cut in the last entry", cut: (text: string) => text.slice(0, text.length - 30) },
-    { name: "cut in the first entry", cut: (text: string) => text.slice(0, 40) },
+    {
+      name: "cut in the last entry",
+      cut: (text: string) => text.slice(0, text.length - 30),
+    },
+    {
+      name: "cut in the first entry",
+      cut: (text: string) => text.slice(0, 40),
+    },
   ])("reports a thread $name as unreadable", async ({ cut }) => {
     const home = tempHome();
     const path = writeRollout(home, id, whole, undefined, cut);

@@ -8,6 +8,7 @@ import { ImportFailure } from "./errors.js";
 import {
   AGENTS,
   checksumTree,
+  commitPreviewed,
   createWorld,
   defaultConfig,
   instrument,
@@ -68,7 +69,11 @@ describe("T-IMP-7 — all nine directions run end to end", () => {
     const report = await pipeline.preview(importRequest(world, target));
     expect(report.blocked).toBe(false);
 
-    const landed = await pipeline.commit(importRequest(world, target), null);
+    const landed = await pipeline.commit(
+      importRequest(world, target),
+      null,
+      report.confirmationToken,
+    );
     expect(landed.ref.agent).toBe(target);
     expect(landed.ref.home).toBe(world.targetHomeOf(target));
     expect(landed.itemsStored).toBe(landed.itemsSent);
@@ -89,9 +94,9 @@ describe("T-IMP-8 — preview and commit compute the same plan", () => {
 
     // Two pipelines, as the two invocations of a numbered-list host would be (FR-10).
     const previewRun = instrument(worldDeps(world));
-    await previewRun.pipeline.preview(importRequest(world, "pi"));
+    const report = await previewRun.pipeline.preview(importRequest(world, "pi"));
     const commitRun = instrument(worldDeps(world));
-    await commitRun.pipeline.commit(importRequest(world, "pi"), null);
+    await commitRun.pipeline.commit(importRequest(world, "pi"), null, report.confirmationToken);
 
     expect(previewRun.plans).toHaveLength(1);
     expect(commitRun.plans).toHaveLength(1);
@@ -101,7 +106,7 @@ describe("T-IMP-8 — preview and commit compute the same plan", () => {
 });
 
 describe("T-IMP-9 — commit refuses when the source moved", () => {
-  it("names the session, asks for another preview, and writes nothing", async () => {
+  it("asks for another preview and writes nothing", async () => {
     const world = await newWorld();
     await writeSession(
       world.homeOf("codex"),
@@ -109,18 +114,72 @@ describe("T-IMP-9 — commit refuses when the source moved", () => {
     );
     const pipeline = createImportPipeline(worldDeps(world));
 
-    await pipeline.preview(importRequest(world, "pi"));
+    const report = await pipeline.preview(importRequest(world, "pi"));
     const before = await checksumTree(world.targetHomeOf("pi"));
 
     // The source agent wrote on after the user saw the preview.
     await appendFile(sessionFilePath(world.homeOf("codex"), SOURCE_ID), "a line written later\n");
 
-    const failure = await pipeline.commit(importRequest(world, "pi"), null).catch((cause) => cause);
+    const failure = await pipeline
+      .commit(importRequest(world, "pi"), null, report.confirmationToken)
+      .catch((cause) => cause);
     expect(failure).toBeInstanceOf(ImportFailure);
-    expect(failure.stage).toBe("source-changed");
-    expect(failure.message).toContain(SOURCE_ID);
+    expect(failure.stage).toBe("confirmation");
     expect(failure.message).toMatch(/preview it again/i);
     expect(await checksumTree(world.targetHomeOf("pi"))).toEqual(before);
+  });
+
+  it("refuses a tampered confirmation token before serialization", async () => {
+    const world = await newWorld();
+    await writeSession(
+      world.homeOf("codex"),
+      referenceSpec({ id: SOURCE_ID, repoPath: world.repoRoot }),
+    );
+    const pipeline = createImportPipeline(worldDeps(world));
+    const request = importRequest(world, "pi");
+    const report = await pipeline.preview(request);
+    const tampered = `${report.confirmationToken.slice(0, -1)}x`;
+
+    const failure = await pipeline.commit(request, null, tampered).catch((cause) => cause);
+
+    expect(failure).toBeInstanceOf(ImportFailure);
+    expect(failure.stage).toBe("confirmation");
+    expect(world.calls).not.toContain("pi.serialize");
+    expect(await checksumTree(world.targetHomeOf("pi"))).toEqual({});
+  });
+
+  it("does not commit a different session after a numbered row is reordered", async () => {
+    const world = await newWorld();
+    const earlier = referenceSpec({ id: "earlier", repoPath: world.repoRoot });
+    await writeSession(world.homeOf("codex"), earlier);
+    const pipeline = createImportPipeline(worldDeps(world));
+    const request: ImportRequest = {
+      ...listRequest(world, "pi"),
+      onlyAgent: "codex",
+      selection: { by: "row", row: 1 },
+    };
+    const report = await pipeline.preview(request);
+    const laterTurns = earlier.turns.map((turn, index) => ({
+      ...turn,
+      timestamp: `2099-01-01T00:00:${String(index).padStart(2, "0")}.000Z`,
+    }));
+    await writeSession(
+      world.homeOf("codex"),
+      referenceSpec({
+        id: "later",
+        repoPath: world.repoRoot,
+        turns: laterTurns,
+      }),
+    );
+
+    const failure = await pipeline
+      .commit(request, null, report.confirmationToken)
+      .catch((cause) => cause);
+
+    expect(failure).toBeInstanceOf(ImportFailure);
+    expect(failure.stage).toBe("confirmation");
+    expect(world.calls).not.toContain("pi.serialize");
+    expect(await checksumTree(world.targetHomeOf("pi"))).toEqual({});
   });
 });
 
@@ -142,7 +201,9 @@ describe("T-IMP-10 — a blocked plan cannot be committed", () => {
     expect(report.blocked).toBe(true);
     expect(report.blockedReason).not.toBeNull();
 
-    const failure = await pipeline.commit(request, null).catch((cause) => cause);
+    const failure = await pipeline
+      .commit(request, null, report.confirmationToken)
+      .catch((cause) => cause);
     expect(failure).toBeInstanceOf(ImportFailure);
     expect(failure.stage).toBe("blocked");
     expect(world.calls).not.toContain("pi.serialize");
@@ -156,7 +217,10 @@ describe("T-IMP-11 — one error shape for every stage", () => {
     const pipeline = createImportPipeline(worldDeps(world));
 
     const failure = await pipeline
-      .preview({ ...importRequest(world, "pi"), selection: { by: "row", row: 9 } })
+      .preview({
+        ...importRequest(world, "pi"),
+        selection: { by: "row", row: 9 },
+      })
       .catch((cause) => cause);
 
     expect(failure).toBeInstanceOf(ImportFailure);
@@ -172,8 +236,13 @@ describe("T-IMP-11 — one error shape for every stage", () => {
     );
     const pipeline = createImportPipeline(worldDeps(world));
 
+    const request = {
+      ...importRequest(world, "pi"),
+      target: world.targetFor("pi", 40),
+    };
+    const report = await pipeline.preview(request);
     const failure = await pipeline
-      .commit({ ...importRequest(world, "pi"), target: world.targetFor("pi", 40) }, null)
+      .commit(request, null, report.confirmationToken)
       .catch((cause) => cause);
 
     expect(failure).toBeInstanceOf(ImportFailure);
@@ -183,14 +252,18 @@ describe("T-IMP-11 — one error shape for every stage", () => {
 
   it("turns a validation defect into an ImportFailure that carries the defects", async () => {
     const defects = [{ path: "items/3/usage", message: "the target needs a usage record" }];
-    const world = await newWorld({ adapter: (agent) => (agent === "pi" ? { defects } : {}) });
+    const world = await newWorld({
+      adapter: (agent) => (agent === "pi" ? { defects } : {}),
+    });
     await writeSession(
       world.homeOf("codex"),
       referenceSpec({ id: SOURCE_ID, repoPath: world.repoRoot }),
     );
     const pipeline = createImportPipeline(worldDeps(world));
 
-    const failure = await pipeline.commit(importRequest(world, "pi"), null).catch((cause) => cause);
+    const failure = await commitPreviewed(pipeline, importRequest(world, "pi")).catch(
+      (cause) => cause,
+    );
 
     expect(failure).toBeInstanceOf(ImportFailure);
     expect(failure.stage).toBe("landing");
@@ -210,7 +283,9 @@ describe("T-IMP-11 — one error shape for every stage", () => {
     await writeFile(taken, "not ours\n");
     const pipeline = createImportPipeline(worldDeps(world));
 
-    const failure = await pipeline.commit(importRequest(world, "pi"), null).catch((cause) => cause);
+    const failure = await commitPreviewed(pipeline, importRequest(world, "pi")).catch(
+      (cause) => cause,
+    );
 
     expect(failure).toBeInstanceOf(ImportFailure);
     expect(failure.stage).toBe("landing");
@@ -228,12 +303,18 @@ describe("T-IMP-11 — one error shape for every stage", () => {
     );
     const pipeline = createImportPipeline(worldDeps(world));
 
-    const failure = await pipeline.commit(importRequest(world, "pi"), null).catch((cause) => cause);
+    const failure = await commitPreviewed(pipeline, importRequest(world, "pi")).catch(
+      (cause) => cause,
+    );
 
     expect(failure).toBeInstanceOf(ImportFailure);
     expect(failure.stage).toBe("landing");
     expect(failure.message).toMatch(/incomplete/i);
-    expect(await checksumTree(world.targetHomeOf("pi"))).toEqual({});
+    const created = landedFilePath(world.targetHomeOf("pi"), landedSessionId(SOURCE_ID));
+    expect(failure.message).toContain(created);
+    expect(Object.keys(await checksumTree(world.targetHomeOf("pi")))).toEqual([
+      "landed/imported-source-1.json",
+    ]);
   });
 });
 
@@ -248,7 +329,9 @@ describe("T-IMP-12 — role checks are enforced", () => {
     );
     const pipeline = createImportPipeline(worldDeps(world));
 
-    const failure = await pipeline.commit(importRequest(world, "pi"), null).catch((cause) => cause);
+    const failure = await pipeline
+      .commit(importRequest(world, "pi"), null, "")
+      .catch((cause) => cause);
 
     expect(failure).toBeInstanceOf(ImportFailure);
     expect(failure.stage).toBe("target");
@@ -287,7 +370,9 @@ describe("T-IMP-27 — a work profile is added by configuration alone", () => {
     );
     await writeSession(workHome, referenceSpec({ id: "work-1", repoPath: world.repoRoot }));
 
-    const config = defaultConfig({ extraHomes: [{ agent: "claude-code", home: workHome }] });
+    const config = defaultConfig({
+      extraHomes: [{ agent: "claude-code", home: workHome }],
+    });
     const listing = await createImportPipeline(worldDeps(world, { config })).list(
       listRequest(world, "pi"),
     );

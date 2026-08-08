@@ -22,11 +22,11 @@ including agents that do not exist yet.
   of the import, and what was dropped (FR-47).
 - Ask the target adapter to serialize the plan into its own format (FR-40, FR-41).
 - Validate the serialized session before it reaches the target home (FR-50).
-- Commit the files, add-only and all-or-nothing (FR-49, FR-53).
+- Commit the adapter's zero-or-one file output, add-only and atomically published (FR-49, FR-53).
 - Read the session back and compare the number of items sent with the number stored (FR-52), and
   check the target can open it (FR-51).
-- Roll the commit back when the reconciliation or the openability check fails, so nothing partial
-  remains (FR-53).
+- If reconciliation or openability fails after commit, preserve the published paths and report them
+  exactly for manual inspection (FR-53).
 - Use the highest landing level the adapter declares (FR-43): move the user in when the adapter can
   (FR-44), otherwise return the session ID and the command that opens it (FR-45).
 - Leave the target idle: no message is sent, no tool is run (FR-46).
@@ -44,9 +44,9 @@ port. This module holds the order and the guarantees, not the formats.
 ## Encapsulated Knowledge
 
 - **The landing sequence.** Serialize, validate, commit, read back, reconcile, switch or hand over —
-  in that order, with rollback attached to every step after the commit.
-- **What is a rollback and what is not.** That a failed reconciliation rolls back, and that a
-  cancelled switch does not, because the session is valid and the user can open it later.
+  in that order, with created-path reporting attached to every failure after commit.
+- **Post-commit preservation.** A failed reconciliation keeps and reports the published paths because
+  pathname rollback could delete a concurrent replacement.
 - **The provenance marker composition.** Which facts go into it and in what order (FR-47).
 - **The handover command.** That when an adapter cannot switch, the user is told the session ID and
   the exact command (FR-45).
@@ -93,7 +93,7 @@ type ToolEffect = "read-only" | "mutating" | "unknown";
 interface ToolCallRecord {
   /** The original tool name. Never translated (FR-27). */
   toolName: string;
-  /** The arguments as the source recorded them. */
+  /** The source arguments after deterministic credential redaction. */
   argumentsText: string;
   /** Exactly one line about the outcome (FR-23). */
   outcomeLine: string;
@@ -237,11 +237,9 @@ interface PendingFile {
 /** Why a commit refused to run, or failed (FR-56). */
 type CommitRefusal = "path-exists" | "not-writable" | "write-failed";
 
-/** A commit that succeeded and can still be undone (FR-52, FR-53). */
+/** A commit that succeeded and reports the paths it created (FR-52, FR-53). */
 interface CommitHandle {
   createdPaths: string[];
-  /** Removes exactly the files and directories this commit created. Touches nothing else. */
-  rollback(): Promise<void>;
 }
 
 /** Raised when a commit refuses to run or fails. Carries an actionable message (FR-56). */
@@ -251,15 +249,17 @@ interface CommitError {
   path: string | null;
   /** What failed, and what the user can do next (FR-56). */
   message: string;
+  /** Paths retained for safety or not removed by cleanup, when manual inspection may be required. */
+  remainingPaths?: string[];
 }
 
-/** Adds files to a home. It only adds (FR-49), and it is all or nothing (FR-53). */
+/** Atomically adds zero or one file to a home (FR-49, FR-53). */
 interface FileCommitter {
   /**
-   * Creates every file, or none. Rejects with a CommitError.
-   * Rejects before writing any byte when a path already exists.
+   * Creates zero or one file. Rejects with a CommitError before filesystem access when more than one
+   * file is supplied, or before writing bytes when the destination already exists.
    */
-  commit(files: PendingFile[]): Promise<CommitHandle>;
+  commit(root: string, files: PendingFile[]): Promise<CommitHandle>;
 }
 ```
 
@@ -354,7 +354,11 @@ interface AgentAdapter {
   readBack(home: HomePath, sessionId: SessionId): Promise<StoredSessionFacts>;
 
   /** Target role, only when capabilities().landing is "create-and-switch" (FR-43, FR-44). */
-  switchTo(home: HomePath, sessionId: SessionId, runtime: AgentRuntime): Promise<SwitchOutcome>;
+  switchTo(
+    home: HomePath,
+    sessionId: SessionId,
+    runtime: AgentRuntime,
+  ): Promise<SwitchOutcome>;
 }
 ```
 
@@ -382,24 +386,25 @@ interface LandingResult {
 
 ```ts
 /** Which step of the landing failed (FR-56). */
-type LandingStage = "serialize" | "validate" | "commit" | "read-back" | "switch";
+type LandingStage =
+  "serialize" | "validate" | "commit" | "read-back" | "switch";
 
-/** A landing that failed. Nothing remains in the target home (FR-53). */
+/** A landing that failed. Published paths are preserved after post-commit failures (FR-53). */
 interface LandingError {
   stage: LandingStage;
   /** What failed, and what the user can do next (FR-56). */
   message: string;
   /** The structural defects, when the stage is "validate" (FR-50). */
   defects: ValidationDefect[];
-  /** True when a commit was made and then undone. */
+  /** Always false because successful commits expose no unsafe pathname rollback operation. */
   rolledBack: boolean;
 }
 
-/** Places a plan in the target home. Adds only, all or nothing (FR-49, FR-53). */
+/** Places a plan in the target home without modifying pre-existing paths (FR-49, FR-53). */
 interface SessionLander {
   /**
    * Runs after the user confirmed the preview (FR-20).
-   * Rejects with a LandingError, leaving the target home unchanged.
+   * Rejects with a LandingError; post-commit failures preserve and report created paths.
    */
   land(
     plan: TransferPlan,
@@ -462,8 +467,7 @@ interface SessionLander {
 Changes that require **only this module** to change:
 
 - A third landing level is added — for example "create and offer to switch".
-- The rollback policy changes, for example keeping a failed session for inspection under a different
-  name.
+- The post-commit preservation message changes.
 - The reconciliation becomes stricter, for example comparing per-item checksums rather than counts.
 - The provenance marker gains a fact, for example the budget that was applied.
 - The handover message changes.
@@ -472,15 +476,16 @@ None of these touch a rule, a preview, or an adapter.
 
 ## Constraints and Invariants
 
-- **Nothing that exists is ever rewritten or removed** (FR-49). Every path in a `SerializedSession`
-  is new, the committer refuses if any exists, and the only removal this module can cause is the
-  rollback of a commit it just made.
+- **Nothing that existed before landing is ever rewritten or removed** (FR-49). Every path in a
+  `SerializedSession` is new and the committer refuses if any exists.
 - **Validation runs before placement** (FR-50). A missing field must never reach the agent — C-11
   showed one crashing Pi outright. A non-empty `ValidationDefect[]` stops the landing with stage
   `"validate"` and nothing is written.
-- **A landing either completes or leaves nothing** (FR-53). If the read-back, the reconciliation, or
-  the openability check fails, the commit is rolled back before the error is raised, and
-  `LandingError.rolledBack` says so.
+- **A failed landing after commit preserves and reports the published paths** (FR-53). Safe automatic
+  pathname removal is not portable, so `LandingError.rolledBack` is always false and the message lists
+  exact `createdPaths` for manual inspection.
+- **Read-back must identify the exact serialized session.** A different session ID is a failed
+  reconciliation even when its item count matches.
 - **`itemsSent` and `itemsStored` are compared, and a difference is an error** (FR-52). C-6 states
   Codex drops an unknown item type in silence, so a successful write is not evidence of a stored
   session.
@@ -500,6 +505,8 @@ None of these touch a rule, a preview, or an adapter.
   reproducible in tests.
 - **A plan with a non-null `blockedReason` is refused before serialization** (FR-33). The preview
   should already have stopped it; this is the second gate.
+- **One session serializes to at most one file.** A target adapter that returns more is refused before
+  validation or placement because multi-path process-interruption atomicity is not portable.
 - **Errors name the stage and the next step** (FR-56). "Write failed" alone is not an acceptable
   message.
 
@@ -546,15 +553,15 @@ all-or-nothing guarantees are exercised against a real filesystem without any ag
 - Expected behavior: rejects with stage `"validate"` and both defects; the directory is unchanged;
   `rolledBack` is false because nothing was committed (FR-50).
 
-**T-LAN-8 — an item-count mismatch rolls back**
-- Scenario: `readBack` reports 23 items where 24 were sent — the C-6 silent-drop case.
-- Expected behavior: rejects with stage `"read-back"`, `rolledBack` true, and the target directory is
-  byte-identical to before the landing (FR-52, FR-53).
+**T-LAN-8 — a read-back mismatch preserves and reports the session**
+- Scenario: `readBack` reports 23 items where 24 were sent, or reports a different session ID.
+- Expected behavior: rejects with stage `"read-back"`, `rolledBack` false, preserves the committed
+  file, and reports its exact path for inspection (FR-52, FR-53).
 
-**T-LAN-9 — a session the target cannot open rolls back**
+**T-LAN-9 — a session the target cannot open is preserved and reported**
 - Scenario: `readBack` reports matching counts but `openable` false.
-- Expected behavior: rejects, rolls back, and the message says the target could not open the session
-  (FR-51).
+- Expected behavior: rejects with `rolledBack` false, preserves the committed file, and names both the
+  openability failure and the exact path (FR-51).
 
 **T-LAN-10 — a commit refusal is reported, not worked around**
 - Scenario: the committer rejects with `"path-exists"`.
@@ -564,7 +571,7 @@ all-or-nothing guarantees are exercised against a real filesystem without any ag
 **T-LAN-11 — every error names the stage and the next step**
 - Scenario: parameterized over failures in all five stages.
 - Expected behavior: each `LandingError` carries the right `stage`, a message stating what failed and
-  what the user can do, and a truthful `rolledBack` (FR-56).
+  what the user can do, and `rolledBack` false (FR-56).
 
 ### Boundary Tests
 
@@ -575,12 +582,12 @@ all-or-nothing guarantees are exercised against a real filesystem without any ag
 **T-LAN-13 — the target home is never damaged**
 - Scenario: a target directory holding 50 files is checksummed; every failure case of T-LAN-11 runs;
   it is checksummed again after each.
-- Expected behavior: identical every time. This is FR-49 and FR-53 together, tested against a real
-  filesystem.
+- Expected behavior: every pre-existing path is identical. Failures before commit add nothing;
+  failures after commit preserve and report the newly published file (FR-49, FR-53).
 
 **T-LAN-14 — a cancelled switch keeps the session**
 - Scenario: `switchTo` resolves with `cancelled` true.
-- Expected behavior: `switched` false, no rollback, the committed files remain, and `handover` gives
+- Expected behavior: `switched` false, the committed files remain, and `handover` gives
   the command to open the session later. A valid session is never destroyed because the user declined
   a move.
 
@@ -589,10 +596,10 @@ all-or-nothing guarantees are exercised against a real filesystem without any ag
 - Expected behavior: rejects with stage `"switch"` and `rolledBack` false — the session is valid and
   is kept — and the message states the command that opens it.
 
-**T-LAN-16 — a rollback that itself fails**
-- Scenario: the read-back mismatch of T-LAN-8, with `rollback` rejecting.
-- Expected behavior: the landing still rejects, and the message names both problems and the paths
-  that may remain. Silence here would leave a partial session the user cannot find.
+**T-LAN-16 — a post-commit failure reports preserved paths**
+- Scenario: the read-back mismatch of T-LAN-8 after a successful commit.
+- Expected behavior: the landing rejects with `rolledBack` false and names both the mismatch and the
+  exact preserved paths. Silence here would leave a partial session the user cannot find.
 
 **T-LAN-17 — no clock, no network**
 - Scenario: the suite runs with the clock and the network stubbed to throw.
@@ -619,8 +626,7 @@ all-or-nothing guarantees are exercised against a real filesystem without any ag
 **T-LAN-21 — an interrupted landing leaves nothing**
 - Scenario: the process is killed between the commit and the read-back.
 - Expected behavior: on the next run, the target holds either the complete session or nothing — never
-  a session the agent will crash on. The test asserts the observable half: no partial file is
-  readable by the agent (FR-53).
+  a partial session. A stub adapter that returns multiple files is refused before placement (FR-53).
 
 **T-LAN-22 — a create-only landing tells the user exactly what to type**
 - Scenario: a landing into Claude Code.

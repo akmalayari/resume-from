@@ -1,6 +1,6 @@
 import type {
   PreviewBuilder,
-  PreviewReport,
+  PreviewContent,
   PreviewWarning,
   RepoReader,
   TransferPlan,
@@ -63,7 +63,7 @@ function blockedLines(blockedReason: string | null): string[] {
  */
 export function createPreviewBuilder(repo: RepoReader, cwd: string): PreviewBuilder {
   return {
-    async build(plan: TransferPlan): Promise<PreviewReport> {
+    async build(plan: TransferPlan): Promise<PreviewContent> {
       const collected: PreviewWarning[] = planWarnings(plan);
       const fromRepo = await repoWarning(plan, repo, cwd);
       if (fromRepo !== null) collected.push(fromRepo);

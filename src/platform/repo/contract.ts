@@ -21,6 +21,14 @@ export interface CommitDistance {
   behind: number;
 }
 
+/** Process controls applied to every git command issued by one reader. */
+export interface RepoReaderOptions {
+  /** Maximum duration of one git command. Defaults to a finite module-owned limit. */
+  timeoutMs?: number | undefined;
+  /** Cancels the current command and every later command issued by this reader. */
+  signal?: AbortSignal | undefined;
+}
+
 /** Reads git state. It never writes to the repository. */
 export interface RepoReader {
   identify(cwd: string): Promise<RepoIdentity>;

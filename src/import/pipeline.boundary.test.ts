@@ -9,6 +9,7 @@ import * as importModule from "./index.js";
 import {
   AGENTS,
   checksumTree,
+  commitPreviewed,
   createWorld,
   instrument,
   landedFilePath,
@@ -26,9 +27,15 @@ import { createImportPipeline } from "./wiring.js";
 const noNetwork = () => {
   throw new Error("the network is unavailable");
 };
-vi.mock("node:http", () => ({ default: { request: noNetwork, get: noNetwork } }));
-vi.mock("node:https", () => ({ default: { request: noNetwork, get: noNetwork } }));
-vi.mock("node:dns", () => ({ default: { lookup: noNetwork, resolve: noNetwork } }));
+vi.mock("node:http", () => ({
+  default: { request: noNetwork, get: noNetwork },
+}));
+vi.mock("node:https", () => ({
+  default: { request: noNetwork, get: noNetwork },
+}));
+vi.mock("node:dns", () => ({
+  default: { lookup: noNetwork, resolve: noNetwork },
+}));
 
 const SOURCE_ID = "source-1";
 
@@ -54,7 +61,10 @@ function listRequest(world: World, target: AgentId): ListRequest {
 }
 
 function importRequest(world: World, target: AgentId): ImportRequest {
-  return { ...listRequest(world, target), selection: { by: "session-id", id: SOURCE_ID } };
+  return {
+    ...listRequest(world, target),
+    selection: { by: "session-id", id: SOURCE_ID },
+  };
 }
 
 const DIRECTIONS: Array<[AgentId, AgentId]> = AGENTS.flatMap((source) =>
@@ -78,42 +88,53 @@ describe("T-IMP-13 — list and preview write nothing", () => {
   });
 });
 
-describe("T-IMP-14 — a failed commit leaves nothing", () => {
-  const failures: Array<[string, () => Promise<World>, (world: World) => Promise<void>]> = [
+describe("T-IMP-14 — failures preserve existing target data", () => {
+  const failures: Array<[string, () => Promise<World>, (world: World) => Promise<void>, boolean]> =
     [
-      "serialize",
-      () => newWorld({ adapter: (agent) => (agent === "pi" ? { failAt: ["serialize"] } : {}) }),
-      async () => undefined,
-    ],
-    [
-      "validate",
-      () =>
-        newWorld({
-          adapter: (agent) =>
-            agent === "pi" ? { defects: [{ path: "items/0", message: "no role" }] } : {},
-        }),
-      async () => undefined,
-    ],
-    [
-      "commit",
-      () => newWorld(),
-      async (world) => {
-        // The path the adapter chose is taken, so the committer refuses before writing.
-        const taken = landedFilePath(world.targetHomeOf("pi"), landedSessionId(SOURCE_ID));
-        await mkdir(dirname(taken), { recursive: true });
-        await writeFile(taken, "not ours\n");
-      },
-    ],
-    [
-      "read-back",
-      () => newWorld({ adapter: (agent) => (agent === "pi" ? { readBackDelta: 1 } : {}) }),
-      async () => undefined,
-    ],
-  ];
+      [
+        "serialize",
+        () =>
+          newWorld({
+            adapter: (agent) => (agent === "pi" ? { failAt: ["serialize"] } : {}),
+          }),
+        async () => undefined,
+        false,
+      ],
+      [
+        "validate",
+        () =>
+          newWorld({
+            adapter: (agent) =>
+              agent === "pi" ? { defects: [{ path: "items/0", message: "no role" }] } : {},
+          }),
+        async () => undefined,
+        false,
+      ],
+      [
+        "commit",
+        () => newWorld(),
+        async (world) => {
+          // The path the adapter chose is taken, so the committer refuses before writing.
+          const taken = landedFilePath(world.targetHomeOf("pi"), landedSessionId(SOURCE_ID));
+          await mkdir(dirname(taken), { recursive: true });
+          await writeFile(taken, "not ours\n");
+        },
+        false,
+      ],
+      [
+        "read-back",
+        () =>
+          newWorld({
+            adapter: (agent) => (agent === "pi" ? { readBackDelta: 1 } : {}),
+          }),
+        async () => undefined,
+        true,
+      ],
+    ];
 
   it.each(failures)(
-    "leaves the target home unchanged when %s fails",
-    async (_stage, build, seed) => {
+    "preserves existing target data when %s fails",
+    async (_stage, build, seed, keepsPublication) => {
       const world = await build();
       await writeSession(
         world.homeOf("codex"),
@@ -122,22 +143,25 @@ describe("T-IMP-14 — a failed commit leaves nothing", () => {
       await seed(world);
       const before = await checksumTree(world.targetHomeOf("pi"));
 
-      const failure = await createImportPipeline(worldDeps(world))
-        .commit(importRequest(world, "pi"), null)
-        .catch((cause) => cause);
+      const pipeline = createImportPipeline(worldDeps(world));
+      const failure = await commitPreviewed(pipeline, importRequest(world, "pi")).catch(
+        (cause) => cause,
+      );
 
       expect(failure).toBeInstanceOf(ImportFailure);
-      expect(await checksumTree(world.targetHomeOf("pi"))).toEqual(before);
+      const after = await checksumTree(world.targetHomeOf("pi"));
+      expect(after).toMatchObject(before);
+      expect(Object.keys(after)).toHaveLength(
+        Object.keys(before).length + (keepsPublication ? 1 : 0),
+      );
+      if (keepsPublication) {
+        expect(failure.message).toContain(
+          landedFilePath(world.targetHomeOf("pi"), landedSessionId(SOURCE_ID)),
+        );
+      }
     },
   );
 
-  /*
-   * The fifth case of T-IMP-14 asks for the same result when the switch fails. The landing
-   * module documents the opposite and its tests assert it (src/import/landing/module.md,
-   * T-LAN-15): a switch failure happens after a valid session was created, and destroying it
-   * would destroy work. This test asserts the landing's documented behaviour and reports the
-   * contradiction between the two documents rather than hiding it.
-   */
   it("keeps the valid session when only the switch fails, and says how to open it", async () => {
     const world = await newWorld({
       adapter: (agent) => (agent === "pi" ? { failAt: ["switchTo" as StubStage] } : {}),
@@ -147,9 +171,10 @@ describe("T-IMP-14 — a failed commit leaves nothing", () => {
       referenceSpec({ id: SOURCE_ID, repoPath: world.repoRoot }),
     );
 
-    const failure = await createImportPipeline(worldDeps(world))
-      .commit(importRequest(world, "pi"), null)
-      .catch((cause) => cause);
+    const pipeline = createImportPipeline(worldDeps(world));
+    const failure = await commitPreviewed(pipeline, importRequest(world, "pi")).catch(
+      (cause) => cause,
+    );
 
     expect(failure).toBeInstanceOf(ImportFailure);
     expect(failure.message).toMatch(/kept/i);
@@ -168,8 +193,8 @@ describe("T-IMP-15 — every source file is byte-identical after every direction
     const before = await Promise.all(AGENTS.map((agent) => checksumTree(world.homeOf(agent))));
 
     await pipeline.list(listRequest(world, target));
-    await pipeline.preview(importRequest(world, target));
-    await pipeline.commit(importRequest(world, target), null);
+    const report = await pipeline.preview(importRequest(world, target));
+    await pipeline.commit(importRequest(world, target), null, report.confirmationToken);
 
     expect(await Promise.all(AGENTS.map((agent) => checksumTree(world.homeOf(agent))))).toEqual(
       before,
@@ -200,7 +225,11 @@ describe("T-IMP-17 — no state is carried between calls", () => {
     expect(await checksumTree(world.root)).toEqual(before);
 
     const commitRun = instrument(worldDeps(world));
-    const landed = await commitRun.pipeline.commit(importRequest(world, "pi"), null);
+    const landed = await commitRun.pipeline.commit(
+      importRequest(world, "pi"),
+      null,
+      previewReport.confirmationToken,
+    );
 
     expect(previewReport.blocked).toBe(false);
     expect(landed.itemsStored).toBe(landed.itemsSent);
@@ -227,7 +256,7 @@ describe("T-IMP-18 — an unknown target agent is refused", () => {
 
     const failure = await (operation === "preview"
       ? pipeline.preview(request)
-      : pipeline.commit(request, null)
+      : pipeline.commit(request, null, "")
     ).catch((cause: unknown) => cause);
 
     expect(failure).toBeInstanceOf(ImportFailure);
@@ -250,8 +279,12 @@ describe("T-IMP-19 — the whole pipeline runs with the network stubbed to fail"
       const pipeline = createImportPipeline(worldDeps(world));
 
       await pipeline.list(listRequest(world, target));
-      await pipeline.preview(importRequest(world, target));
-      const landed = await pipeline.commit(importRequest(world, target), null);
+      const report = await pipeline.preview(importRequest(world, target));
+      const landed = await pipeline.commit(
+        importRequest(world, target),
+        null,
+        report.confirmationToken,
+      );
 
       expect(landed.ref.agent).toBe(target);
     } finally {

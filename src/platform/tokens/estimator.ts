@@ -24,6 +24,9 @@ const EXACT_BUDGET_CHARS = 262_144;
 /** UTF-8 bytes per token. The rule of thumb the heuristic families are built on. */
 const BYTES_PER_TOKEN = 4;
 
+/** A byte-level tokenizer cannot emit more tokens than the UTF-8 bytes it consumes. */
+const utf8UpperBound = (text: string): number => Buffer.byteLength(text, "utf8");
+
 const isWhitespace = (code: number): boolean => code === 32 || (code >= 9 && code <= 13);
 
 /** Characters outside the BMP — emoji, mostly — cost far more tokens per byte than text does. */
@@ -83,7 +86,7 @@ const exactCount = (text: string, count: EncodeCount): number => {
   while (start < text.length) {
     const end = segmentEnd(text, start);
     const segment = text.slice(start, end);
-    total += start < EXACT_BUDGET_CHARS ? prefixEnvelope(segment, count) : heuristicCount(segment);
+    total += start < EXACT_BUDGET_CHARS ? prefixEnvelope(segment, count) : utf8UpperBound(segment);
     start = end;
   }
   return total;
@@ -96,7 +99,7 @@ const exactEstimator = (count: EncodeCount): TokenEstimator => ({
     try {
       return exactCount(text, count);
     } catch {
-      return heuristicCount(text);
+      return utf8UpperBound(text);
     }
   },
 });

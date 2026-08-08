@@ -108,7 +108,7 @@ type ToolEffect = "read-only" | "mutating" | "unknown";
 interface ToolCallRecord {
   /** The original tool name. Never translated (FR-27). */
   toolName: string;
-  /** The arguments as the source recorded them. */
+  /** The source arguments after deterministic credential redaction. */
   argumentsText: string;
   /** Exactly one line about the outcome (FR-23). */
   outcomeLine: string;
@@ -282,7 +282,11 @@ interface AgentAdapter {
   readBack(home: HomePath, sessionId: SessionId): Promise<StoredSessionFacts>;
 
   /** Target role, only when capabilities().landing is "create-and-switch" (FR-43, FR-44). */
-  switchTo(home: HomePath, sessionId: SessionId, runtime: AgentRuntime): Promise<SwitchOutcome>;
+  switchTo(
+    home: HomePath,
+    sessionId: SessionId,
+    runtime: AgentRuntime,
+  ): Promise<SwitchOutcome>;
 }
 ```
 
@@ -303,11 +307,9 @@ interface PendingFile {
 /** Why a commit refused to run, or failed (FR-56). */
 type CommitRefusal = "path-exists" | "not-writable" | "write-failed";
 
-/** A commit that succeeded and can still be undone (FR-52, FR-53). */
+/** A commit that succeeded and reports the paths it created (FR-52, FR-53). */
 interface CommitHandle {
   createdPaths: string[];
-  /** Removes exactly the files and directories this commit created. Touches nothing else. */
-  rollback(): Promise<void>;
 }
 
 /** Raised when a commit refuses to run or fails. Carries an actionable message (FR-56). */
@@ -317,15 +319,17 @@ interface CommitError {
   path: string | null;
   /** What failed, and what the user can do next (FR-56). */
   message: string;
+  /** Paths retained for safety or not removed by cleanup, when manual inspection may be required. */
+  remainingPaths?: string[];
 }
 
-/** Adds files to a home. It only adds (FR-49), and it is all or nothing (FR-53). */
+/** Atomically adds zero or one file to a home (FR-49, FR-53). */
 interface FileCommitter {
   /**
-   * Creates every file, or none. Rejects with a CommitError.
-   * Rejects before writing any byte when a path already exists.
+   * Creates zero or one file. Rejects with a CommitError before filesystem access when more than one
+   * file is supplied, or before writing bytes when the destination already exists.
    */
-  commit(files: PendingFile[]): Promise<CommitHandle>;
+  commit(root: string, files: PendingFile[]): Promise<CommitHandle>;
 }
 ```
 
@@ -424,7 +428,10 @@ interface SessionFinder {
   /** Newest first (FR-14), only sessions of the current repository (FR-13). */
   list(scope: SearchScope): Promise<Listing>;
   /** Resolves a choice against the same ordering list() produced. Rejects with SelectionError. */
-  resolve(scope: SearchScope, input: SelectionInput): Promise<SessionDescriptor>;
+  resolve(
+    scope: SearchScope,
+    input: SelectionInput,
+  ): Promise<SessionDescriptor>;
   /** Reads one session into the neutral vocabulary, through its source adapter. */
   load(descriptor: SessionDescriptor): Promise<CanonicalSession>;
 }
@@ -505,10 +512,12 @@ interface PreviewWarning {
 }
 ```
 
-<!-- contract: PreviewReport, PreviewBuilder — restated from src/import/preview/module.md -->
+<!-- contract: PreviewReport, PreviewContent, PreviewBuilder — restated from src/import/preview/module.md -->
 ```ts
 /** Everything the user sees before confirming (FR-16 to FR-21). */
 interface PreviewReport {
+  /** Opaque binding that must be returned unchanged to commit this exact preview (FR-20). */
+  confirmationToken: string;
   /** Source, target, and the turn counts that cross and are dropped (FR-17). */
   headerLines: string[];
   /** For example "Budget: 34k tokens of a 200k window" (FR-18). */
@@ -525,9 +534,12 @@ interface PreviewReport {
   lines: string[];
 }
 
+/** Preview content before the pipeline binds it to a confirmation token. */
+type PreviewContent = Omit<PreviewReport, "confirmationToken">;
+
 /** Builds the preview from a plan and the current repository state. */
 interface PreviewBuilder {
-  build(plan: TransferPlan): Promise<PreviewReport>;
+  build(plan: TransferPlan): Promise<PreviewContent>;
 }
 ```
 
@@ -555,24 +567,25 @@ interface LandingResult {
 <!-- contract: LandingStage, LandingError, SessionLander — restated from src/import/landing/module.md -->
 ```ts
 /** Which step of the landing failed (FR-56). */
-type LandingStage = "serialize" | "validate" | "commit" | "read-back" | "switch";
+type LandingStage =
+  "serialize" | "validate" | "commit" | "read-back" | "switch";
 
-/** A landing that failed. Nothing remains in the target home (FR-53). */
+/** A landing that failed. Published paths are preserved after post-commit failures (FR-53). */
 interface LandingError {
   stage: LandingStage;
   /** What failed, and what the user can do next (FR-56). */
   message: string;
   /** The structural defects, when the stage is "validate" (FR-50). */
   defects: ValidationDefect[];
-  /** True when a commit was made and then undone. */
+  /** Always false because successful commits expose no unsafe pathname rollback operation. */
   rolledBack: boolean;
 }
 
-/** Places a plan in the target home. Adds only, all or nothing (FR-49, FR-53). */
+/** Places a plan in the target home without modifying pre-existing paths (FR-49, FR-53). */
 interface SessionLander {
   /**
    * Runs after the user confirmed the preview (FR-20).
-   * Rejects with a LandingError, leaving the target home unchanged.
+   * Rejects with a LandingError; post-commit failures preserve and report created paths.
    */
   land(
     plan: TransferPlan,
@@ -612,7 +625,11 @@ interface ImportPipeline {
   /** Writes nothing (FR-16). */
   preview(request: ImportRequest): Promise<PreviewReport>;
   /** Runs only after the user confirmed the preview (FR-20). */
-  commit(request: ImportRequest, runtime: AgentRuntime): Promise<LandingResult>;
+  commit(
+    request: ImportRequest,
+    runtime: AgentRuntime,
+    confirmationToken: string,
+  ): Promise<LandingResult>;
 }
 ```
 
@@ -692,12 +709,12 @@ discovery ── resolve ─► SessionDescriptor         FR-10, FR-12
             landing ──► LandingResult             FR-40 to FR-53
 ```
 
-| Stage | Submodule | What it contributes | Writes? |
-| ----- | --------- | ------------------- | ------- |
-| Find | `discovery/` | Which sessions exist here, which one the user meant, and its canonical form | No |
-| Rule | `transfer/` | What crosses over and how much | No |
-| Show | `preview/` | The lines the user confirms, and the block decision | No |
-| Land | `landing/` | The new session, the reconciliation, and the handover | Yes, once |
+| Stage | Submodule    | What it contributes                                                         | Writes?   |
+| ----- | ------------ | --------------------------------------------------------------------------- | --------- |
+| Find  | `discovery/` | Which sessions exist here, which one the user meant, and its canonical form | No        |
+| Rule  | `transfer/`  | What crosses over and how much                                              | No        |
+| Show  | `preview/`   | The lines the user confirms, and the block decision                         | No        |
+| Land  | `landing/`   | The new session, the reconciliation, and the handover                       | Yes, once |
 
 ### The three operations
 
@@ -708,8 +725,9 @@ touches no other stage. It never writes.
 `TransferRules.apply` with the configuration and the estimator, then `PreviewBuilder.build`. It never
 writes. A blocked plan still produces a report — the user is told why the import cannot run (FR-33).
 
-**`commit(request, runtime)`** repeats the whole of `preview`, then refuses if the plan is blocked,
-then calls `SessionLander.land` with the target adapter, the committer and the runtime handle.
+**`commit(request, runtime, confirmationToken)`** repeats the whole of `preview`, refuses unless the
+token matches that exact recomputed selection, plan, and report, then refuses if the plan is blocked.
+Only then does it call `SessionLander.land` with the target adapter, committer, and runtime handle.
 
 ### Why `commit` recomputes instead of receiving a plan
 
@@ -718,10 +736,10 @@ list, `/resume-from 3` shows a preview, and a third invocation confirms. A plan 
 between processes, and serializing it into a temporary file would create a second write path — the
 opposite of what FR-49 and C-3 ask for.
 
-Recomputation is safe because `TransferRules.apply` is pure and `SessionFinder`'s ordering is
-deterministic. The one thing that can change between the two invocations is the source session
-itself, so `commit` compares the resolved descriptor's `updatedAt` with the value the preview
-reported and refuses when it moved. The user then previews again.
+Recomputation is safe because `TransferRules.apply` is pure. A versioned SHA-256 confirmation token
+binds the resolved descriptor, full transfer plan, and preview report. A row reorder, source change,
+configuration change, target change, or warning change therefore refuses before serialization. The
+descriptor timestamp check remains as an additional diagnostic. The user then previews again.
 
 ### Where each adapter is chosen
 
@@ -853,9 +871,11 @@ without any agent installed; the live equivalents live in the adapter modules.
   nine directions.
 - Expected behavior: identical every time (FR-16).
 
-**T-IMP-14 — a failed commit leaves nothing**
+**T-IMP-14 — failures preserve existing target data**
 - Scenario: parameterized over failures at serialize, validate, commit, read-back and switch.
-- Expected behavior: the target home is byte-identical to before the commit in every case (FR-53).
+- Expected behavior: every pre-existing path is byte-identical. Failures before commit add nothing;
+  read-back and switch failures preserve the published session and report how to inspect or open it
+  (FR-53).
 
 **T-IMP-15 — every source file is byte-identical after every direction**
 - Scenario: all nine directions; every file of every source home is checksummed before and after.
@@ -914,21 +934,24 @@ The three tests below were moved here from modules that compose below this one. 
 property of a collaboration, and a module cannot own a test of collaborators that do not exist when
 it is implemented.
 
-**T-IMP-25 — the canonical vocabulary survives a round trip** *(moved from `src/session/`,
-was T-SES-16)*
+**T-IMP-25 — the canonical vocabulary survives a round trip** _(moved from `src/session/`,
+was T-SES-16)_
+
 - Scenario: the reference fixture is passed through the rules, the preview, and a stub adapter's
   serialize.
 - Expected behavior: no stage needs a field the vocabulary does not have, and no stage adds one.
 
-**T-IMP-26 — swapping the estimator changes only the numbers** *(moved from `src/platform/tokens/`,
-was T-TOK-13)*
+**T-IMP-26 — swapping the estimator changes only the numbers** _(moved from `src/platform/tokens/`,
+was T-TOK-13)_
+
 - Scenario: the pipeline previews one session twice, with two different token estimators.
 - Expected behavior: both produce a valid plan with the same structure; only the counts and the
   number of dropped turns differ. No consumer breaks. This is the switching-risk claim of the
   generic classification of `src/platform/tokens/`, tested where both halves exist.
 
-**T-IMP-27 — a work profile is added by configuration alone** *(moved from `src/platform/config/`,
-was T-CFG-15)*
+**T-IMP-27 — a work profile is added by configuration alone** _(moved from `src/platform/config/`,
+was T-CFG-15)_
+
 - Scenario: `~/.claude-team` is added to `extraHomes` and a listing runs with stub adapters over
   fixture homes.
 - Expected behavior: sessions of both Claude Code profiles appear in one listing (the FR-5 test),

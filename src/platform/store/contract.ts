@@ -14,11 +14,9 @@ export interface PendingFile {
 /** Why a commit refused to run, or failed (FR-56). */
 export type CommitRefusal = "path-exists" | "not-writable" | "write-failed";
 
-/** A commit that succeeded and can still be undone (FR-52, FR-53). */
+/** A commit that succeeded and reports the paths it created (FR-52, FR-53). */
 export interface CommitHandle {
   createdPaths: string[];
-  /** Removes exactly the files and directories this commit created. Touches nothing else. */
-  rollback(): Promise<void>;
 }
 
 /** Raised when a commit refuses to run or fails. Carries an actionable message (FR-56). */
@@ -28,13 +26,15 @@ export interface CommitError {
   path: string | null;
   /** What failed, and what the user can do next (FR-56). */
   message: string;
+  /** Paths retained for safety or not removed by cleanup, when manual inspection may be required. */
+  remainingPaths?: string[];
 }
 
-/** Adds files to a home. It only adds (FR-49), and it is all or nothing (FR-53). */
+/** Atomically adds zero or one file to a home (FR-49, FR-53). */
 export interface FileCommitter {
   /**
-   * Creates every file, or none. Rejects with a CommitError.
-   * Rejects before writing any byte when a path already exists.
+   * Creates zero or one file. Rejects with a CommitError before filesystem access when more than one
+   * file is supplied, or before writing bytes when the destination already exists.
    */
-  commit(files: PendingFile[]): Promise<CommitHandle>;
+  commit(root: string, files: PendingFile[]): Promise<CommitHandle>;
 }

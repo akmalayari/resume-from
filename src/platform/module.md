@@ -51,12 +51,12 @@ default value, and no format.
 **This module publishes no types of its own.** Each submodule's Public Contract is its own normative
 home and is the integration surface for consumers:
 
-| Submodule | Publishes | Used by |
-| --------- | --------- | ------- |
-| `src/platform/config/` | `ConfigLoader`, `ImportConfig`, `HomeEntry`, `WindowOverride`, `ConfigError` | `src/host/`, `src/import/discovery/`, `src/import/transfer/` |
-| `src/platform/repo/` | `RepoReader`, `RepoIdentity`, `CommitDistance` | `src/import/discovery/`, `src/import/preview/` |
-| `src/platform/tokens/` | `EstimatorFactory`, `TokenEstimator`, `EstimatorFamily` | `src/import/transfer/` |
-| `src/platform/store/` | `FileCommitter`, `PendingFile`, `Bytes`, `CommitHandle`, `CommitError`, `CommitRefusal` | `src/import/landing/`, and `PendingFile` is restated by `src/adapters/` |
+| Submodule              | Publishes                                                                               | Used by                                                                 |
+| ---------------------- | --------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `src/platform/config/` | `ConfigLoader`, `ImportConfig`, `HomeEntry`, `WindowOverride`, `ConfigError`            | `src/host/`, `src/import/discovery/`, `src/import/transfer/`            |
+| `src/platform/repo/`   | `RepoReader`, `RepoIdentity`, `CommitDistance`                                          | `src/import/discovery/`, `src/import/preview/`                          |
+| `src/platform/tokens/` | `EstimatorFactory`, `TokenEstimator`, `EstimatorFamily`                                 | `src/import/transfer/`                                                  |
+| `src/platform/store/`  | `FileCommitter`, `PendingFile`, `Bytes`, `CommitHandle`, `CommitError`, `CommitRefusal` | `src/import/landing/`, and `PendingFile` is restated by `src/adapters/` |
 
 A consumer integrates with the submodule that owns the service it calls, and restates that
 submodule's contract in its own document. This module deliberately adds no façade over them: a façade
@@ -86,12 +86,12 @@ folder boundary is `src/platform/config/` on `src/session/`, and it is documente
 They do not. The four submodules are independent of each other: none calls another, and none shares
 a type with another. They are grouped because they share a property, not a flow.
 
-| Submodule | Question it answers | Vocabulary it speaks |
-| --------- | ------------------- | -------------------- |
-| `config/` | What did the user set, and what is the default? | settings, paths, numbers |
-| `repo/` | Where is the repository, and how far has it moved? | paths, commits |
-| `tokens/` | How much does this text cost? | text, counts |
-| `store/` | Can these files be created, all or nothing? | paths, bytes |
+| Submodule | Question it answers                                | Vocabulary it speaks     |
+| --------- | -------------------------------------------------- | ------------------------ |
+| `config/` | What did the user set, and what is the default?    | settings, paths, numbers |
+| `repo/`   | Where is the repository, and how far has it moved? | paths, commits           |
+| `tokens/` | How much does this text cost?                      | text, counts             |
+| `store/`  | Can these files be created, all or nothing?        | paths, bytes             |
 
 ### Where they are used in the flows
 
@@ -104,8 +104,8 @@ a type with another. They are grouped because they share a property, not a flow.
 ### The one rule, and why it is enforced here
 
 Each submodule restates the boundary rule in its Constraints section, so an implementer working in
-one folder sees it without opening this file. This document is where the rule is *decided*; the
-restatements are where it is *obeyed*.
+one folder sees it without opening this file. This document is where the rule is _decided_; the
+restatements are where it is _obeyed_.
 
 The rule has a mechanical test: if a submodule of `src/platform/` ever needs a restatement marker
 citing `src/session/`, `src/adapters/` or `src/import/`, the rule has been broken. The single
@@ -122,7 +122,7 @@ Changes that require **only this module** to change:
 - The boundary rule is refined, for example to allow a service to know `AgentId` explicitly rather
   than as a documented exception.
 - The division of generic questions is redrawn, for example splitting `store/` into a writer and a
-  rollback journal.
+  publication journal.
 
 ## Constraints and Invariants
 
@@ -198,6 +198,6 @@ boundary rule. They run as static checks over the four submodule folders.
 - Expected behavior: each stub satisfies its interface and is accepted wherever the real service is,
   with no file outside `src/platform/` edited to make it work.
 
-*The end-to-end half of this test — that the whole pipeline still runs with each service stubbed —
+_The end-to-end half of this test — that the whole pipeline still runs with each service stubbed —
 moved to the root as T-ROO-22. It needs `src/import/` and `src/host/`, which are siblings of this
-module in wave 1 and therefore may not exist when this task runs.*
+module in wave 1 and therefore may not exist when this task runs._

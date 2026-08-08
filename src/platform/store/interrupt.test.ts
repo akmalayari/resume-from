@@ -1,5 +1,5 @@
 // T-STO-17 — a commit killed part-way through leaves no destination file behind. The commit runs in
-// a child process that is SIGKILLed while it is still staging, so no rollback ever runs.
+// a child process that is SIGKILLed while it is still staging, so no later cleanup can run.
 
 import { spawn } from "node:child_process";
 import { once } from "node:events";
@@ -9,12 +9,8 @@ import { setTimeout as delay } from "node:timers/promises";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { makeHome, removeHome } from "./test-support.js";
 
-// Enough bytes that the child is certainly still mid-commit when the kill lands.
-const FILE_COUNT = 64;
-const FILE_SIZE = 1024 * 1024;
-// Kill only once several files have been written. A commit that placed files as it went would have
-// destinations on disk by now; a commit that stages everything first has none.
-const ENTRIES_BEFORE_KILL = 4;
+// Enough bytes that the child is still staging the one allowed file when the kill lands.
+const FILE_SIZE = 256 * 1024 * 1024;
 
 let home: string;
 
@@ -36,11 +32,11 @@ it("T-STO-17 — an interrupted commit leaves no partial session", async () => {
     [
       `import { createFileCommitter } from ${JSON.stringify(committerPath)};`,
       "const target = process.argv[2];",
-      `const files = Array.from({ length: ${FILE_COUNT} }, (_, index) => ({`,
-      '  absolutePath: target + "/session-" + index + ".jsonl",',
+      "const files = [{",
+      '  absolutePath: target + "/session.jsonl",',
       `  bytes: Buffer.alloc(${FILE_SIZE}, 65),`,
-      "}));",
-      "await createFileCommitter().commit(files);",
+      "}];",
+      "await createFileCommitter().commit(target, files);",
       'console.log("COMPLETED");',
       "",
     ].join("\n"),
@@ -57,12 +53,12 @@ it("T-STO-17 — an interrupted commit leaves no partial session", async () => {
     output += chunk.toString();
   });
 
-  // Kill part-way through the commit, well after the first file was written.
+  // Kill after the private temporary file appears but before it is linked to the destination.
   const deadline = Date.now() + 15_000;
   let killed = false;
   while (Date.now() < deadline && child.exitCode === null) {
     const names = await readdir(target).catch(() => [] as string[]);
-    if (names.length >= ENTRIES_BEFORE_KILL) {
+    if (names.some((name) => name.startsWith(".resume-from-") && name.endsWith(".tmp"))) {
       killed = child.kill("SIGKILL");
       break;
     }

@@ -115,7 +115,7 @@ type ToolEffect = "read-only" | "mutating" | "unknown";
 interface ToolCallRecord {
   /** The original tool name. Never translated (FR-27). */
   toolName: string;
-  /** The arguments as the source recorded them. */
+  /** The source arguments after deterministic credential redaction. */
   argumentsText: string;
   /** Exactly one line about the outcome (FR-23). */
   outcomeLine: string;
@@ -301,7 +301,11 @@ interface AgentAdapter {
   readBack(home: HomePath, sessionId: SessionId): Promise<StoredSessionFacts>;
 
   /** Target role, only when capabilities().landing is "create-and-switch" (FR-43, FR-44). */
-  switchTo(home: HomePath, sessionId: SessionId, runtime: AgentRuntime): Promise<SwitchOutcome>;
+  switchTo(
+    home: HomePath,
+    sessionId: SessionId,
+    runtime: AgentRuntime,
+  ): Promise<SwitchOutcome>;
 }
 ```
 
@@ -364,13 +368,16 @@ None of these touch a rule, a preview, another adapter, or the host.
   configuration file, not a project record. If Claude Code needs a session to be registered somewhere
   before it appears, and that registration would modify an existing file, this module declares the
   limitation rather than performing the write. AC-4 and FR-49 outrank convenience.
+- **Verified inert project records do not block an add-only import.** Session sidecar directories,
+  `memory/`, `sessions-index.json`, and `.session-aliases` are recognized but never modified.
 - **`serialize` writes the smallest set of entry types that works.** C-9 proved `user` and
   `assistant` are enough; the other eight of C-3 are not written. Fewer entry types means fewer ways
   to corrupt the store.
 - **`validate` runs before placement and returns every defect** (FR-50).
 - **`readBack` reports what the store holds** (FR-52) and whether the native resume list shows the
   session (FR-51). C-9's own caution — a throwaway directory with one session does not prove a real
-  store is safe — is why this check is not optional.
+  store is safe — is why this check is not optional. Openability requires matching embedded session
+  identity, valid turn envelopes, and an intact active parent graph.
 - **`switchTo` rejects with an error naming the missing capability.** Claude Code declares
   `"create-only"` (C-2), and the landing returns `claude --resume <id>` instead (FR-45).
 - **This module never writes a file.** `serialize` returns `PendingFile` values; `src/import/landing/`
@@ -379,6 +386,9 @@ None of these touch a rule, a preview, another adapter, or the host.
 - **This module never calls Claude Code's model, and never opens a network connection** (FR-8).
 - **Tool names cross unchanged** (FR-27). A `Read` from Claude Code stays `Read` everywhere else, and
   a foreign tool name arriving from Codex or Pi is written as it came.
+- **Only the active non-sidechain transcript crosses.** The last non-sidechain UUID record is the
+  active leaf and `parentUuid` selects its ancestry; malformed graphs are unreadable. Current
+  `isCompactSummary` user records and legacy `summary` records both become canonical summaries.
 - **No result body is carried into `CanonicalTurn`** (FR-24), and each dropped body is marked in text
   the model can read (FR-25).
 - **No system prompt, developer prompt, token, password, environment value or vendor state is read

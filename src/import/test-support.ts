@@ -37,7 +37,9 @@ import type {
   HomePath,
   ImportConfig,
   ImportPipeline,
+  ImportRequest,
   LandingLevel,
+  LandingResult,
   PendingFile,
   PreviewBuilder,
   PreviewReport,
@@ -63,11 +65,25 @@ import { buildStages, type ImportPipelineDeps } from "./wiring.js";
 export const SESSIONS_DIR = "sessions";
 export const LANDED_DIR = "landed";
 
+/** Preview the exact request, then commit the confirmation token that preview returned. */
+export async function commitPreviewed(
+  pipeline: ImportPipeline,
+  request: ImportRequest,
+  runtime: AgentRuntime = null,
+): Promise<LandingResult> {
+  const report = await pipeline.preview(request);
+  return pipeline.commit(request, runtime, report.confirmationToken);
+}
+
 /** One token per character: a test can state a budget and know exactly what fits. */
-export const charEstimator: TokenEstimator = { estimate: (text) => text.length };
+export const charEstimator: TokenEstimator = {
+  estimate: (text) => text.length,
+};
 
 /** Half a token per character, so the same session costs a different number of tokens. */
-export const halfEstimator: TokenEstimator = { estimate: (text) => Math.ceil(text.length / 2) };
+export const halfEstimator: TokenEstimator = {
+  estimate: (text) => Math.ceil(text.length / 2),
+};
 
 export function defaultConfig(overrides: Partial<ImportConfig> = {}): ImportConfig {
   return {
@@ -216,7 +232,11 @@ const DECLARED: Record<string, CapabilityShape> = {
     landing: "create-and-switch",
     provenance: "out-of-context-entry",
   },
-  codex: { selection: "numbered-list", landing: "create-only", provenance: "out-of-context-entry" },
+  codex: {
+    selection: "numbered-list",
+    landing: "create-only",
+    provenance: "out-of-context-entry",
+  },
   "claude-code": {
     selection: "numbered-list",
     landing: "create-only",
@@ -389,10 +409,10 @@ class TestCommitError extends Error implements CommitError {
   }
 }
 
-/** Creates every file or none, and can undo exactly what it created (FR-49, FR-53). */
+/** Creates every file or none and reports the paths it created (FR-49, FR-53). */
 export function createTestCommitter(): FileCommitter {
   return {
-    async commit(files: PendingFile[]): Promise<CommitHandle> {
+    async commit(_root: string, files: PendingFile[]): Promise<CommitHandle> {
       for (const file of files) {
         if (existsSync(file.absolutePath)) {
           throw new TestCommitError(
@@ -417,12 +437,7 @@ export function createTestCommitter(): FileCommitter {
           `writing the new session failed: ${String(cause)}`,
         );
       }
-      return {
-        createdPaths: created,
-        async rollback(): Promise<void> {
-          for (const done of [...created].reverse()) await unlink(done).catch(() => undefined);
-        },
-      };
+      return { createdPaths: created };
     },
   };
 }
@@ -499,6 +514,7 @@ export interface StageRecorder {
 }
 
 const EMPTY_REPORT: PreviewReport = {
+  confirmationToken: "v1-sha256-0000000000000000000000000000000000000000000000000000000000000000",
   headerLines: [],
   budgetLine: "",
   warnings: [],
@@ -589,7 +605,11 @@ export function recordingStages(overrides: Partial<PipelineStages> = {}): StageR
         calls.push("lander.land");
         landed.push(plan);
         return {
-          ref: { agent: plan.target.agent, home: plan.target.home, id: "landed-1" },
+          ref: {
+            agent: plan.target.agent,
+            home: plan.target.home,
+            id: "landed-1",
+          },
           switched: false,
           handover: null,
           itemsSent: plan.turns.length,

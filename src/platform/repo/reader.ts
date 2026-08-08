@@ -1,7 +1,7 @@
 import { realpath } from "node:fs/promises";
 import { resolve } from "node:path";
-import type { CommitDistance, RepoIdentity, RepoReader } from "./contract.js";
-import { runGit } from "./git.js";
+import type { CommitDistance, RepoIdentity, RepoReader, RepoReaderOptions } from "./contract.js";
+import { type GitResult, normalizeGitOptions, runGit } from "./git.js";
 
 /** Nothing is known: `ahead` and `behind` are 0 so a caller cannot print a fabricated distance. */
 function unknownDistance(): CommitDistance {
@@ -24,37 +24,54 @@ const MAX_REVISION_LENGTH = 256;
  * `identify` takes the directory to look at; `distanceFrom` compares against the HEAD of `cwd`,
  * which is the repository the command is running in.
  */
-export function createRepoReader(cwd: string = process.cwd()): RepoReader {
+export function createRepoReader(
+  cwd: string = process.cwd(),
+  options: RepoReaderOptions = {},
+): RepoReader {
+  const processOptions = normalizeGitOptions(options);
+  const git = (directory: string, args: readonly string[]) =>
+    runGit(directory, args, processOptions);
+
   return {
-    identify: (directory: string) => identify(directory),
-    distanceFrom: (sourceCommit: string) => distanceFrom(cwd, sourceCommit),
+    identify: (directory: string) => identify(directory, git),
+    distanceFrom: (sourceCommit: string) => distanceFrom(cwd, sourceCommit, git),
   };
 }
 
-async function identify(directory: string): Promise<RepoIdentity> {
+type GitRunner = (cwd: string, args: readonly string[]) => Promise<GitResult>;
+
+async function identify(directory: string, git: GitRunner): Promise<RepoIdentity> {
   const dir = resolve(directory);
-  const toplevel = await runGit(dir, ["rev-parse", "--show-toplevel"]);
+  const toplevel = await git(dir, ["rev-parse", "--show-toplevel"]);
   if (!toplevel.ok) return noRepository();
 
   const root = await resolveFully(toplevel.stdout.trim());
   if (root === null) return noRepository();
 
-  return { root, head: await commitOf(dir, "HEAD"), branch: await branch(dir) };
+  return {
+    root,
+    head: await commitOf(dir, "HEAD", git),
+    branch: await branch(dir, git),
+  };
 }
 
-async function distanceFrom(cwd: string, sourceCommit: string): Promise<CommitDistance> {
+async function distanceFrom(
+  cwd: string,
+  sourceCommit: string,
+  git: GitRunner,
+): Promise<CommitDistance> {
   const revision = plausibleRevision(sourceCommit);
   if (revision === null) return unknownDistance();
 
   const dir = resolve(cwd);
-  const source = await commitOf(dir, revision);
+  const source = await commitOf(dir, revision, git);
   if (source === null) return unknownDistance();
 
-  const from = await commitOf(dir, "HEAD");
+  const from = await commitOf(dir, "HEAD", git);
   if (from === null) return unknownDistance();
 
   // Both sides are commits git itself printed, so the range holds no caller input.
-  const counts = await runGit(dir, [
+  const counts = await git(dir, [
     "rev-list",
     "--left-right",
     "--count",
@@ -73,10 +90,10 @@ async function distanceFrom(cwd: string, sourceCommit: string): Promise<CommitDi
 }
 
 /** The commit a revision names, or null when this repository does not have it. */
-async function commitOf(dir: string, revision: string): Promise<string | null> {
+async function commitOf(dir: string, revision: string, git: GitRunner): Promise<string | null> {
   // `--end-of-options` stops git reading the revision as an option, and `^{commit}` rejects a
   // revision that exists but is not a commit.
-  const result = await runGit(dir, [
+  const result = await git(dir, [
     "rev-parse",
     "--verify",
     "--quiet",
@@ -88,8 +105,8 @@ async function commitOf(dir: string, revision: string): Promise<string | null> {
 }
 
 /** The branch HEAD is on, or null when HEAD is detached. An unborn branch still has a name. */
-async function branch(dir: string): Promise<string | null> {
-  const result = await runGit(dir, ["symbolic-ref", "--quiet", "--short", "HEAD"]);
+async function branch(dir: string, git: GitRunner): Promise<string | null> {
+  const result = await git(dir, ["symbolic-ref", "--quiet", "--short", "HEAD"]);
   const name = result.stdout.trim();
   return result.ok && name !== "" ? name : null;
 }

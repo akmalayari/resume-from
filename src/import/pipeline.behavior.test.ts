@@ -7,6 +7,7 @@ import {
   AGENTS,
   charEstimator,
   checksumTree,
+  commitPreviewed,
   createWorld,
   defaultConfig,
   halfEstimator,
@@ -48,7 +49,10 @@ function listRequest(world: World, target: AgentId): ListRequest {
 }
 
 function importRequest(world: World, target: AgentId): ImportRequest {
-  return { ...listRequest(world, target), selection: { by: "session-id", id: SOURCE_ID } };
+  return {
+    ...listRequest(world, target),
+    selection: { by: "session-id", id: SOURCE_ID },
+  };
 }
 
 const DIRECTIONS: Array<[AgentId, AgentId]> = AGENTS.flatMap((source) =>
@@ -60,7 +64,14 @@ function stamp(index: number): string {
 }
 
 function message(index: number, role: "user" | "agent", text: string): CanonicalTurn {
-  return { index, role, kind: "message", text, toolCall: null, timestamp: stamp(index) };
+  return {
+    index,
+    role,
+    kind: "message",
+    text,
+    toolCall: null,
+    timestamp: stamp(index),
+  };
 }
 
 function tool(index: number, name: string, args: string, mutating: boolean): CanonicalTurn {
@@ -127,7 +138,10 @@ describe("T-IMP-20 — the acceptance scenario, without a live agent", () => {
     );
     const pipeline = createImportPipeline(worldDeps(world));
     // A window small enough that the older turns cannot all fit (FR-30, FR-32).
-    const request = { ...importRequest(world, "pi"), target: world.targetFor("pi", 4_000) };
+    const request = {
+      ...importRequest(world, "pi"),
+      target: world.targetFor("pi", 4_000),
+    };
 
     const listing = await pipeline.list(listRequest(world, "pi"));
     expect(listing.rows[0]?.turnCount).toBe(turns.length);
@@ -136,7 +150,7 @@ describe("T-IMP-20 — the acceptance scenario, without a live agent", () => {
     expect(report.blocked).toBe(false);
     expect(report.dropLines.join(" ")).toMatch(/older turns? dropped/);
 
-    const landed = await pipeline.commit(request, null);
+    const landed = await pipeline.commit(request, null, report.confirmationToken);
     expect(landed.itemsStored).toBe(landed.itemsSent);
 
     const text = await landedText(world, "pi");
@@ -158,11 +172,16 @@ describe("T-IMP-21 — no result body reaches any target, in any direction", () 
     const world = await newWorld();
     const turns = workedSession(12);
     const bodies = Object.fromEntries(turns.map((turn) => [turn.index, `${SECRET} ${turn.index}`]));
-    const spec: Partial<SessionSpec> = { id: SOURCE_ID, repoPath: world.repoRoot, turns, bodies };
+    const spec: Partial<SessionSpec> = {
+      id: SOURCE_ID,
+      repoPath: world.repoRoot,
+      turns,
+      bodies,
+    };
     await writeSession(world.homeOf(source), referenceSpec(spec));
 
     const pipeline = createImportPipeline(worldDeps(world));
-    await pipeline.commit(importRequest(world, target), null);
+    await commitPreviewed(pipeline, importRequest(world, target));
 
     // The source file holds the bodies; nothing the pipeline wrote does (FR-24).
     expect(await readFile(`${world.homeOf(source)}/sessions/${SOURCE_ID}.jsonl`, "utf8")).toContain(
@@ -182,7 +201,10 @@ describe("T-IMP-22 — a very large session leaves room to work", () => {
       referenceSpec({ id: SOURCE_ID, repoPath: world.repoRoot, turns }),
     );
     const run = instrument(worldDeps(world));
-    const request = { ...importRequest(world, "pi"), target: world.targetFor("pi", 8_000) };
+    const request = {
+      ...importRequest(world, "pi"),
+      target: world.targetFor("pi", 8_000),
+    };
 
     const report = await run.pipeline.preview(request);
     const plan = run.plans[0];
@@ -195,8 +217,10 @@ describe("T-IMP-22 — a very large session leaves room to work", () => {
     expect(report.lines.join("\n")).toContain(report.budgetLine);
 
     // The claim is about what lands, not only about what was planned (AC-5).
-    await run.pipeline.commit(request, null);
-    const landed = JSON.parse(await landedText(world, "pi")) as { turns: CanonicalTurn[] };
+    await run.pipeline.commit(request, null, report.confirmationToken);
+    const landed = JSON.parse(await landedText(world, "pi")) as {
+      turns: CanonicalTurn[];
+    };
     expect(landed.turns).toHaveLength(plan?.keptTurnCount ?? 0);
     expect(landed.turns.length).toBeLessThan(turns.length);
     const cost = landed.turns.reduce(
@@ -221,13 +245,17 @@ describe("T-IMP-23 — the nine directions cannot be told apart", () => {
       });
       await writeSession(
         world.homeOf(source),
-        referenceSpec({ id: SOURCE_ID, repoPath: world.repoRoot, turns: workedSession(12) }),
+        referenceSpec({
+          id: SOURCE_ID,
+          repoPath: world.repoRoot,
+          turns: workedSession(12),
+        }),
       );
       const pipeline = createImportPipeline(worldDeps(world));
 
       const report = await pipeline.preview(importRequest(world, target));
       world.calls.length = 0;
-      await pipeline.commit(importRequest(world, target), null);
+      await pipeline.commit(importRequest(world, target), null, report.confirmationToken);
 
       const anonymous = report.lines.map((line) =>
         line
@@ -257,10 +285,8 @@ describe("T-IMP-24 — adding a fake fourth agent changes nothing here", () => {
           world.homeOf(source),
           referenceSpec({ id: SOURCE_ID, repoPath: world.repoRoot }),
         );
-        const landed = await createImportPipeline(worldDeps(world)).commit(
-          importRequest(world, target),
-          null,
-        );
+        const pipeline = createImportPipeline(worldDeps(world));
+        const landed = await commitPreviewed(pipeline, importRequest(world, target));
         expect(landed.ref.agent).toBe(target);
         expect(Object.keys(await checksumTree(world.targetHomeOf(target)))).toHaveLength(1);
       }
@@ -287,7 +313,7 @@ describe("T-IMP-25 — the canonical vocabulary survives a round trip", () => {
     );
     const run = instrument(worldDeps(world));
 
-    await run.pipeline.commit(importRequest(world, "pi"), null);
+    await commitPreviewed(run.pipeline, importRequest(world, "pi"));
 
     const serialized = JSON.parse(await landedText(world, "pi")) as {
       turns: CanonicalTurn[];
@@ -319,9 +345,16 @@ describe("T-IMP-26 — swapping the estimator changes only the numbers", () => {
     const world = await newWorld();
     await writeSession(
       world.homeOf("codex"),
-      referenceSpec({ id: SOURCE_ID, repoPath: world.repoRoot, turns: bigSession(200) }),
+      referenceSpec({
+        id: SOURCE_ID,
+        repoPath: world.repoRoot,
+        turns: bigSession(200),
+      }),
     );
-    const request = { ...importRequest(world, "pi"), target: world.targetFor("pi", 8_000) };
+    const request = {
+      ...importRequest(world, "pi"),
+      target: world.targetFor("pi", 8_000),
+    };
     const config = defaultConfig();
 
     const wide = instrument(worldDeps(world, { config, estimator: charEstimator }));

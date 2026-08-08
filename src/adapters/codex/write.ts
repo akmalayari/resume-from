@@ -8,7 +8,7 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { isAbsolute } from "node:path";
+import { basename, isAbsolute } from "node:path";
 import type {
   CanonicalSession,
   CanonicalTurn,
@@ -21,19 +21,17 @@ import type { RolloutEntry } from "./rollout.js";
 import {
   CODEX_CLI_VERSION,
   CODEX_ENTRY_EVENT_MSG,
-  CODEX_ENTRY_RESPONSE_ITEM,
   CODEX_ENTRY_SESSION_META,
   CODEX_EVENT_AGENT_MESSAGE,
   CODEX_EVENT_USER_MESSAGE,
   CODEX_ORIGINATOR,
   CODEX_SOURCE_CLI,
   isMessageEvent,
-  messageTextOf,
-  parseRolloutText,
-  payloadType,
   rolloutFilePath,
+  sessionIdFromRolloutFileName,
   stringifyRollout,
 } from "./rollout.js";
+import { inspectCodexRollout } from "./validation.js";
 
 export function serializeCodex(
   session: CanonicalSession,
@@ -75,7 +73,10 @@ export function validateCodex(serialized: SerializedSession): ValidationDefect[]
   const file = serialized.files[0];
 
   if (serialized.files.length !== 1 || file === undefined) {
-    defects.push({ path: "files", message: "a Codex thread is exactly one rollout file" });
+    defects.push({
+      path: "files",
+      message: "a Codex thread is exactly one rollout file",
+    });
     return defects;
   }
   if (!isAbsolute(file.absolutePath) || !file.absolutePath.endsWith(".jsonl")) {
@@ -85,70 +86,17 @@ export function validateCodex(serialized: SerializedSession): ValidationDefect[]
     });
   }
 
-  const { entries, truncated } = parseRolloutText(file.bytes.toString("utf8"));
-  if (truncated) {
-    defects.push({ path: "files/0/bytes", message: "a rollout line is not one whole JSON object" });
-  }
-
-  const meta = entries[0];
-  if (meta === undefined || meta.type !== CODEX_ENTRY_SESSION_META) {
+  if (sessionIdFromRolloutFileName(basename(file.absolutePath)) !== serialized.sessionId) {
     defects.push({
-      path: "items/0",
-      message: "the first entry must be session metadata, or the picker cannot list the thread",
-    });
-  } else {
-    if (meta.payload.id !== serialized.sessionId) {
-      defects.push({
-        path: "items/0/payload/id",
-        message: "session metadata names a different session",
-      });
-    }
-    const cwd = meta.payload.cwd;
-    if (typeof cwd !== "string" || !isAbsolute(cwd)) {
-      defects.push({
-        path: "items/0/payload/cwd",
-        message: "session metadata needs an absolute cwd",
-      });
-    }
-    for (const field of ["originator", "cli_version"]) {
-      if (typeof meta.payload[field] !== "string" || meta.payload[field] === "") {
-        defects.push({
-          path: `items/0/payload/${field}`,
-          message: `session metadata needs ${field}`,
-        });
-      }
-    }
-    if (Number.isNaN(Date.parse(String(meta.payload.timestamp)))) {
-      defects.push({
-        path: "items/0/payload/timestamp",
-        message: "session metadata needs an ISO timestamp",
-      });
-    }
-  }
-
-  const firstUser = entries.find(
-    (entry) =>
-      entry.type === CODEX_ENTRY_EVENT_MSG && payloadType(entry) === CODEX_EVENT_USER_MESSAGE,
-  );
-  if (firstUser === undefined || messageTextOf(firstUser).trim() === "") {
-    defects.push({
-      path: "items",
-      message:
-        "no user_message entry, so the preview would be empty and thread/list would not show the thread",
+      path: "files/0/absolutePath",
+      message: "the rollout filename names a different session",
     });
   }
 
-  for (const [index, entry] of entries.entries()) {
-    if (entry.type === CODEX_ENTRY_RESPONSE_ITEM) {
-      defects.push({
-        path: `items/${index}`,
-        message:
-          "response_item entries fill the model history only — C-7 measured that as invisible",
-      });
-    }
-  }
+  const inspection = inspectCodexRollout(file.bytes.toString("utf8"), serialized.sessionId);
+  defects.push(...inspection.defects);
 
-  const written = entries.filter(isMessageEvent).length;
+  const written = inspection.itemCount;
   if (written !== serialized.itemCount) {
     defects.push({
       path: "itemCount",

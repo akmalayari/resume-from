@@ -20,6 +20,11 @@ export interface JsonlParse {
   unreadable: string | null;
 }
 
+export interface ActiveEntryPath {
+  entries: RawEntry[];
+  unreadable: string | null;
+}
+
 /** Parse a session file. A line that is not a complete entry makes the whole file unreadable. */
 export function parseJsonl(text: string): JsonlParse {
   const entries: RawEntry[] = [];
@@ -39,6 +44,56 @@ export function parseJsonl(text: string): JsonlParse {
     entries.push(value as RawEntry);
   }
   return { entries, unreadable: null };
+}
+
+/** Follow the last non-sidechain UUID record to the root of Claude's active transcript. */
+export function resolveActiveEntryPath(entries: RawEntry[]): ActiveEntryPath {
+  const byUuid = new Map<string, RawEntry>();
+  const mainEntries: RawEntry[] = [];
+  for (const entry of entries) {
+    if (entry.isSidechain === true || entry.uuid === undefined) continue;
+    const uuid = asString(entry.uuid);
+    if (uuid === null) return { entries: [], unreadable: "entry has a malformed uuid" };
+    if (byUuid.has(uuid)) {
+      return { entries: [], unreadable: `duplicate entry uuid ${uuid}` };
+    }
+    if (entry.parentUuid !== null && typeof entry.parentUuid !== "string") {
+      return {
+        entries: [],
+        unreadable: `entry ${uuid} has a malformed parentUuid`,
+      };
+    }
+    byUuid.set(uuid, entry);
+    mainEntries.push(entry);
+  }
+  const leaf = mainEntries[mainEntries.length - 1];
+  if (leaf === undefined) return { entries: [], unreadable: null };
+
+  const reversed: RawEntry[] = [];
+  const visited = new Set<string>();
+  let current: RawEntry | undefined = leaf;
+  while (current !== undefined) {
+    const uuid = asString(current.uuid);
+    if (uuid === null) return { entries: [], unreadable: "active entry has no uuid" };
+    if (visited.has(uuid)) {
+      return {
+        entries: [],
+        unreadable: `entry graph contains a cycle at ${uuid}`,
+      };
+    }
+    visited.add(uuid);
+    reversed.push(current);
+    if (current.parentUuid === null) break;
+    const parent: RawEntry | undefined = byUuid.get(current.parentUuid as string);
+    if (parent === undefined) {
+      return {
+        entries: [],
+        unreadable: `entry ${uuid} refers to missing parent ${String(current.parentUuid)}`,
+      };
+    }
+    current = parent;
+  }
+  return { entries: reversed.reverse(), unreadable: null };
 }
 
 export function asString(value: unknown): string | null {

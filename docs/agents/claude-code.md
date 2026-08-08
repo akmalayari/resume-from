@@ -18,7 +18,7 @@ If the command does not appear, restart Claude Code.
 2. Read the numbered list.
 3. Run `/resume-from <row>`.
 4. Read the preview.
-5. Run `/resume-from <row> --confirm`.
+5. Run the token-bearing `/resume-from <row> --confirm <token>` command printed by the preview.
 
 Claude Code cannot move the current process into the new session. The command
 prints the new session ID and the native resume command.

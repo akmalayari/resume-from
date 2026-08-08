@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { CommitError, FileCommitter } from "./contract.js";
 import { createFileCommitter } from "./file-committer.js";
-import { entriesOf, exists, makeHome, removeHome } from "./test-support.js";
+import { entriesOf, makeHome, removeHome } from "./test-support.js";
 
 const intruder = vi.hoisted(() => ({
   armed: null as string | null,
@@ -42,28 +42,20 @@ afterEach(async () => {
 });
 
 it("T-STO-13 — a path that appears between the check and the rename", async () => {
-  const first = join(home, "first.txt");
-  const second = join(home, "second.txt");
-  const third = join(home, "third.txt");
-  intruder.armed = third;
+  const destination = join(home, "session.jsonl");
+  intruder.armed = destination;
 
   let refusal: CommitError | null = null;
   try {
-    await committer.commit([
-      { absolutePath: first, bytes: Buffer.from("a") },
-      { absolutePath: second, bytes: Buffer.from("b") },
-      { absolutePath: third, bytes: Buffer.from("mine") },
-    ]);
+    await committer.commit(home, [{ absolutePath: destination, bytes: Buffer.from("mine") }]);
   } catch (error) {
     refusal = error as CommitError;
   }
 
   expect(refusal?.refusal).toBe("path-exists");
-  expect(refusal?.path).toBe(third);
+  expect(refusal?.path).toBe(destination);
   // The file that appeared is never overwritten.
-  expect(Buffer.compare(await readFile(third), intruder.bytes)).toBe(0);
+  expect(Buffer.compare(await readFile(destination), intruder.bytes)).toBe(0);
   // Everything the commit created is gone, temporary files included.
-  await expect(exists(first)).resolves.toBe(false);
-  await expect(exists(second)).resolves.toBe(false);
-  await expect(entriesOf(home)).resolves.toEqual(["third.txt"]);
+  await expect(entriesOf(home)).resolves.toEqual(["session.jsonl"]);
 });

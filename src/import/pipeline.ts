@@ -2,6 +2,7 @@
 // Nothing here knows an agent: the source adapter comes from the chosen session and the
 // target adapter from the target profile (FR-6, FR-60).
 
+import { confirmationMatches, confirmationToken } from "./confirmation.js";
 import type {
   AgentAdapter,
   AgentRuntime,
@@ -15,6 +16,7 @@ import type {
   Listing,
   ListRequest,
   PreviewBuilder,
+  PreviewContent,
   PreviewReport,
   SearchScope,
   SessionDescriptor,
@@ -134,7 +136,7 @@ export function createPipelineFromStages(stages: PipelineStages): ImportPipeline
       );
     }
 
-    let report: PreviewReport;
+    let report: PreviewContent;
     try {
       report = await stages.previewFor(request.repoRoot).build(plan);
     } catch (cause) {
@@ -145,7 +147,12 @@ export function createPipelineFromStages(stages: PipelineStages): ImportPipeline
       );
     }
 
-    return { descriptor, plan, report };
+    const token = confirmationToken(descriptor, plan, report);
+    return {
+      descriptor,
+      plan,
+      report: { ...report, confirmationToken: token },
+    };
   }
 
   return {
@@ -169,9 +176,20 @@ export function createPipelineFromStages(stages: PipelineStages): ImportPipeline
       return (await compute(request)).report;
     },
 
-    async commit(request: ImportRequest, runtime: AgentRuntime): Promise<LandingResult> {
+    async commit(
+      request: ImportRequest,
+      runtime: AgentRuntime,
+      suppliedToken: string,
+    ): Promise<LandingResult> {
       const adapter = targetAdapter(stages.adapters, request.target);
-      const { descriptor, plan } = await compute(request);
+      const { descriptor, plan, report } = await compute(request);
+
+      if (!confirmationMatches(report.confirmationToken, suppliedToken)) {
+        throw new ImportFailure(
+          "confirmation",
+          `The source session or preview changed after confirmation. Nothing was written to ${request.target.home}. ${PREVIEW_AGAIN}`,
+        );
+      }
 
       if (plan.blockedReason !== null) {
         throw new ImportFailure(
@@ -199,7 +217,10 @@ export function createPipelineFromStages(stages: PipelineStages): ImportPipeline
         const message = known
           ? cause.message
           : `The import could not be placed in ${request.target.home}: ${reasonOf(cause)}. ${IMPORT_AGAIN}`;
-        throw new ImportFailure("landing", message, { cause, defects: known ? cause.defects : [] });
+        throw new ImportFailure("landing", message, {
+          cause,
+          defects: known ? cause.defects : [],
+        });
       }
     },
   };

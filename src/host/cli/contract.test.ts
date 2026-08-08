@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { CliExit } from "./contract.js";
 import { createCliRunner } from "./index.js";
 import {
+  CONFIRMATION_TOKEN,
   descriptor,
   invocation,
   landing,
@@ -48,12 +49,20 @@ describe("T-CLI-10 the landing outcome is printed", () => {
   it("prints the session ID, the exact command and the marker", async () => {
     const result = landing({
       switched: false,
-      handover: { sessionId: "new-session-7", command: "claude --resume new-session-7" },
-      marker: marker({ lines: ["=== imported ===", "from codex sess-1", "12 turns dropped"] }),
+      handover: {
+        sessionId: "new-session-7",
+        command: "claude --resume new-session-7",
+      },
+      marker: marker({
+        lines: ["=== imported ===", "from codex sess-1", "12 turns dropped"],
+      }),
     });
     const { pipeline } = stubPipeline({ landing: result });
 
-    const outcome = await createCliRunner().run(invocation({ argv: ["1", "--confirm"] }), pipeline);
+    const outcome = await createCliRunner().run(
+      invocation({ argv: ["1", "--confirm", CONFIRMATION_TOKEN] }),
+      pipeline,
+    );
 
     const printed = outcome.stdout.join("\n");
     expect(printed).toContain(result.ref.id);
@@ -78,8 +87,18 @@ describe("T-CLI-11 exit codes", () => {
       exit: 0,
       stub: () => stubPipeline({ listing: listing({ rows: [descriptor()] }) }),
     },
-    { name: "a successful preview", argv: ["1"], exit: 0, stub: () => stubPipeline() },
-    { name: "a successful commit", argv: ["1", "--confirm"], exit: 0, stub: () => stubPipeline() },
+    {
+      name: "a successful preview",
+      argv: ["1"],
+      exit: 0,
+      stub: () => stubPipeline(),
+    },
+    {
+      name: "a successful commit",
+      argv: ["1", "--confirm", CONFIRMATION_TOKEN],
+      exit: 0,
+      stub: () => stubPipeline(),
+    },
     {
       name: "a blocked preview",
       argv: ["1"],
@@ -106,7 +125,7 @@ describe("T-CLI-11 exit codes", () => {
     },
     {
       name: "a landing failure",
-      argv: ["1", "--confirm"],
+      argv: ["1", "--confirm", CONFIRMATION_TOKEN],
       exit: 2,
       stub: () =>
         stubPipeline({
@@ -114,7 +133,7 @@ describe("T-CLI-11 exit codes", () => {
             stage: "commit",
             message: "The target home is read only. Check its permissions.",
             defects: [],
-            rolledBack: true,
+            rolledBack: false,
           },
         }),
     },
@@ -152,11 +171,14 @@ describe("T-CLI-12 errors go to standard error with a next step", () => {
         stage: "commit",
         message: "The target home is read only. Check its permissions.",
         defects: [],
-        rolledBack: true,
+        rolledBack: false,
       },
     });
 
-    const outcome = await createCliRunner().run(invocation({ argv: ["1", "--confirm"] }), pipeline);
+    const outcome = await createCliRunner().run(
+      invocation({ argv: ["1", "--confirm", CONFIRMATION_TOKEN] }),
+      pipeline,
+    );
 
     expect(outcome.stdout).toEqual([]);
     expect(outcome.stderr.join("\n")).toContain("read only");

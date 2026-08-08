@@ -24,9 +24,11 @@ import {
   ENTRY_TYPE_USER,
   parseJsonl,
   type RawEntry,
+  resolveActiveEntryPath,
   toIsoUtc,
 } from "./entries.js";
 import { listSessionFiles, sessionIdOf } from "./layout.js";
+import { redactSensitiveStructure, redactSensitiveText } from "./redaction.js";
 
 /** FR-25: every dropped body is marked in text the model can read. */
 export const DROPPED_MARKER = "(content dropped: imported session, may be stale)";
@@ -100,10 +102,11 @@ function renderValue(value: unknown): string {
   return truncate(oneLine(JSON.stringify(value) ?? ""), MAX_ARGUMENT_CHARS);
 }
 
-/** The arguments as the source recorded them, shortened so one call stays one line. */
+/** The redacted source arguments, shortened so one call stays one line. */
 export function renderArguments(input: unknown): string {
-  const object = asObject(input);
-  if (object === null) return input === undefined ? "" : renderValue(input);
+  const safeInput = redactSensitiveStructure(input);
+  const object = asObject(safeInput);
+  if (object === null) return safeInput === undefined ? "" : renderValue(safeInput);
   return truncate(Object.values(object).map(renderValue).join(", "), MAX_ARGUMENTS_CHARS);
 }
 
@@ -126,7 +129,10 @@ function hasResultBody(content: unknown): boolean {
 }
 
 /** Exactly one line about the outcome (FR-23). */
-function summarizeResult(result: ResultBody | undefined): { text: string; bodyDropped: boolean } {
+function summarizeResult(result: ResultBody | undefined): {
+  text: string;
+  bodyDropped: boolean;
+} {
   if (result === undefined) return { text: "no result recorded", bodyDropped: false };
   if (result.body === null) {
     // A structured result: its size is unknown, but it existed and it is being dropped (FR-25).
@@ -136,11 +142,17 @@ function summarizeResult(result: ResultBody | undefined): { text: string; bodyDr
         bodyDropped: true,
       };
     }
-    return { text: result.isError ? "error" : "no result recorded", bodyDropped: false };
+    return {
+      text: result.isError ? "error" : "no result recorded",
+      bodyDropped: false,
+    };
   }
   const lines = result.body === "" ? 0 : result.body.split("\n").length;
   const size = `${lines} line${lines === 1 ? "" : "s"}`;
-  return { text: result.isError ? `error, ${size}` : size, bodyDropped: result.body.length > 0 };
+  return {
+    text: result.isError ? `error, ${size}` : size,
+    bodyDropped: result.body.length > 0,
+  };
 }
 
 function toolCallRecord(
@@ -154,7 +166,7 @@ function toolCallRecord(
   return {
     toolName,
     argumentsText,
-    outcomeLine: bodyDropped ? `${line} ${DROPPED_MARKER}` : line,
+    outcomeLine: redactSensitiveText(bodyDropped ? `${line} ${DROPPED_MARKER}` : line),
     effect: effectOf(toolName),
     bodyDropped,
   };
@@ -198,6 +210,15 @@ function messageText(content: unknown): string {
   return texts.join("\n");
 }
 
+/** Claude records local slash-command stdout as a user-shaped carrier in some versions. */
+function isLocalCommandCarrier(content: unknown): boolean {
+  const text = messageText(content).trim();
+  return (
+    /(?:^|\n)<local-command-stdout>[\s\S]*<\/local-command-stdout>(?:\n|$)/.test(text) ||
+    /(?:^|\n)<local-command-caveat>[\s\S]*<\/local-command-caveat>(?:\n|$)/.test(text)
+  );
+}
+
 function firstLine(text: string, max: number): string {
   const line = oneLine(text.split("\n")[0] ?? "");
   return truncate(line, max);
@@ -205,12 +226,17 @@ function firstLine(text: string, max: number): string {
 
 /** Read a whole session file into canonical turns. Pure: it takes the text, not a path. */
 export function readSessionText(text: string): SessionReadResult {
-  const { entries, unreadable } = parseJsonl(text);
-  const results = collectResults(entries);
+  const parsed = parseJsonl(text);
+  const active =
+    parsed.unreadable === null
+      ? resolveActiveEntryPath(parsed.entries)
+      : { entries: [] as RawEntry[], unreadable: null };
+  const unreadable = parsed.unreadable ?? active.unreadable;
+  const results = collectResults(active.entries);
 
   const turns: CanonicalTurn[] = [];
   const changedPaths: string[] = [];
-  let skipped = 0;
+  let skipped = parsed.entries.length - active.entries.length;
   let repoPath: string | null = null;
   let branch: string | null = null;
 
@@ -218,7 +244,7 @@ export function readSessionText(text: string): SessionReadResult {
     turns.push({ ...turn, index: turns.length });
   };
 
-  for (const entry of entries) {
+  for (const entry of active.entries) {
     if (repoPath === null) repoPath = asString(entry.cwd);
     if (branch === null) branch = asString(entry.gitBranch);
 
@@ -229,6 +255,22 @@ export function readSessionText(text: string): SessionReadResult {
     }
     const timestamp = toIsoUtc(entry.timestamp);
 
+    if (entry.type === ENTRY_TYPE_USER && entry.isCompactSummary === true) {
+      const summary = messageText(asObject(entry.message)?.content);
+      if (summary.trim() === "") {
+        skipped++;
+      } else {
+        push({
+          role: "agent",
+          kind: "summary",
+          text: summary,
+          toolCall: null,
+          timestamp,
+        });
+      }
+      continue;
+    }
+
     if (entry.type === ENTRY_TYPE_USER) {
       // Meta entries carry injected context — environment blocks, command output, reminders.
       // FR-28 keeps all of it out of the canonical model.
@@ -236,7 +278,12 @@ export function readSessionText(text: string): SessionReadResult {
         skipped++;
         continue;
       }
-      const text = messageText(asObject(entry.message)?.content);
+      const content = asObject(entry.message)?.content;
+      if (isLocalCommandCarrier(content)) {
+        skipped++;
+        continue;
+      }
+      const text = messageText(content);
       if (text.trim() === "") continue; // a tool-result carrier; its outcome already crossed
       push({ role: "user", kind: "message", text, toolCall: null, timestamp });
       continue;
@@ -245,7 +292,13 @@ export function readSessionText(text: string): SessionReadResult {
     if (entry.type === ENTRY_TYPE_ASSISTANT) {
       const content = asObject(entry.message)?.content;
       if (typeof content === "string") {
-        push({ role: "agent", kind: "message", text: content, toolCall: null, timestamp });
+        push({
+          role: "agent",
+          kind: "message",
+          text: content,
+          toolCall: null,
+          timestamp,
+        });
         continue;
       }
       const blocks = asArray(content);
@@ -292,7 +345,13 @@ export function readSessionText(text: string): SessionReadResult {
               }
             }
           }
-          push({ role: "agent", kind: "tool-call", text: "", toolCall: record, timestamp });
+          push({
+            role: "agent",
+            kind: "tool-call",
+            text: "",
+            toolCall: record,
+            timestamp,
+          });
         } else {
           // thinking, redacted_thinking, server tool state: hidden reasoning and vendor state
           // never cross (FR-28, NG-8).
@@ -306,7 +365,13 @@ export function readSessionText(text: string): SessionReadResult {
     if (entry.type === ENTRY_TYPE_SUMMARY) {
       const summary = asString(entry.summary);
       if (summary !== null) {
-        push({ role: "agent", kind: "summary", text: summary, toolCall: null, timestamp });
+        push({
+          role: "agent",
+          kind: "summary",
+          text: summary,
+          toolCall: null,
+          timestamp,
+        });
         continue;
       }
     }

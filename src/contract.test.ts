@@ -10,9 +10,6 @@
  * recomputed from the tree, and every edge is read out of the documents that claim it.
  */
 
-import { spawnSync } from "node:child_process";
-import { existsSync, readdirSync } from "node:fs";
-import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
@@ -22,6 +19,7 @@ import {
   distanceOf,
   documentOf,
   edgeKey,
+  formatRestatementDefects,
   headings,
   type Integration,
   importSpecifiers,
@@ -40,6 +38,7 @@ import {
   shippedSources,
   strengthsIn,
   strictestStrength,
+  validateContractRestatements,
 } from "./test-support.js";
 
 const MODULES = moduleFolders(SRC_DIR);
@@ -115,29 +114,43 @@ describe("T-ROO-4 — the design tree matches the source tree", () => {
 });
 
 describe("T-ROO-5 — every restatement matches its normative home", () => {
-  /** The fractal-design validator, wherever the plugin cache put this version of it. */
-  const validator = ((): string | null => {
-    const cache = join(homedir(), ".claude/plugins/cache/vladikk-fractal-modularity/modularity");
-    if (!existsSync(cache)) return null;
-    const candidates = readdirSync(cache)
-      .map((version) => join(cache, version, "skills/fractal-design/scripts/validate_module.py"))
-      .filter((path) => existsSync(path))
-      .sort();
-    return candidates[candidates.length - 1] ?? null;
-  })();
+  const documents = MODULES.map((dir) => ({
+    path: `${modulePath(dir)}/module.md`,
+    text: documentOf(dir),
+  }));
 
-  // This validator belongs to an external Claude Code plugin. CI does not install
-  // personal plugin caches, so run this fitness check only where the plugin exists.
-  it.skipIf(validator === null)("runs in tree mode over src/ and reports no defect", () => {
-    if (validator === null) return;
+  it("validates every marker with the project-owned TypeScript validator", () => {
+    const defects = validateContractRestatements(documents);
+    expect(defects, formatRestatementDefects(defects)).toEqual([]);
+  });
 
-    const run = spawnSync("python3", [validator, "src"], {
-      cwd: join(SRC_DIR, ".."),
-      encoding: "utf8",
-    });
+  it("reports marker placement and declaration drift with file, line and type", () => {
+    const owner = {
+      path: "src/owner/module.md",
+      text: "## Public Contract\n\n```ts\ninterface Example {\n  value: string;\n}\n```\n\n## Integrations\n",
+    };
+    const consumer = {
+      path: "src/consumer/module.md",
+      text:
+        "## Public Contract\n\n" +
+        "<!-- contract: Example — restated from src/owner/module.md -->\n\n" +
+        "```ts\ninterface Example {\n  value: number;\n}\n```\n\n## Integrations\n",
+    };
+    const defects = validateContractRestatements([owner, consumer]);
+    const rendered = formatRestatementDefects(defects);
 
-    expect(`${run.stdout ?? ""}${run.stderr ?? ""}`.trim()).not.toBe("");
-    expect(run.status, `${run.stdout ?? ""}${run.stderr ?? ""}`).toBe(0);
+    expect(rendered).toContain("src/consumer/module.md:");
+    expect(rendered).toContain("marker must be immediately followed by a code fence");
+
+    const drift = formatRestatementDefects(
+      validateContractRestatements([
+        owner,
+        { ...consumer, text: consumer.text.replace("-->\n\n```", "-->\n```") },
+      ]),
+    );
+    expect(drift).toContain("[Example]");
+    expect(drift).toContain("src/owner/module.md:");
+    expect(drift).toContain('expected "  value: string;", got "  value: number;"');
   });
 });
 
@@ -303,7 +316,10 @@ describe("T-ROO-7 — the module graph is acyclic and layered", () => {
 
   const edges: Edge[] = shipped.flatMap((source) =>
     importSpecifiers(source)
-      .map((specifier) => ({ specifier, target: resolveSpecifier(source.path, specifier) }))
+      .map((specifier) => ({
+        specifier,
+        target: resolveSpecifier(source.path, specifier),
+      }))
       .filter((reach): reach is { specifier: string; target: string } => reach.target !== undefined)
       .map((reach) => ({
         from: moduleOf(source.path),

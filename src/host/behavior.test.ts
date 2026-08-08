@@ -163,7 +163,11 @@ describe("T-HOS-18 — adding an agent costs one folder and one line", () => {
       expect(report.lines.length).toBeGreaterThan(0);
 
       const target = scene.host.registry().get(targetAgent);
-      const result = await pipeline.commit(request, runtimeFor(target, scene.root, profile.home));
+      const result = await pipeline.commit(
+        request,
+        runtimeFor(target, scene.root, profile.home),
+        report.confirmationToken,
+      );
 
       expect(result.ref.agent).toBe(targetAgent);
       expect(result.ref.home).toBe(profile.home);
@@ -201,7 +205,9 @@ describe("T-HOS-19 — the profile is right for every agent", () => {
   it.each(REAL_AGENTS.map((agent) => [agent] as const))(
     "%s takes the configured window when the user set one (FR-18)",
     (agent) => {
-      const config = testConfig({ windowOverrides: [{ agent, windowTokens: 64_000 }] });
+      const config = testConfig({
+        windowOverrides: [{ agent, windowTokens: 64_000 }],
+      });
       expect(scene.host.profiles().build(agent, null, config).windowTokens).toBe(64_000);
     },
   );
@@ -263,7 +269,8 @@ describe("T-HOS-20 — two homes of one agent are two targets", () => {
         onlyAgent: sourceAgent,
         onlyHome: sourceHome,
       };
-      const result = await pipeline.commit(request, null);
+      const report = await pipeline.preview(request);
+      const result = await pipeline.commit(request, null, report.confirmationToken);
       expect(result.ref.home).toBe(profile.home);
       landed[name] = result.ref.id;
     }

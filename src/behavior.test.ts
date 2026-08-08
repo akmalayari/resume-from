@@ -100,8 +100,19 @@ async function runEveryDirection(scene: Bench): Promise<Direction[]> {
       const request = importRequest(scene, source, profile);
       const report = await pipeline.preview(request);
       expect([report.blocked, report.blockedReason]).toEqual([false, null]);
-      const result = await pipeline.commit(request, runtimeFor(target, REPO_ROOT, profile.home));
-      done.push({ name: `${source} → ${agent}`, source, target: agent, profile, report, result });
+      const result = await pipeline.commit(
+        request,
+        runtimeFor(target, REPO_ROOT, profile.home),
+        report.confirmationToken,
+      );
+      done.push({
+        name: `${source} → ${agent}`,
+        source,
+        target: agent,
+        profile,
+        report,
+        result,
+      });
     }
   }
   return done;
@@ -348,7 +359,11 @@ describe("T-ROO-16 — AC-3: a stale file is read again, not edited blind", () =
 
     const report = await pipeline.preview(request);
     expect([report.blocked, report.blockedReason]).toEqual([false, null]);
-    const result = await pipeline.commit(request, runtimeFor(target, REPO_ROOT, profile.home));
+    const result = await pipeline.commit(
+      request,
+      runtimeFor(target, REPO_ROOT, profile.home),
+      report.confirmationToken,
+    );
 
     const rows = await target.listSessions(profile.home);
     const row = rows.find((candidate) => candidate.ref.id === result.ref.id);
@@ -408,7 +423,11 @@ describe("T-ROO-18 — AC-5: a very large session leaves room to work", () => {
     expect(report.dropLines.length).toBeGreaterThan(0);
     expect(report.budgetLine).not.toBe("");
 
-    const result = await pipeline.commit(request, runtimeFor(target, REPO_ROOT, profile.home));
+    const result = await pipeline.commit(
+      request,
+      runtimeFor(target, REPO_ROOT, profile.home),
+      report.confirmationToken,
+    );
     expect(result.itemsSent).toBeGreaterThan(0);
     expect(result.itemsSent).toBeLessThan(HUGE_TURNS);
 
@@ -533,7 +552,12 @@ describe("T-ROO-21 — nothing is written before confirmation, anywhere", () => 
       const home = join(scene.root, `${adapter.agent}-cli-untouched`);
       for (const argv of [[], ["1"]]) {
         const outcome = await runCommandBinary(
-          { argv, cwd: REPO_ROOT, targetAgent: adapter.agent, targetHome: home },
+          {
+            argv,
+            cwd: REPO_ROOT,
+            targetAgent: adapter.agent,
+            targetHome: home,
+          },
           { cwd: REPO_ROOT },
         );
         expect([argv.join(" "), outcome.exitCode], outcome.stderr.join("\n")).toEqual([
@@ -587,7 +611,11 @@ describe("T-ROO-22 — a platform service can be replaced without touching a con
               createRepo: () => ({
                 identify: () => {
                   asked += 1;
-                  return Promise.resolve({ root: null, head: null, branch: null });
+                  return Promise.resolve({
+                    root: null,
+                    head: null,
+                    branch: null,
+                  });
                 },
                 distanceFrom: () => Promise.resolve({ known: false, ahead: 0, behind: 0 }),
               }),
@@ -605,7 +633,7 @@ describe("T-ROO-22 — a platform service can be replaced without touching a con
           deps: {
             deps: {
               createCommitter: () => ({
-                async commit(files: PendingFile[]) {
+                async commit(_root: string, files: PendingFile[]) {
                   committed.push(...files);
                   // It records, and then writes them its own way — plainly, with none of the
                   // shipped committer's staging. The landing reads the session back after the
@@ -613,12 +641,13 @@ describe("T-ROO-22 — a platform service can be replaced without touching a con
                   // pipeline stops, not that it runs.
                   const { mkdir, writeFile: write } = await import("node:fs/promises");
                   for (const file of files) {
-                    await mkdir(join(file.absolutePath, ".."), { recursive: true });
+                    await mkdir(join(file.absolutePath, ".."), {
+                      recursive: true,
+                    });
                     await write(file.absolutePath, file.bytes);
                   }
                   return {
                     createdPaths: files.map((file) => file.absolutePath),
-                    rollback: () => Promise.resolve(),
                   };
                 },
               }),
@@ -688,7 +717,11 @@ describe("T-ROO-22 — a platform service can be replaced without touching a con
         const report = await pipeline.preview(request);
         expect([report.blocked, report.blockedReason]).toEqual([false, null]);
 
-        const result = await pipeline.commit(request, runtimeFor(target, REPO_ROOT, profile.home));
+        const result = await pipeline.commit(
+          request,
+          runtimeFor(target, REPO_ROOT, profile.home),
+          report.confirmationToken,
+        );
         expect(result.itemsStored).toBe(result.itemsSent);
 
         check();

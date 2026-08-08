@@ -56,7 +56,11 @@ function turn(index: number): CanonicalTurn {
 }
 
 function makePlan(home: HomePath, over: Partial<TransferPlan> = {}): TransferPlan {
-  const target: TargetProfile = { agent: "claude-code", home, windowTokens: 200_000 };
+  const target: TargetProfile = {
+    agent: "claude-code",
+    home,
+    windowTokens: 200_000,
+  };
   const base: TransferPlan = {
     target,
     provenance: {
@@ -109,6 +113,7 @@ interface AdapterOptions {
   fileCount?: number;
   itemCount?: number;
   storedItemCount?: number;
+  storedSessionId?: SessionId;
   openable?: boolean;
   defects?: ValidationDefect[];
   switchOutcome?: SwitchOutcome;
@@ -164,7 +169,7 @@ function createAdapter(log: string[], options: AdapterOptions = {}): AdapterStub
       if (options.serializeThrows) throw options.serializeThrows;
       return {
         sessionId,
-        files: filesFor(target.home, sessionId, options.fileCount ?? 3),
+        files: filesFor(target.home, sessionId, options.fileCount ?? 1),
         itemCount,
       };
     },
@@ -177,7 +182,7 @@ function createAdapter(log: string[], options: AdapterOptions = {}): AdapterStub
       log.push("readBack");
       if (options.readBackRejects) return Promise.reject(options.readBackRejects);
       return Promise.resolve({
-        sessionId,
+        sessionId: options.storedSessionId ?? sessionId,
         itemCount: options.storedItemCount ?? itemCount,
         openable: options.openable ?? true,
       });
@@ -227,7 +232,7 @@ async function undo(files: string[], dirs: string[]): Promise<void> {
 
 function createFsCommitter(log: string[] = []): FileCommitter {
   return {
-    async commit(files: PendingFile[]): Promise<CommitHandle> {
+    async commit(_root: string, files: PendingFile[]): Promise<CommitHandle> {
       log.push("commit");
       for (const file of files) {
         if (existsSync(file.absolutePath)) {
@@ -254,33 +259,16 @@ function createFsCommitter(log: string[] = []): FileCommitter {
           `Writing the session failed: ${(cause as Error).message}`,
         );
       }
-      return {
-        createdPaths: [...createdFiles, ...createdDirs],
-        rollback: () => undo(createdFiles, createdDirs),
-      };
+      return { createdPaths: createdFiles };
     },
   };
 }
 
 function createRefusingCommitter(error: unknown, log: string[] = []): FileCommitter {
   return {
-    commit(_files: PendingFile[]): Promise<CommitHandle> {
+    commit(_root: string, _files: PendingFile[]): Promise<CommitHandle> {
       log.push("commit");
       return Promise.reject(error);
-    },
-  };
-}
-
-/** A committer that succeeds but whose rollback fails (T-LAN-16). */
-function createUnrollbackableCommitter(log: string[] = []): FileCommitter {
-  const real = createFsCommitter(log);
-  return {
-    async commit(files: PendingFile[]): Promise<CommitHandle> {
-      const handle = await real.commit(files);
-      return {
-        createdPaths: handle.createdPaths,
-        rollback: () => Promise.reject(new Error("the directory is locked")),
-      };
     },
   };
 }
@@ -462,8 +450,7 @@ describe("unit", () => {
 interface FailureCase {
   name: string;
   stage: LandingStage;
-  rolledBack: boolean;
-  /** A switch failure keeps the valid session, so the target gains files. */
+  /** A post-commit failure keeps the published session, so the target gains files. */
   keepsSession: boolean;
   build(targetHome: string): {
     plan: TransferPlan;
@@ -476,18 +463,18 @@ const failureCases: FailureCase[] = [
   {
     name: "serialize throws",
     stage: "serialize",
-    rolledBack: false,
     keepsSession: false,
     build: (targetHome) => ({
       plan: makePlan(targetHome),
-      adapter: createAdapter([], { serializeThrows: new Error("unknown turn kind") }),
+      adapter: createAdapter([], {
+        serializeThrows: new Error("unknown turn kind"),
+      }),
       committer: createFsCommitter(),
     }),
   },
   {
     name: "validate reports defects",
     stage: "validate",
-    rolledBack: false,
     keepsSession: false,
     build: (targetHome) => ({
       plan: makePlan(targetHome),
@@ -500,7 +487,6 @@ const failureCases: FailureCase[] = [
   {
     name: "the committer refuses",
     stage: "commit",
-    rolledBack: false,
     keepsSession: false,
     build: (targetHome) => ({
       plan: makePlan(targetHome),
@@ -517,7 +503,6 @@ const failureCases: FailureCase[] = [
   {
     name: "the committer fails with something that is not a CommitError",
     stage: "commit",
-    rolledBack: false,
     keepsSession: false,
     build: (targetHome) => ({
       plan: makePlan(targetHome),
@@ -528,8 +513,7 @@ const failureCases: FailureCase[] = [
   {
     name: "the read-back finds fewer items",
     stage: "read-back",
-    rolledBack: true,
-    keepsSession: false,
+    keepsSession: true,
     build: (targetHome) => ({
       plan: makePlan(targetHome),
       adapter: createAdapter([], { itemCount: 24, storedItemCount: 23 }),
@@ -539,11 +523,12 @@ const failureCases: FailureCase[] = [
   {
     name: "the switch fails",
     stage: "switch",
-    rolledBack: false,
     keepsSession: true,
     build: (targetHome) => ({
       plan: makePlan(targetHome),
-      adapter: createAdapter([], { switchRejects: new Error("no terminal attached") }),
+      adapter: createAdapter([], {
+        switchRejects: new Error("no terminal attached"),
+      }),
       committer: createFsCommitter(),
     }),
   },
@@ -580,7 +565,7 @@ describe("integration contract", () => {
     expect(await snapshot(home)).toEqual(before);
   });
 
-  it("T-LAN-8 rolls back when the stored item count differs", async () => {
+  it("T-LAN-8 preserves and reports the session when the stored item count differs", async () => {
     await seedHome(home, 3);
     const before = await snapshot(home);
 
@@ -595,13 +580,37 @@ describe("integration contract", () => {
     );
 
     expect(failure.stage).toBe("read-back");
-    expect(failure.rolledBack).toBe(true);
+    expect(failure.rolledBack).toBe(false);
     expect(failure.message).toContain("23");
     expect(failure.message).toContain("24");
-    expect(await snapshot(home)).toEqual(before);
+    expect(failure.message).toContain(join(home, "sessions", SESSION_ID, "part-0.jsonl"));
+    expect(await snapshot(home)).toEqual(expect.arrayContaining(before));
+    expect(await snapshot(home)).not.toEqual(before);
   });
 
-  it("T-LAN-9 rolls back a session the target cannot open", async () => {
+  it("preserves and reports the session when read-back returns a different session ID", async () => {
+    const before = await snapshot(home);
+
+    const failure = await failureOf(
+      createSessionLander().land(
+        makePlan(home),
+        createAdapter([], { storedSessionId: "another-session" }),
+        createFsCommitter(),
+        RUNTIME,
+        IMPORTED_AT,
+      ),
+    );
+
+    expect(failure.stage).toBe("read-back");
+    expect(failure.rolledBack).toBe(false);
+    expect(failure.message).toContain("another-session");
+    expect(failure.message).toContain(SESSION_ID);
+    expect(failure.message).toContain(join(home, "sessions", SESSION_ID, "part-0.jsonl"));
+    expect(await snapshot(home)).toEqual(expect.arrayContaining(before));
+    expect(await snapshot(home)).not.toEqual(before);
+  });
+
+  it("T-LAN-9 preserves and reports a session the target cannot open", async () => {
     const before = await snapshot(home);
 
     const failure = await failureOf(
@@ -615,9 +624,11 @@ describe("integration contract", () => {
     );
 
     expect(failure.stage).toBe("read-back");
-    expect(failure.rolledBack).toBe(true);
+    expect(failure.rolledBack).toBe(false);
     expect(failure.message).toMatch(/could not open/i);
-    expect(await snapshot(home)).toEqual(before);
+    expect(failure.message).toContain(join(home, "sessions", SESSION_ID, "part-0.jsonl"));
+    expect(await snapshot(home)).toEqual(expect.arrayContaining(before));
+    expect(await snapshot(home)).not.toEqual(before);
   });
 
   it("T-LAN-10 reports a commit refusal instead of working around it", async () => {
@@ -647,9 +658,32 @@ describe("integration contract", () => {
     expect(await snapshot(home)).toEqual([]);
   });
 
+  it("reports the exact paths left by incomplete commit cleanup", async () => {
+    const remaining = join(home, "sessions", SESSION_ID, "part-0.jsonl");
+    const error = Object.assign(
+      new TestCommitError("write-failed", remaining, "cleanup was incomplete"),
+      { remainingPaths: [remaining] },
+    );
+
+    const failure = await failureOf(
+      createSessionLander().land(
+        makePlan(home),
+        createAdapter([]),
+        createRefusingCommitter(error),
+        RUNTIME,
+        IMPORTED_AT,
+      ),
+    );
+
+    expect(failure.stage).toBe("commit");
+    expect(failure.message).toContain(remaining);
+    expect(failure.message).toMatch(/cleanup was incomplete/i);
+    expect(failure.message).not.toContain("Nothing was created");
+  });
+
   it.each(failureCases)(
     "T-LAN-11 $name names the stage and the next step",
-    async ({ stage, rolledBack, build }) => {
+    async ({ stage, build }) => {
       const { plan, adapter, committer } = build(home);
 
       const failure = await failureOf(
@@ -657,7 +691,7 @@ describe("integration contract", () => {
       );
 
       expect(failure.stage).toBe(stage);
-      expect(failure.rolledBack).toBe(rolledBack);
+      expect(failure.rolledBack).toBe(false);
       expect(failure.message.length).toBeGreaterThan(20);
       expect(failure.message).toMatch(NEXT_STEP);
       expect(failure.message).not.toContain("undefined");
@@ -676,7 +710,9 @@ describe("boundary", () => {
 
     const failure = await failureOf(
       createSessionLander().land(
-        makePlan(home, { blockedReason: "the pinned turns alone exceed the budget" }),
+        makePlan(home, {
+          blockedReason: "the pinned turns alone exceed the budget",
+        }),
         createAdapter(log),
         createFsCommitter(log),
         RUNTIME,
@@ -702,7 +738,7 @@ describe("boundary", () => {
     // Nothing that existed was rewritten or removed (FR-49).
     expect(after).toEqual(expect.arrayContaining(before));
     if (kase.keepsSession) {
-      // A switch failure keeps the valid session, so the home only grew.
+      // A failure after publication keeps the session, so the home only grew.
       expect(after.length).toBeGreaterThan(before.length);
     } else {
       expect(after).toEqual(before);
@@ -712,7 +748,9 @@ describe("boundary", () => {
   it("T-LAN-14 keeps the session when the user cancels the switch", async () => {
     const result = await createSessionLander().land(
       makePlan(home),
-      createAdapter([], { switchOutcome: { switched: false, cancelled: true } }),
+      createAdapter([], {
+        switchOutcome: { switched: false, cancelled: true },
+      }),
       createFsCommitter(),
       RUNTIME,
       IMPORTED_AT,
@@ -722,7 +760,7 @@ describe("boundary", () => {
     expect(result.handover?.sessionId).toBe(SESSION_ID);
     expect(result.handover?.command).toContain(SESSION_ID);
     const files = (await snapshot(home)).filter((line) => line.startsWith("f "));
-    expect(files).toHaveLength(3);
+    expect(files).toHaveLength(1);
   });
 
   it("T-LAN-15 keeps the session when the switch fails", async () => {
@@ -743,15 +781,15 @@ describe("boundary", () => {
     expect(failure.rolledBack).toBe(false);
     expect(failure.message).toContain(command);
     const files = (await snapshot(home)).filter((line) => line.startsWith("f "));
-    expect(files).toHaveLength(3);
+    expect(files).toHaveLength(1);
   });
 
-  it("T-LAN-16 reports a rollback that itself fails", async () => {
+  it("T-LAN-16 reports the paths preserved after a post-commit failure", async () => {
     const failure = await failureOf(
       createSessionLander().land(
         makePlan(home),
         createAdapter([], { itemCount: 24, storedItemCount: 23 }),
-        createUnrollbackableCommitter(),
+        createFsCommitter(),
         RUNTIME,
         IMPORTED_AT,
       ),
@@ -759,10 +797,9 @@ describe("boundary", () => {
 
     expect(failure.stage).toBe("read-back");
     expect(failure.rolledBack).toBe(false);
-    // Both problems, and the paths that may remain.
     expect(failure.message).toContain("23");
-    expect(failure.message).toContain("the directory is locked");
     expect(failure.message).toContain(join(home, "sessions", SESSION_ID, "part-0.jsonl"));
+    expect(failure.message).toMatch(/preserved/i);
     expect(failure.message).toMatch(NEXT_STEP);
   });
 
@@ -901,33 +938,33 @@ describe("behavior", () => {
 
   it("T-LAN-21 leaves either a complete session or nothing", async () => {
     const plan = makePlan(home);
-    const adapter = createAdapter([], { fileCount: 4 });
+    const adapter = createAdapter([]);
 
-    // Complete: every committed file holds exactly the bytes that were sent.
+    // Complete: the one committed file holds exactly the bytes that were sent.
     await createSessionLander().land(plan, adapter, createFsCommitter(), RUNTIME, IMPORTED_AT);
-    const sent = filesFor(home, SESSION_ID, 4);
-    for (const file of sent) {
-      expect(await readFile(file.absolutePath)).toEqual(file.bytes);
-    }
+    const [sent] = filesFor(home, SESSION_ID, 1);
+    expect(sent).toBeDefined();
+    if (sent !== undefined) expect(await readFile(sent.absolutePath)).toEqual(sent.bytes);
+  });
 
-    // Nothing: a write that fails part-way leaves no readable fragment.
-    const second = await mkdtemp(join(tmpdir(), "resume-from-landing-half-"));
-    try {
-      // The second file cannot be created: its parent directory name is taken
-      // by a file, so the write throws after the first file was written.
-      const blocked: PendingFile[] = [
-        { absolutePath: join(second, "a.jsonl"), bytes: Buffer.from("a") },
-        { absolutePath: join(second, "wall", "b.jsonl"), bytes: Buffer.from("b") },
-      ];
-      await writeFile(join(second, "wall"), "not a directory", "utf8");
-      const before = await snapshot(second);
+  it("refuses an adapter that serializes one session to multiple files", async () => {
+    const log: string[] = [];
 
-      await expect(createFsCommitter().commit(blocked)).rejects.toThrow();
-      expect(await snapshot(second)).toEqual(before);
-      expect(existsSync(join(second, "a.jsonl"))).toBe(false);
-    } finally {
-      await rm(second, { recursive: true, force: true });
-    }
+    const failure = await failureOf(
+      createSessionLander().land(
+        makePlan(home),
+        createAdapter(log, { fileCount: 2 }),
+        createFsCommitter(log),
+        RUNTIME,
+        IMPORTED_AT,
+      ),
+    );
+
+    expect(failure.stage).toBe("serialize");
+    expect(failure.message).toMatch(/2 files|at most one file/i);
+    expect(log).not.toContain("validate");
+    expect(log).not.toContain("commit");
+    expect(await snapshot(home)).toEqual([]);
   });
 
   it("T-LAN-22 tells a create-only user exactly what to type", async () => {
@@ -962,7 +999,10 @@ async function moduleSources(): Promise<{ name: string; text: string }[]> {
   );
   expect(names.length).toBeGreaterThan(0);
   return Promise.all(
-    names.map(async (name) => ({ name, text: await readFile(join(dir, name), "utf8") })),
+    names.map(async (name) => ({
+      name,
+      text: await readFile(join(dir, name), "utf8"),
+    })),
   );
 }
 

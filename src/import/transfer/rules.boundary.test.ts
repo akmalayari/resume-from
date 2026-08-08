@@ -162,6 +162,6 @@ describe("T-TRA-28 a hostile session does not break the rules", () => {
     expect(plan.keptTurnCount).toBe(2);
     expect(plan.turns[0]?.toolCall?.toolName).toBe("");
     expect(plan.blockedReason).toBeNull();
-    expect(plan.provenance.repo.changedPaths.length).toBeGreaterThan(0);
+    expect(plan.provenance.repo.changedPaths).toEqual([]);
   });
 });
