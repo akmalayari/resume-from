@@ -1,7 +1,8 @@
-import { activatePiExtension } from "resume-from";
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("resume-from", () => ({ activatePiExtension: vi.fn() }));
+const activatePiExtension = vi.hoisted(() => vi.fn());
+
+vi.mock("resume-from", () => ({ activatePiExtension }));
 vi.mock("resume-from/pi-extension", () => ({
   formatRow: vi.fn(),
   safeLines: (lines: string[]) => lines,
@@ -30,6 +31,12 @@ type OuterCommandContext = {
 };
 
 type OuterCommandHandler = (rawArgs: string, context: OuterCommandContext) => Promise<void>;
+type MockPiActivation = {
+  home: string | null;
+  registrar: {
+    registerCommand(definition: { name: string; description: string; run: unknown }): void;
+  };
+};
 
 async function loadOuterCommand(): Promise<OuterCommandHandler> {
   const shimUrl = new URL("../../../shims/pi/extensions/resume-from.js", import.meta.url).href;
@@ -119,7 +126,7 @@ describe("Pi package shim command boundary", () => {
     const previous = process.env.PI_CODING_AGENT_DIR;
     process.env.PI_CODING_AGENT_DIR = "relative-pi-home";
     const run = vi.fn().mockResolvedValue(undefined);
-    vi.mocked(activatePiExtension).mockImplementation(async (deps) => {
+    activatePiExtension.mockImplementation(async (deps: MockPiActivation) => {
       deps.registrar.registerCommand({
         name: "resume-from",
         description: "test",
@@ -142,7 +149,7 @@ describe("Pi package shim command boundary", () => {
 
       await handler(" sessions/my session.jsonl ", context);
 
-      const activation = vi.mocked(activatePiExtension).mock.calls.at(-1)?.[0];
+      const activation = activatePiExtension.mock.calls.at(-1)?.[0] as MockPiActivation | undefined;
       expect(activation?.home).toMatch(/\/relative-pi-home$/);
       expect(run).toHaveBeenCalledOnce();
       expect(run.mock.calls[0]?.[0].home).toBe(activation?.home);
