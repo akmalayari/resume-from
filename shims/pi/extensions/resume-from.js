@@ -1,5 +1,6 @@
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
+import { truncateToWidth } from "@earendil-works/pi-tui";
 import { activatePiExtension } from "resume-from";
 import { formatRow, safeLines, safeText } from "resume-from/pi-extension";
 
@@ -8,18 +9,29 @@ const DESCRIPTION =
   "Continue another session. Use /resume-from --help for accepted arguments.";
 const PROVENANCE_CUSTOM_TYPE = "resume-from-provenance";
 
-function provenanceLines(entries) {
-  for (let index = entries.length - 1; index >= 0; index -= 1) {
-    const entry = entries[index];
-    if (entry?.type !== "custom" || entry.customType !== PROVENANCE_CUSTOM_TYPE)
-      continue;
-    const lines = entry.data?.lines;
-    return Array.isArray(lines) &&
-      lines.every((line) => typeof line === "string")
-      ? lines
-      : null;
-  }
-  return null;
+function provenanceLines(data) {
+  const lines = data?.lines;
+  return Array.isArray(lines) && lines.every((line) => typeof line === "string")
+    ? lines
+    : null;
+}
+
+function renderProvenance(entry, { expanded }, theme) {
+  const lines = provenanceLines(entry.data);
+  const visible =
+    lines === null
+      ? ["Imported session"]
+      : expanded
+        ? lines
+        : [`${lines[0] ?? "Imported session"} · ${lines.at(-1) ?? ""}`];
+  return {
+    render(width) {
+      return visible.map((line) =>
+        theme.bg("customMessageBg", truncateToWidth(safeText(line), Math.max(0, width), "")),
+      );
+    },
+    invalidate() {},
+  };
 }
 
 function agentHome() {
@@ -68,13 +80,9 @@ function pickerFor(context) {
 }
 
 export default function resumeFrom(pi) {
-  pi.on("session_start", (_event, context) => {
-    const lines = provenanceLines(context.sessionManager.getEntries());
-    context.ui.setWidget(
-      PROVENANCE_CUSTOM_TYPE,
-      lines === null ? undefined : safeLines(lines),
-    );
-  });
+  // Provenance is already persisted as a custom entry. Render it in the transcript,
+  // not as a widget, so it scrolls away and never occupies the footer/editor area.
+  pi.registerEntryRenderer(PROVENANCE_CUSTOM_TYPE, renderProvenance);
 
   pi.registerCommand(COMMAND_NAME, {
     description: DESCRIPTION,

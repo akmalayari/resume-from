@@ -132,7 +132,7 @@ You can also select an exact session ID or file path. Selection by path does not
 - **Add-only target:** the importer creates target files; it does not replace or delete existing sessions.
 - **Native validation:** the new file is validated and read back before it is reported as openable.
 - **No model call during transfer:** conversion, filtering, budgeting, and writing are deterministic local operations.
-- **Visible provenance:** the imported session identifies its source and states what was dropped without putting that marker in model context.
+- **Visible provenance:** the imported session identifies its source and states what was dropped without putting that marker in model context. Pi renders it as a transcript entry; Claude Code uses its native metadata entry; Codex prints it in the CLI because no safe durable out-of-context entry is verified.
 
 ## Documentation
 

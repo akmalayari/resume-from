@@ -247,9 +247,7 @@ describe.skipIf(!live)("T-ROO-13 — live: the acceptance test", () => {
   let source: AgentAdapter;
   let piTarget: AgentAdapter;
 
-  const isCodex = (adapter: AgentAdapter): boolean =>
-    adapter.capabilities().selection === "numbered-list" &&
-    adapter.capabilities().provenance === "out-of-context-entry";
+  const isCodex = (adapter: AgentAdapter): boolean => adapter.capabilities().agent === "codex";
 
   beforeAll(async () => {
     scene = await bench({ seed: false });

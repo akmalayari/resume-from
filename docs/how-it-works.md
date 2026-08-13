@@ -72,7 +72,11 @@ After confirmation:
 2. The output is validated before commit.
 3. The file is added to the target home without replacing an existing session.
 4. The committed session is read back and checked as openable.
-5. A provenance marker records the source and dropped content outside model context.
+5. A provenance marker records the source and dropped content outside model context. Pi renders its
+   persisted marker in the transcript, Claude Code uses its native metadata entry, and Codex prints
+   the marker in CLI output because it has no verified safe durable entry.
+
+The marker is never pinned as a footer or status line and is never represented as a tool result.
 
 Pi can switch to the imported session in the current process. Claude Code and Codex create the session and return their native resume commands.
 
