@@ -140,8 +140,8 @@ function formatFailure(failure: HomeFailure): string {
 
 /**
  * Shows the marker and handover when the switch did not happen (FR-45, FR-47).
- * A successful switch invalidates the command context; the package shim restores
- * the persisted provenance marker as a widget in the replacement session instead.
+ * A successful switch invalidates the command context; the package shim renders
+ * the persisted provenance marker as a transcript entry in the replacement session instead.
  */
 function present(ui: PiUi, landing: LandingResult): void {
   ui.show(landing.marker.lines);

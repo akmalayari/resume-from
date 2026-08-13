@@ -351,6 +351,11 @@ opens it.
 
 **FR-48** — The provenance marker is not in the model context and costs no tokens.
 
+The marker is a durable transcript/session metadata entry when the target host has a verified
+out-of-context entry (Pi and Claude Code). It is host output only when the target does not have one
+(Codex). It must not be a sticky footer, status line, or fake tool result. A host may show a compact
+landing notice in addition to the durable marker.
+
 ---
 
 ## H. Target safety

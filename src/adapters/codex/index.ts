@@ -20,9 +20,9 @@ function codexCapabilities(): AgentCapabilities {
     selection: "numbered-list",
     // C-2: Codex cannot move the user, so the landing hands back the command (FR-45).
     landing: "create-only",
-    // `event_msg` entries are rendered but never sent to the model (C-7), which is exactly
-    // the out-of-context entry FR-47 and FR-48 need.
-    provenance: "out-of-context-entry",
+    // Codex has no verified durable, out-of-context entry shape. The CLI prints
+    // provenance after landing instead of writing it as a conversation turn.
+    provenance: "host-output-only",
     defaultHome: defaultCodexHome(),
     defaultWindowTokens: CODEX_WINDOW_TOKENS,
   };

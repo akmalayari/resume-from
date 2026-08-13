@@ -357,7 +357,7 @@ list and picks.
 | Submodule      | Roles          | Selection          | Landing           | Provenance           | The fact that shapes it                                                                                     |
 | -------------- | -------------- | ------------------ | ----------------- | -------------------- | ----------------------------------------------------------------------------------------------------------- |
 | `pi/`          | source, target | interactive-picker | create-and-switch | out-of-context-entry | `ctx.switchSession` works from a command handler (C-10); a missing `usage` object crashes Pi (C-11)         |
-| `codex/`       | source, target | numbered-list      | create-only       | out-of-context-entry | the picker and the transcript are built from `event_msg` entries; injected items are invisible (C-7, C-8)   |
+| `codex/`       | source, target | numbered-list      | create-only       | host-output-only | the picker and transcript are built from `event_msg` entries; provenance is printed by the CLI because Codex has no verified out-of-context entry (C-7, C-8) |
 | `claude-code/` | source, target | numbered-list      | create-only       | out-of-context-entry | two entry types are enough, `user` and `assistant`; the store has ten and eight were unnecessary (C-3, C-9) |
 
 ### The order the port is called in

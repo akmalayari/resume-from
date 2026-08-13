@@ -17,8 +17,8 @@ files. It does not inject.
 
 ## Functional Responsibilities
 
-- Declare Codex's capabilities: both roles, a numbered list, create-only landing, an out-of-context
-  provenance entry, the default home, and the assumed context window.
+- Declare Codex's capabilities: both roles, a numbered list, create-only landing, host-output-only
+  provenance, the default home, and the assumed context window.
 - List the threads in a Codex home, with the fields the selection list needs (FR-11).
 - Load one Codex thread into the canonical vocabulary, dropping every result body (FR-24) and every
   reasoning trace (FR-28, C-4).
@@ -41,9 +41,10 @@ exists, and the reason this module's `readBack` is not optional.
 
 ## Encapsulated Knowledge
 
-- **Which entry type the user interface reads.** That Codex builds the visible history from
-  `event_msg` entries — `user_message` and `agent_message` — and that a thread without them shows
-  zero turns even when the model history is full (C-7).
+- **Which entry type the user interface reads.** Codex builds the visible history from
+  `event_msg` entries — `user_message` and `agent_message` — and a thread without them shows zero
+  turns even when the model history is full (C-7). Codex has no verified durable entry that is both
+  visible and excluded from resumed model context, so provenance is printed by the CLI only.
 - **Which entry type the picker reads.** That `thread/list` shows a thread only when it has session
   metadata **and** a preview, and that the preview comes from an `event_msg` entry. A thread without
   one is invisible even though the file exists (C-7).
@@ -392,9 +393,9 @@ None of these touch a rule, a preview, another adapter, or the host.
 - **No result body is carried into `CanonicalTurn`** (FR-24). C-5 measured tool calls and outputs at
   about 49% of one Codex session file and reasoning at about 41%; dropping both is what makes an
   import fit a budget at all.
-- **The provenance marker is written as an entry Codex shows but does not send to the model**
-  (FR-47, FR-48). If the installed Codex has no such entry, this module declares
-  `provenance: "host-output-only"` rather than putting the marker into the model context.
+- **The provenance marker is printed by the host CLI, not written as a Codex conversation event**
+  (FR-47, FR-48). Writing it as an `agent_message` would make metadata look like conversation and
+  could send it back to the model on resume, so this module declares `provenance: "host-output-only"`.
 - **Facts about Codex are verified against the installed version, never assumed.** The default home,
   the thread file location, and the exact entry names are confirmed by the boundary tests of this
   module against codex-cli 0.146.0 or later. C-4 to C-8 are the only facts this design treats as
@@ -411,7 +412,7 @@ says Codex fails silently, so nothing here may be inferred from the absence of a
 **T-COD-1 — capabilities are as designed**
 - Scenario: `capabilities()`.
 - Expected behavior: agent `codex`; roles `source` and `target`; selection `numbered-list`; landing
-  `create-only`; provenance `out-of-context-entry`; an absolute default home; a positive window
+  `create-only`; provenance `host-output-only`; an absolute default home; a positive window
   (C-1, C-2).
 
 **T-COD-2 — a rollout file becomes canonical turns**
@@ -425,10 +426,11 @@ says Codex fails silently, so nothing here may be inferred from the absence of a
 - Expected behavior: `outcomeLine` is one line, `bodyDropped` is true, and no fragment of the output
   survives (FR-23, FR-24, FR-25).
 
-**T-COD-4 — serialization writes event_msg entries**
+**T-COD-4 — serialization writes event_msg entries without a provenance turn**
 - Scenario: the reference session is serialized.
 - Expected behavior: the file holds one `user_message` or `agent_message` `event_msg` entry per
-  canonical turn. This is the difference between C-7's invisible thread and C-8's working one.
+  canonical turn, and no provenance text in any event. This is the difference between C-7's
+  invisible thread and C-8's working one without turning metadata into conversation.
 
 **T-COD-5 — serialization writes the metadata the picker needs**
 - Scenario: the serialized output is inspected.

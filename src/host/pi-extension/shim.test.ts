@@ -3,19 +3,14 @@ import { describe, expect, it, vi } from "vitest";
 const activatePiExtension = vi.hoisted(() => vi.fn());
 
 vi.mock("resume-from", () => ({ activatePiExtension }));
-vi.mock("resume-from/pi-extension", () => ({
-  formatRow: vi.fn(),
-  safeLines: (lines: string[]) => lines,
-  safeText: (text: string) => text,
-}));
 
-type SessionStartContext = {
-  sessionManager: { getEntries(): unknown[] };
-  ui: { setWidget(key: string, lines: string[] | undefined): void };
-};
-type SessionStartHandler = (event: unknown, context: SessionStartContext) => void | Promise<void>;
+type EntryRenderer = (
+  entry: { data?: unknown },
+  options: { expanded: boolean },
+  theme: { bg(name: string, text: string): string },
+) => { render(width: number): string[]; invalidate(): void };
 type ShimFactory = (pi: {
-  on(event: string, handler: SessionStartHandler): void;
+  registerEntryRenderer(customType: string, renderer: EntryRenderer): void;
   registerCommand(name: string, definition: unknown): void;
 }) => void;
 
@@ -44,7 +39,7 @@ async function loadOuterCommand(): Promise<OuterCommandHandler> {
   let handler: OuterCommandHandler | undefined;
 
   module.default({
-    on() {},
+    registerEntryRenderer() {},
     registerCommand(_name, definition) {
       handler = (definition as { handler: OuterCommandHandler }).handler;
     },
@@ -54,70 +49,35 @@ async function loadOuterCommand(): Promise<OuterCommandHandler> {
   return handler;
 }
 
-async function loadSessionStartHandler(): Promise<SessionStartHandler> {
-  const shimUrl = new URL("../../../shims/pi/extensions/resume-from.js", import.meta.url).href;
-  const module = (await import(shimUrl)) as { default: ShimFactory };
-  let handler: SessionStartHandler | undefined;
-
-  module.default({
-    on(event, candidate) {
-      if (event === "session_start") handler = candidate;
-    },
-    registerCommand() {},
-  });
-
-  if (handler === undefined) throw new Error("resume-from shim did not register session_start");
-  return handler;
-}
-
 describe("Pi package shim provenance", () => {
-  it("restores the persisted import marker as a widget from the fresh session context", async () => {
-    const handler = await loadSessionStartHandler();
-    const setWidget = vi.fn();
-    const lines = ["Imported from pi", "Source session: source-1"];
+  it("registers provenance as a transcript renderer instead of a persistent widget", async () => {
+    const shimUrl = new URL("../../../shims/pi/extensions/resume-from.js", import.meta.url).href;
+    const module = (await import(shimUrl)) as { default: ShimFactory };
+    let renderer: EntryRenderer | undefined;
 
-    await handler(
-      { reason: "resume" },
-      {
-        sessionManager: {
-          getEntries: () => [
-            { type: "message", message: { role: "user" } },
-            {
-              type: "custom",
-              customType: "resume-from-provenance",
-              data: { lines },
-            },
-          ],
-        },
-        ui: { setWidget },
+    module.default({
+      registerEntryRenderer(customType, candidate) {
+        expect(customType).toBe("resume-from-provenance");
+        renderer = candidate;
       },
+      registerCommand() {},
+    });
+
+    expect(renderer).toBeDefined();
+    const component = renderer?.(
+      { data: { lines: ["Imported from pi", "Source session: source-1", "Dropped: 57"] } },
+      { expanded: false },
+      { bg: (_name, text) => text },
     );
+    expect(component?.render(80)).toEqual(["Imported from pi · Dropped: 57"]);
 
-    expect(setWidget).toHaveBeenCalledOnce();
-    expect(setWidget).toHaveBeenCalledWith("resume-from-provenance", lines);
-  });
-
-  it("clears the widget when provenance is malformed", async () => {
-    const handler = await loadSessionStartHandler();
-    const setWidget = vi.fn();
-
-    await handler(
-      { reason: "resume" },
-      {
-        sessionManager: {
-          getEntries: () => [
-            {
-              type: "custom",
-              customType: "resume-from-provenance",
-              data: { lines: ["Imported from pi", 42] },
-            },
-          ],
-        },
-        ui: { setWidget },
-      },
+    const unsafe = renderer?.(
+      { data: { lines: ["Imported from pi\u001b[31m", "Dropped: 57"] } },
+      { expanded: true },
+      { bg: (_name, text) => text },
     );
-
-    expect(setWidget).toHaveBeenCalledWith("resume-from-provenance", undefined);
+    expect(unsafe?.render(80)[0]).toBe("Imported from pi ");
+    expect(unsafe?.render(10)).toEqual(["Imported f", "Dropped: 5"]);
   });
 });
 

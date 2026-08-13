@@ -64,7 +64,7 @@ describe("T-COD-1 capabilities", () => {
     expect([...capabilities.roles].sort()).toEqual(["source", "target"]);
     expect(capabilities.selection).toBe("numbered-list");
     expect(capabilities.landing).toBe("create-only");
-    expect(capabilities.provenance).toBe("out-of-context-entry");
+    expect(capabilities.provenance).toBe("host-output-only");
   });
 
   it("declares an absolute default home and a positive window", () => {
@@ -94,15 +94,13 @@ describe("T-COD-4 event_msg entries", () => {
         (entry.payload.type === CODEX_EVENT_USER_MESSAGE ||
           entry.payload.type === CODEX_EVENT_AGENT_MESSAGE),
     );
-    // One per turn, plus the provenance marker entry.
-    expect(messages).toHaveLength(REFERENCE_SESSION.turns.length + 1);
+    expect(messages).toHaveLength(REFERENCE_SESSION.turns.length);
     expect(itemCount).toBe(messages.length);
   });
 
   it("gives every turn an entry whose role matches the turn", () => {
     const { entries } = serializeReference();
-    const messages = entries.filter((entry) => entry.type === CODEX_ENTRY_EVENT_MSG);
-    const turnEntries = messages.slice(1); // the first message entry is the marker
+    const turnEntries = entries.filter((entry) => entry.type === CODEX_ENTRY_EVENT_MSG);
     for (const [index, turn] of REFERENCE_SESSION.turns.entries()) {
       const entry = turnEntries[index];
       if (entry === undefined) throw new Error(`no entry for turn ${index}`);
@@ -113,12 +111,10 @@ describe("T-COD-4 event_msg entries", () => {
     }
   });
 
-  it("writes the provenance marker as an out-of-context event entry", () => {
+  it("does not write provenance as a conversation event", () => {
     const { entries } = serializeReference();
-    const first = entries.filter((entry) => entry.type === CODEX_ENTRY_EVENT_MSG)[0];
-    if (first === undefined) throw new Error("no event entry");
-    expect(first.payload.type).toBe(CODEX_EVENT_AGENT_MESSAGE);
-    for (const line of MARKER.lines) expect(String(first.payload.message)).toContain(line);
+    const messages = entries.filter((entry) => entry.type === CODEX_ENTRY_EVENT_MSG);
+    for (const line of MARKER.lines) expect(JSON.stringify(messages)).not.toContain(line);
   });
 });
 

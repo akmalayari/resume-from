@@ -43,10 +43,9 @@ export function serializeCodex(
   const stamp = importedAt.toISOString();
 
   const entries: RolloutEntry[] = [sessionMetaEntry(sessionId, stamp, session)];
-  // The marker is an `event_msg` entry: Codex renders it and never sends it to the model,
-  // which is exactly what FR-47 and FR-48 ask for. The preview is unaffected — Codex takes
-  // the preview from the first `user_message`.
-  entries.push(agentMessageEntry(marker.lines.join("\n"), stamp));
+  // Codex has no verified durable, out-of-context transcript entry. Do not encode
+  // provenance as an agent message: that would make imported metadata look like
+  // conversation and could send it back to the model on resume.
   for (const turn of session.turns) {
     const entry = turnEntry(turn, stamp);
     if (entry !== null) entries.push(entry);
