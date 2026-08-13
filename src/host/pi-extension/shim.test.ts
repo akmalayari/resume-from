@@ -71,13 +71,31 @@ describe("Pi package shim provenance", () => {
     );
     expect(component?.render(80)).toEqual(["Imported from pi · Dropped: 57"]);
 
+    const expanded = renderer?.(
+      { data: { lines: ["Imported from pi", "Source session: source-1", "Dropped: 57"] } },
+      { expanded: true },
+      { bg: (_name, text) => text },
+    );
+    expect(expanded?.render(80)).toEqual([
+      "Imported from pi",
+      "Source session: source-1",
+      "Dropped: 57",
+    ]);
+
     const unsafe = renderer?.(
       { data: { lines: ["Imported from pi\u001b[31m", "Dropped: 57"] } },
       { expanded: true },
       { bg: (_name, text) => text },
     );
     expect(unsafe?.render(80)[0]).toBe("Imported from pi ");
-    expect(unsafe?.render(10)).toEqual(["Imported f", "Dropped: 5"]);
+    expect(unsafe?.render(10)).toEqual(["Imported f\u001b[0m", "Dropped: 5\u001b[0m"]);
+
+    const wide = renderer?.(
+      { data: { lines: ["界界界界界", "Dropped: 57"] } },
+      { expanded: true },
+      { bg: (_name, text) => text },
+    );
+    expect(wide?.render(5)).toEqual(["界界\u001b[0m", "Dropp\u001b[0m"]);
   });
 });
 

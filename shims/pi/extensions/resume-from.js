@@ -1,5 +1,6 @@
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
+import { truncateToWidth } from "@earendil-works/pi-tui";
 import { activatePiExtension } from "resume-from";
 import { formatRow, safeLines, safeText } from "resume-from/pi-extension";
 
@@ -26,7 +27,7 @@ function renderProvenance(entry, { expanded }, theme) {
   return {
     render(width) {
       return visible.map((line) =>
-        theme.bg("customMessageBg", safeText(line).slice(0, Math.max(0, width))),
+        theme.bg("customMessageBg", truncateToWidth(safeText(line), Math.max(0, width), "")),
       );
     },
     invalidate() {},
