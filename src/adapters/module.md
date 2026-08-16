@@ -123,6 +123,12 @@ interface ToolCallRecord {
   effect: ToolEffect;
   /** True when the source had a result body and it was dropped (FR-25). */
   bodyDropped: boolean;
+  /**
+   * True when the source recorded any answer to this call (even an empty or error result).
+   * False when no result entry exists at all — the broken-tail signal (FR-54).
+   * This is a presence flag, not a content field; it cannot hold a result body.
+   */
+  resultRecorded?: boolean;
 }
 
 /** One turn of the canonical session. */
@@ -430,6 +436,16 @@ module.
 - **An adapter never carries hidden reasoning, a system prompt, a token, a password, an environment
   value, or vendor state** (FR-28, NG-7, NG-8). C-4 makes this unavoidable for Codex reasoning
   traces; it is a rule for every adapter regardless.
+- **Credential redaction covers message and summary turn text, not only tool inputs.** A credential
+  that the user typed as a chat message (for example `curl -H "Authorization: Bearer sk-..."`) would
+  otherwise cross to a different model vendor when the session is resumed there. Each adapter applies
+  `redactSensitiveText` to every non-empty turn text at the point of construction, so no turn that
+  reaches `CanonicalSession.turns` can carry a recognizable credential in its `text` field.
+- **The three adapter copies of `redaction.ts` are byte-identical by design.** Consolidating into a
+  shared module is blocked: `src/adapters/contract.ts` is types-only (no behaviour), and importing
+  behaviour from `src/platform/` would violate T-ROO-7 (cross-module imports must go through
+  `/contract.js`, which can export only types). The byte-equality invariant is enforced by
+  `src/adapters/boundary.test.ts`; a fix in one copy must be applied to all three.
 - **`capabilities()` is pure and synchronous** and returns the same value every time. The rules read
   it more than once per import.
 - **`serialize` is deterministic given the same session, target and marker**, except for the session

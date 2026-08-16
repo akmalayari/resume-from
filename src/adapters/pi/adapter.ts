@@ -171,6 +171,10 @@ export function createPiAdapter(overrides: Partial<PiAdapterDeps> = {}): AgentAd
 
     async listSessions(home: HomePath): Promise<SessionDescriptor[]> {
       const descriptors: SessionDescriptor[] = [];
+      // Whole-file read and full parse per file: title, turn count, and updatedAt all require
+      // parsing the entire JSONL (FR-11). Same approach as the claude-code adapter (not
+      // separately benchmarked for Pi files); revisit if a home with thousands of sessions
+      // makes the listing noticeably slow to users.
       for (const filePath of await sessionFilesIn(home)) {
         let text: string;
         let fileTime: string;

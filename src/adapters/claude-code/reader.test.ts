@@ -293,6 +293,27 @@ describe("T-CC-14 — excluded content never crosses", () => {
     expect(JSON.stringify(read)).not.toContain(secret);
     expect(read.skipped).toBe(1);
   });
+
+  it("redacts a credential typed as a user message (FR-28, security)", () => {
+    // A credential pasted into chat must not cross to a different model vendor.
+    const bearer = "sk-1234567890abcdef1234";
+    const read = readSessionText(
+      textOf([
+        userEntry(
+          CTX,
+          uuidFor(20),
+          "2026-08-01T09:14:10.000Z",
+          `run: curl -H "Authorization: Bearer ${bearer}" https://api.example.com`,
+        ),
+        assistantTextEntry(CTX, uuidFor(21), "2026-08-01T09:14:11.000Z", "On it."),
+      ]),
+    );
+
+    expect(JSON.stringify(read.turns)).not.toContain(bearer);
+    expect(JSON.stringify(read.turns)).toContain("[REDACTED]");
+    // Normal assistant reply is not disturbed.
+    expect(read.turns[1]?.text).toBe("On it.");
+  });
 });
 
 describe("T-CC-15 — a truncated or unknown-typed session", () => {
