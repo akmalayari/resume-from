@@ -401,65 +401,91 @@ Every test uses stub adapters over fixture homes. No agent needs to be installed
 ### Unit Tests
 
 **T-DIS-1 — the search list is the defaults plus the extras**
+
 - Scenario: three adapters with default homes, and a configuration adding two extra homes.
 - Expected behavior: five homes are searched, each exactly once.
 
 **T-DIS-2 — a duplicate home is searched once**
+
 - Scenario: parameterized — an extra home equal to an adapter default; the same home spelled with
   `~`, with `..`, and through a symlink.
 - Expected behavior: one search in every case. Deduplication compares resolved absolute paths.
 
 **T-DIS-3 — only source adapters are searched**
+
 - Scenario: one adapter declares `["target"]` only.
 - Expected behavior: its home is not searched and none of its sessions appears (FR-59).
 
 **T-DIS-4 — the listing is newest first**
+
 - Scenario: nine sessions across three agents and four homes, with interleaved `updatedAt` values.
 - Expected behavior: strictly descending by `updatedAt`, mixed across agents and homes (FR-14,
   FR-15).
 
 **T-DIS-5 — the ordering is deterministic on a tie**
+
 - Scenario: two sessions with an identical `updatedAt`, listed 100 times.
 - Expected behavior: the same order every time, broken by `SessionRef`. This is what makes
   `/resume-from 3` mean the same session in a second invocation.
 
 **T-DIS-6 — only sessions of this repository are listed**
+
 - Scenario: sessions from repository A and repository B; the scope names A.
 - Expected behavior: only A's sessions appear (FR-13, NG-9).
 
 **T-DIS-7 — a session with no repository is out of scope**
+
 - Scenario: a session whose `repoPath` is null.
 - Expected behavior: it is not listed, and it appears in `Listing.failures` with a reason.
 
 **T-DIS-8 — naming one agent narrows the search**
+
 - Scenario: the scope sets `onlyAgent` to `codex`.
 - Expected behavior: only Codex homes are searched (FR-15).
 
 **T-DIS-9 — naming one home narrows the search**
+
 - Scenario: the scope sets `onlyHome` to `~/.claude-team`.
 - Expected behavior: only that home is searched (FR-2).
+
+**T-DIS-25 — a named home outside every default and extra home is still searched**
+
+- Scenario: the scope sets `onlyHome` to a directory no adapter default and no `extraHomes`
+  entry names.
+- Expected behavior: every source adapter searches that home; the list is never silently
+  empty because the home was unknown to the configuration (FR-2).
+
+**T-DIS-26 — an unlisted named home narrowed by agent searches only that agent**
+
+- Scenario: the scope sets `onlyHome` to an unlisted directory and `onlyAgent` to one agent.
+- Expected behavior: only that agent's adapter searches the named home (FR-2, FR-15).
 
 ### Integration Contract Tests
 
 **T-DIS-10 — every selection form resolves to the same session**
+
 - Scenario: a fixed listing; the same session is named by row 3, by session ID, and by file path.
 - Expected behavior: all three resolve to the identical descriptor (FR-10, FR-12).
 
 **T-DIS-11 — rows are 1-based and match what was listed**
+
 - Scenario: `list` then `resolve` with each row number from 1 to the length.
 - Expected behavior: row _n_ resolves to the _n_-th row of the listing, and row 0 fails.
 
 **T-DIS-12 — resolve after a re-listing agrees**
+
 - Scenario: `list` is called, the finder is rebuilt from scratch, and `resolve` with row 3 runs on
   the new instance.
 - Expected behavior: the same session. The two invocations of FR-10 are separate processes, and this
   is the property that makes them agree.
 
 **T-DIS-13 — load returns exactly what the adapter produced**
+
 - Scenario: a stub adapter returns a known canonical session.
 - Expected behavior: `load` returns it unchanged. No rule of section D or E runs here.
 
 **T-DIS-24 — a duplicate exact session ID must be disambiguated**
+
 - Scenario: the same ID appears in two Pi homes and one Codex home in the current repository.
 - Expected behavior: selection by ID rejects, names every matching location, and recommends a
   numbered row, exact file path, or narrower agent/home scope.
@@ -467,51 +493,61 @@ Every test uses stub adapters over fixture homes. No agent needs to be installed
 ### Boundary Tests
 
 **T-DIS-14 — an unknown row, ID or path fails with a message**
+
 - Scenario: parameterized — row 0, row 999, an unknown session ID, a path that does not exist, a
   path that exists but is not a session.
 - Expected behavior: each rejects with a `SelectionError` naming what the user gave and what to do
   next (FR-56).
 
 **T-DIS-15 — a session from another repository cannot be reached by ID or path**
+
 - Scenario: `resolve` by session ID and by file path, naming a session of repository B while the
   scope is repository A.
 - Expected behavior: both fail. Selection by path is a convenience, not a way around FR-13 (NG-9).
 
 **T-DIS-16 — one bad home does not empty the listing**
+
 - Scenario: parameterized — a home that does not exist; a home with no read permission; a home
   containing one corrupt session file.
 - Expected behavior: in each case the other homes still list, and the failure appears in
   `Listing.failures` with the home, the agent and a one-line reason.
 
 **T-DIS-17 — every home failing still returns a listing**
+
 - Scenario: every home is unreadable.
 - Expected behavior: `rows` is empty, `failures` has one entry per home. It does not reject — the
   host prints the failures.
 
 **T-DIS-18 — an empty listing is not an error**
+
 - Scenario: readable homes with no sessions for this repository.
 - Expected behavior: `rows` empty, `failures` empty.
 
 **T-DIS-19 — nothing is written**
+
 - Scenario: every home and the repository are checksummed around `list`, `resolve` and `load`.
 - Expected behavior: identical (NG-1, AC-4).
 
 **T-DIS-20 — no model is called**
+
 - Scenario: the whole suite runs with the network stubbed to fail.
 - Expected behavior: every test passes (FR-8).
 
 ### Behavior Tests
 
 **T-DIS-21 — the listing works with the source agent stopped**
+
 - Scenario: fixture homes are read while no agent process is running and every network call fails.
 - Expected behavior: the full listing is produced — the explicit FR-8 test ("stop the source agent,
   reach its usage limit, the list and the import still work").
 
 **T-DIS-22 — one list, every agent**
+
 - Scenario: the command runs with Pi as the target, and the homes hold Pi, Codex and Claude Code
   sessions for this repository.
 - Expected behavior: all three agents appear in one listing, ordered by time (FR-15's test).
 
 **T-DIS-23 — two profiles of one agent appear together**
+
 - Scenario: `~/.claude` and `~/.claude-team` both hold sessions for this repository.
 - Expected behavior: both appear, each row naming its home (FR-5, FR-11).

@@ -19,7 +19,12 @@ For Claude Code or Codex, open the plugin manager and make sure that
 `resume-from` lists sessions for the current Git repository. Run the command
 from the repository that owns the source session.
 
-If the source uses another profile, add that home to `extraHomes`. See
+If the source uses another profile, name its home with `--home`:
+
+    /resume-from --home ~/.claude-team
+
+For a profile you import from often, add that home to `extraHomes` instead, so
+every listing includes it. See
 [Configuration](configuration.md#add-another-profile).
 
 The tool reports each home that it cannot read. Correct the path or its file
