@@ -45,10 +45,11 @@ const FLAG_PATTERN =
   /(--(?:api[-_]?key|access[-_]?token|auth[-_]?token|token|password|passwd|secret|client[-_]?secret|private[-_]?key))(=|\s+)("[^"\r\n]*"|'[^'\r\n]*'|[^\s;&|]+)/gi;
 const USER_CREDENTIAL_PATTERN = /(^|[\s;&|])(-u|--user)(=|\s+)("[^"\r\n]*"|'[^'\r\n]*'|[^\s;&|]+)/g;
 const URI_USERINFO_PATTERN = /\b([a-z][a-z0-9+.-]*:\/\/)([^\s/:@]+):([^\s/@]+)@/gi;
-// Unquoted value requires a structural delimiter or line/string end following it
-// (C-RED-1: guards against false-positive matches in prose where "token: word" is plain English).
+// Unquoted value requires a structural delimiter or line/string end following it, OR a digit
+// somewhere in the token (C-RED-1: "token: expired" is plain English and stays, while
+// "password: hunter2 # prod" carries a credential that must not cross even mid-line).
 const JSON_LIKE_PATTERN =
-  /(["']?)([A-Za-z_][A-Za-z0-9_-]*)\1(\s*:\s*)("[^"\r\n]*"|'[^'\r\n]*'|[^\s,;}]+(?=[,;}]|[\r\n]|$))/g;
+  /(["']?)([A-Za-z_][A-Za-z0-9_-]*)\1(\s*:\s*)("[^"\r\n]*"|'[^'\r\n]*'|[^\s,;}]+(?=[,;}]|[\r\n]|$)|[^\s,;}]*\d[^\s,;}]*)/g;
 
 function normalizedKey(key: string): string {
   return key.toLowerCase().replaceAll(/[^a-z0-9]/g, "");

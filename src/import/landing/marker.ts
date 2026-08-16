@@ -15,7 +15,9 @@ export function summariseDrops(plan: TransferPlan): string {
   if (plan.bodiesDropped > 0) {
     parts.push(counted(plan.bodiesDropped, "tool result body", "tool result bodies"));
   }
-  if (plan.brokenTailDropped) parts.push("an incomplete trailing tool call");
+  const brokenTails = plan.drops.filter((drop) => drop.reason === "broken-tail").length;
+  if (brokenTails === 1) parts.push("an incomplete trailing tool call");
+  if (brokenTails > 1) parts.push(`${brokenTails} incomplete trailing tool calls`);
   if (parts.length === 0) return NOTHING_DROPPED;
   return `${DROPPED_PREFIX}${parts.join(PART_SEPARATOR)}.`;
 }

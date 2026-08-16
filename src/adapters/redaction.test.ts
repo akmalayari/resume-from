@@ -116,4 +116,15 @@ describe.each(IMPLEMENTATIONS)("%s credential redaction", (_name, redaction) => 
   ])("leaves normal prose untouched: %s", (_label, prose) => {
     expect(redaction.redactSensitiveText(prose)).toBe(prose);
   });
+
+  // The delimiter rule alone would also skip a real secret sitting mid-line; a digit in the
+  // value keeps recall: opaque tokens carry digits, English words do not (C-RED-1).
+  it.each([
+    ["shell comment after the value", "password: hunter2 # prod box"],
+    ["more flags after the value", "token: abc123 verbose true"],
+  ])("still redacts a digit-bearing secret mid-line: %s", (_label, text) => {
+    const redacted = redaction.redactSensitiveText(text);
+    expect(redacted).toContain(redaction.REDACTED_VALUE);
+    expect(redacted).not.toMatch(/hunter2|abc123/);
+  });
 });

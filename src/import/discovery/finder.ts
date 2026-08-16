@@ -12,7 +12,13 @@ import type {
   SessionFinder,
 } from "./contract.js";
 import { SessionSelectionError } from "./errors.js";
-import { buildSearchList, canonicalPath, type SearchTarget, type SourceAdapter } from "./homes.js";
+import {
+  buildSearchList,
+  canonicalPath,
+  isDirectory,
+  type SearchTarget,
+  type SourceAdapter,
+} from "./homes.js";
 import { compareDescriptors } from "./ordering.js";
 
 export type { SourceAdapter };
@@ -33,6 +39,20 @@ function reasonLine(reason: unknown): string {
 
 export function createSessionFinder(deps: DiscoveryDeps): SessionFinder {
   async function collect(target: SearchTarget, repoRoot: string): Promise<Listing> {
+    // A home the user named must never fail silently: adapters swallow a missing
+    // directory (an absent default home is normal), but a typo'd --home is not (FR-2).
+    if (target.named === true && !(await isDirectory(target.home))) {
+      return {
+        rows: [],
+        failures: [
+          {
+            home: target.home,
+            agent: target.agent,
+            message: "home not searched: no such directory",
+          },
+        ],
+      };
+    }
     let found: SessionDescriptor[];
     try {
       found = await target.adapter.listSessions(target.home);

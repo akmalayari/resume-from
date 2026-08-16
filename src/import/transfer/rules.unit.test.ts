@@ -346,6 +346,23 @@ describe("T-TRA-13 a broken tail is dropped", () => {
     expect(keptIndexes(plan)).toEqual([0, 1]);
   });
 
+  test("an interrupted parallel batch drops every trailing unanswered call", () => {
+    // Claude Code can issue several tool calls in one assistant turn; an interrupt
+    // leaves all of them without results, not just the last one (FR-54).
+    const turns = [
+      userMessage(0, "Fix it."),
+      brokenToolTurn(1, "Read", "'a.ts'"),
+      brokenToolTurn(2, "Edit", "'a.ts'"),
+    ];
+
+    const plan = planOf(turns, 1_000_000, 1, 5);
+
+    expect(plan.brokenTailDropped).toBe(true);
+    expect(plan.drops).toContainEqual({ index: 1, reason: "broken-tail" });
+    expect(plan.drops).toContainEqual({ index: 2, reason: "broken-tail" });
+    expect(keptIndexes(plan)).toEqual([0]);
+  });
+
   test("a complete trailing call is not a broken tail", () => {
     const turns = [userMessage(0, "Fix it."), toolTurn(1, "Edit", "'a.ts'", "1 hunk", "mutating")];
 

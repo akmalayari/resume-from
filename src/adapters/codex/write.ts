@@ -33,13 +33,11 @@ import {
 } from "./rollout.js";
 import { inspectCodexRollout } from "./validation.js";
 
-/** The injectable seam that keeps serialize pure (no ambient process state). */
-export interface CodexSerializeDeps {
-  /** Where the user is when the import runs. `codex resume` filters the picker by cwd. */
-  cwd(): string;
-  /** Produces the new thread's UUID. Injected so two calls with the same deps are byte-equal. */
-  newSessionId(): string;
-}
+// The seam's normative declaration lives in contract.ts; re-exported so existing import
+// sites keep working without a second, silently driftable copy.
+export type { CodexSerializeDeps } from "./contract.js";
+
+import type { CodexSerializeDeps } from "./contract.js";
 
 export function serializeCodex(
   session: CanonicalSession,

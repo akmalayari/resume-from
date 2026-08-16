@@ -1,7 +1,7 @@
 // Which homes are searched, and in what form. A home reached twice is searched once,
 // and two spellings of the same directory are one home.
 
-import { realpath } from "node:fs/promises";
+import { realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 import type { AgentAdapter, AgentId, HomePath, ImportConfig, SearchScope } from "./contract.js";
@@ -18,6 +18,17 @@ export interface SearchTarget {
   /** Resolved absolute path. */
   home: HomePath;
   adapter: SourceAdapter;
+  /** Set when the user named this home and no configuration lists it (FR-2). */
+  named?: boolean;
+}
+
+/** True when the path exists and is a directory. Symlinks are followed. */
+export async function isDirectory(target: string): Promise<boolean> {
+  try {
+    return (await stat(target)).isDirectory();
+  } catch {
+    return false;
+  }
 }
 
 /** Expands a leading `~` and makes the path absolute. */
@@ -89,7 +100,7 @@ export async function buildSearchList(
   if (onlyHome !== null && targets.length === 0) {
     for (const [agent, adapter] of sources) {
       if (scope.onlyAgent !== null && agent !== scope.onlyAgent) continue;
-      targets.push({ agent, home: onlyHome, adapter });
+      targets.push({ agent, home: onlyHome, adapter, named: true });
     }
   }
   return targets;

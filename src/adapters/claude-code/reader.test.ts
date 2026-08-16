@@ -317,13 +317,27 @@ describe("T-CC-14 — excluded content never crosses", () => {
           "2026-08-01T09:14:06.000Z",
           "<bash-stdout>plan-a.md</bash-stdout><bash-stderr></bash-stderr>",
         ),
+        // Tag order varies by version: some sessions put <command-message> first.
+        userEntry(
+          CTX,
+          uuidFor(17),
+          "2026-08-01T09:14:06.500Z",
+          "<command-message>planning:make</command-message>\n<command-name>/planning:make</command-name>\n<command-args>a plan</command-args>",
+        ),
+        // Stderr-only shell output has no <bash-stdout> opener.
+        userEntry(
+          CTX,
+          uuidFor(18),
+          "2026-08-01T09:14:06.700Z",
+          "<bash-stderr>permission denied</bash-stderr>",
+        ),
         userEntry(CTX, uuidFor(16), "2026-08-01T09:14:07.000Z", "real request"),
       ]),
     );
 
     expect(read.turns.map((turn) => turn.text)).toEqual(["real request"]);
     expect(read.title).toBe("real request");
-    expect(read.skipped).toBe(3);
+    expect(read.skipped).toBe(5);
   });
 
   it("redacts a credential typed as a user message (FR-28, security)", () => {

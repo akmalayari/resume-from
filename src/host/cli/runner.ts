@@ -1,7 +1,7 @@
 // One invocation of the command binary: parse, call the pipeline, print.
 // Every decision this file appears to make is a decision the pipeline made (FR-60).
 
-import { parseArgs, USAGE } from "./args.js";
+import { CONFIRM_FLAG, isConfirmFlag, parseArgs, USAGE } from "./args.js";
 import type {
   CliInvocation,
   CliOutcome,
@@ -134,10 +134,10 @@ function failure(what: string, nextStep: string): CliOutcome {
 }
 
 function withoutConfirmation(argv: string[]): string[] {
-  const index = argv.findIndex((arg) => arg === "--confirm" || arg.startsWith("--confirm="));
+  const index = argv.findIndex(isConfirmFlag);
   if (index < 0) return argv;
   // "--confirm <token>" consumes two slots; "--confirm=<token>" consumes one.
-  const consumed = argv[index] === "--confirm" ? 2 : 1;
+  const consumed = argv[index] === CONFIRM_FLAG ? 2 : 1;
   return [...argv.slice(0, index), ...argv.slice(index + consumed)];
 }
 

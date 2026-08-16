@@ -10,6 +10,7 @@
 
 import { readFileSync } from "node:fs";
 import path, { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { PendingFile, SerializedSession, SessionDescriptor } from "./contract.js";
 import {
@@ -261,7 +262,9 @@ describe.each(cases)(
  * The three files are kept in sync by policy. This test enforces that policy mechanically.
  */
 describe("redaction implementations are byte-identical across adapter submodules", () => {
-  const ADAPTERS_DIR = new URL(".", import.meta.url).pathname;
+  // fileURLToPath, not .pathname: a checkout path with spaces or non-ASCII must not
+  // percent-encode into an ENOENT that would disguise itself as a drift failure.
+  const ADAPTERS_DIR = fileURLToPath(new URL(".", import.meta.url));
   const REDACTION_FILES = [
     join(ADAPTERS_DIR, "claude-code", "redaction.ts"),
     join(ADAPTERS_DIR, "codex", "redaction.ts"),

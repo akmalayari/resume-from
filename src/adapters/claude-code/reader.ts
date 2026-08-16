@@ -222,9 +222,10 @@ function isLocalCommandCarrier(content: unknown): boolean {
   return (
     /(?:^|\n)<local-command-stdout>[\s\S]*<\/local-command-stdout>(?:\n|$)/.test(text) ||
     /(?:^|\n)<local-command-caveat>[\s\S]*<\/local-command-caveat>(?:\n|$)/.test(text) ||
-    /^<command-name>[\s\S]*<\/command-name>/.test(text) ||
+    // Tag order varies by Claude Code version: <command-message> may come first.
+    /^<command-(?:name|message|args)>[\s\S]*<\/command-(?:name|message|args)>/.test(text) ||
     /^<bash-input>[\s\S]*<\/bash-input>(?:\n|$)/.test(text) ||
-    /^<bash-stdout>[\s\S]*<\/bash-std(?:out|err)>(?:\n|$)/.test(text)
+    /^<bash-std(?:out|err)>[\s\S]*<\/bash-std(?:out|err)>(?:\n|$)/.test(text)
   );
 }
 

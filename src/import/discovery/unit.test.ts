@@ -366,3 +366,20 @@ it("T-DIS-26 — an unlisted named home narrowed by agent searches only that age
   expect(codex.calls).toEqual([]);
   expect(listing.rows.map((r) => r.ref.id)).toEqual(["team-1"]);
 });
+
+it("T-DIS-27 — a named home that does not exist is reported, never silently empty (FR-2)", async () => {
+  process.env.HOME = root;
+  const adapter = makeStubAdapter({
+    agent: "claude-code",
+    defaultHome: await makeDir(root, ".claude"),
+  });
+
+  // A typo'd --home: nothing at that path. Adapters swallow a missing directory,
+  // so the finder must say why the listing is empty.
+  const listing = await finderOf([adapter]).list(scopeFor(repoA, { onlyHome: "~/.claude-tem" }));
+
+  expect(listing.rows).toEqual([]);
+  expect(listing.failures.length).toBeGreaterThan(0);
+  expect(listing.failures[0]?.message).toContain("no such directory");
+  expect(adapter.calls).toEqual([]);
+});

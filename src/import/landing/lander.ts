@@ -87,7 +87,8 @@ async function runLanding(
   if (plan.blockedReason !== null) {
     throw new LandingFailure(
       "serialize",
-      `The plan cannot be imported: ${plan.blockedReason}. Nothing was written to ${home}. Reduce what the import must carry, or raise the budget, then run the import again.`,
+      // blockedReason ends in a sentence and carries the cause-specific advice (FR-33, FR-56).
+      `The plan cannot be imported: ${plan.blockedReason} Nothing was written to ${home}. ${RETRY}`,
     );
   }
 

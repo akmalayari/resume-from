@@ -22,6 +22,10 @@ const DROPPED_BODY_MARKER = "(content dropped: imported session, may be stale)";
 /** FR-23. One line, in words, when the source recorded no outcome at all. */
 const NO_OUTCOME_RECORDED = "(outcome not recorded by the source)";
 
+/** FR-33. The one advice sentence every budget-driven block ends with. */
+const BUDGET_ADVICE =
+  "Raise budgetShare, lower pinnedRecentTurns, or choose a target with a larger window.";
+
 /** Role/kind delimiters and message framing that target serializers add around every turn. */
 const TURN_FRAMING_TOKENS = 4;
 
@@ -76,17 +80,16 @@ function normalizeTurn(turn: CanonicalTurn): CanonicalTurn {
   };
 }
 
-/** FR-54: the source's last turn is a tool call the source never recorded a result for. */
-function hasBrokenTail(turns: readonly CanonicalTurn[]): boolean {
-  const last = turns[turns.length - 1];
-  if (last?.kind !== "tool-call") return false;
+/** FR-54: a tool call the source never recorded a result for. */
+function isUnansweredCall(turn: CanonicalTurn | undefined): boolean {
+  if (turn?.kind !== "tool-call") return false;
   // Check resultRecorded directly; outcomeLine is always non-empty (adapters fill it with a
-  // fallback text), so the old outcomeLine=="" check was dead and never caught real broken tails.
+  // fallback text), so an outcomeLine=="" check would be dead and never catch real broken tails.
   //
   // Use === false, not !resultRecorded: an absent flag (undefined) means "unknown, treat as
   // recorded" — construction sites outside this module may omit the field (e.g. test fixtures),
   // and we must not silently break tails that were never broken. Only an explicit false fires. (FR-54)
-  return !last.toolCall || last.toolCall.resultRecorded === false;
+  return !turn.toolCall || turn.toolCall.resultRecorded === false;
 }
 
 /** Adapters understand their native tool schema; this layer only normalizes their path list. */
@@ -170,13 +173,18 @@ function apply(
   const source = session.turns;
   const drops: TurnDrop[] = [];
 
-  // 1. Drop a broken tail (FR-54, FR-55).
-  const brokenTailDropped = hasBrokenTail(source);
-  const tail = source[source.length - 1];
-  if (brokenTailDropped && tail) drops.push({ index: tail.index, reason: "broken-tail" });
+  // 1. Drop the broken tail (FR-54, FR-55): every consecutive trailing call the source never
+  // answered — an interrupted parallel tool batch leaves several unanswered calls, not one.
+  let cut = source.length;
+  while (cut > 0 && isUnansweredCall(source[cut - 1])) {
+    const turn = source[cut - 1];
+    if (turn) drops.push({ index: turn.index, reason: "broken-tail" });
+    cut -= 1;
+  }
+  const brokenTailDropped = cut < source.length;
 
   // 2. Select content (FR-22 to FR-28). The record shape is what enforces FR-24.
-  const selected = (brokenTailDropped ? source.slice(0, -1) : source).map(normalizeTurn);
+  const selected = source.slice(0, cut).map(normalizeTurn);
 
   // 3. Compute the budget (FR-29, FR-30).
   const budgetTokens = Math.floor(config.budgetShare * target.windowTokens);
@@ -201,7 +209,7 @@ function apply(
     blockedReason =
       `Pinned content needs ${pinnedTokens} tokens but the budget is ${budgetTokens} tokens ` +
       `(budgetShare ${config.budgetShare} of a ${target.windowTokens}-token window). ` +
-      `Raise budgetShare, lower pinnedRecentTurns, or choose a target with a larger window.`;
+      BUDGET_ADVICE;
   } else {
     // 6. Drop the oldest unpinned turn until the estimate fits (FR-31, FR-34).
     for (const [position, turn] of selected.entries()) {
@@ -223,8 +231,7 @@ function apply(
   if (blockedReason === null && turns.length === 0) {
     const budgetDriven = drops.some((d) => d.reason === "budget");
     blockedReason = budgetDriven
-      ? "nothing to import — the budget removed all turns. " +
-        "Raise budgetShare, lower pinnedRecentTurns, or choose a target with a larger window."
+      ? `nothing to import — the budget removed all turns. ${BUDGET_ADVICE}`
       : "nothing to import — the session has no importable content. Choose a different session.";
   }
 
