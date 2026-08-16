@@ -7,13 +7,13 @@
  * resumed with native turns. This module writes that file, and never calls that API.
  */
 
-import { randomUUID } from "node:crypto";
 import { basename, isAbsolute } from "node:path";
 import type {
   CanonicalSession,
   CanonicalTurn,
   ProvenanceMarker,
   SerializedSession,
+  SourceProvenance,
   TargetProfile,
   ValidationDefect,
 } from "./contract.js";
@@ -33,16 +33,25 @@ import {
 } from "./rollout.js";
 import { inspectCodexRollout } from "./validation.js";
 
+/** The injectable seam that keeps serialize pure (no ambient process state). */
+export interface CodexSerializeDeps {
+  /** Where the user is when the import runs. `codex resume` filters the picker by cwd. */
+  cwd(): string;
+  /** Produces the new thread's UUID. Injected so two calls with the same deps are byte-equal. */
+  newSessionId(): string;
+}
+
 export function serializeCodex(
   session: CanonicalSession,
   target: TargetProfile,
   marker: ProvenanceMarker,
+  deps: CodexSerializeDeps,
 ): SerializedSession {
-  const importedAt = parseDate(marker.importedAt);
-  const sessionId = randomUUID();
+  const importedAt = resolveStamp(marker.importedAt, session.provenance);
+  const sessionId = deps.newSessionId();
   const stamp = importedAt.toISOString();
 
-  const entries: RolloutEntry[] = [sessionMetaEntry(sessionId, stamp, session)];
+  const entries: RolloutEntry[] = [sessionMetaEntry(sessionId, stamp, deps.cwd(), session)];
   // Codex has no verified durable, out-of-context transcript entry. Do not encode
   // provenance as an agent message: that would make imported metadata look like
   // conversation and could send it back to the model on resume.
@@ -109,6 +118,7 @@ export function validateCodex(serialized: SerializedSession): ValidationDefect[]
 function sessionMetaEntry(
   sessionId: string,
   stamp: string,
+  cwd: string,
   session: CanonicalSession,
 ): RolloutEntry {
   const repo = session.provenance.repo;
@@ -124,7 +134,7 @@ function sessionMetaEntry(
       session_id: sessionId,
       timestamp: stamp,
       // Where the user is now. `codex resume` filters the picker by cwd by default.
-      cwd: process.cwd(),
+      cwd,
       originator: CODEX_ORIGINATOR,
       cli_version: CODEX_CLI_VERSION,
       source: CODEX_SOURCE_CLI,
@@ -169,7 +179,16 @@ function agentMessageEntry(message: string, stamp: string): RolloutEntry {
   };
 }
 
-function parseDate(value: string): Date {
-  const parsed = Date.parse(value);
-  return Number.isNaN(parsed) ? new Date() : new Date(parsed);
+/**
+ * Resolve the stamp for the serialized file without reading the clock.
+ * Chain: marker.importedAt → session.provenance.updatedAt → session.provenance.startedAt.
+ * If none parse, fall back to the Unix epoch so serialize stays deterministic (write design
+ * constraint: the preview and the commit of one request must agree, and no ambient state is read).
+ */
+function resolveStamp(importedAt: string, provenance: SourceProvenance): Date {
+  for (const candidate of [importedAt, provenance.updatedAt, provenance.startedAt]) {
+    const t = Date.parse(candidate);
+    if (!Number.isNaN(t)) return new Date(t);
+  }
+  return new Date(0);
 }

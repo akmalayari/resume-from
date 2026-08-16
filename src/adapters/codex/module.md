@@ -126,6 +126,12 @@ interface ToolCallRecord {
   effect: ToolEffect;
   /** True when the source had a result body and it was dropped (FR-25). */
   bodyDropped: boolean;
+  /**
+   * True when the source recorded any answer to this call (even an empty or error result).
+   * False when no result entry exists at all — the broken-tail signal (FR-54).
+   * This is a presence flag, not a content field; it cannot hold a result body.
+   */
+  resultRecorded?: boolean;
 }
 
 /** One turn of the canonical session. */
@@ -313,12 +319,22 @@ interface AgentAdapter {
 }
 ```
 
-The block below is the normative home of the type it defines.
+The two blocks below are the normative home of the types they define.
+
+```ts
+/** The injectable seam that keeps serialize pure (no ambient process state). */
+interface CodexSerializeDeps {
+  /** Where the user is when the import runs. `codex resume` filters the picker by cwd. */
+  cwd(): string;
+  /** Produces the new thread's UUID. Injected so two calls with the same deps are byte-equal. */
+  newSessionId(): string;
+}
+```
 
 ```ts
 /** Builds the Codex adapter. The only export of this module (FR-57). */
 interface CodexAdapterFactory {
-  create(): AgentAdapter;
+  create(overrides?: Partial<CodexSerializeDeps>): AgentAdapter;
 }
 ```
 
@@ -384,6 +400,11 @@ None of these touch a rule, a preview, another adapter, or the host.
   (C-2), and the landing returns the command that opens the thread instead (FR-45).
 - **Reasoning traces are never read and never written** (C-4, FR-28, NG-8). Their absence in a source
   thread is normal, not a defect.
+- **Credential redaction applies to message and summary turn text, not only tool arguments.** A
+  credential typed by the user as a chat message must not cross to a different model vendor. The
+  reader applies `redactSensitiveText` to every `event_msg` message body and every `compacted`
+  summary before pushing a turn, so no turn in the loaded session can carry a recognizable
+  credential in its `text` field.
 - **This module never writes a file.** `serialize` returns `PendingFile` values; `src/import/landing/`
   commits them (FR-49, FR-53).
 - **This module never opens a Codex source thread for writing** (NG-1, AC-4).
@@ -515,3 +536,14 @@ says Codex fails silently, so nothing here may be inferred from the absence of a
   file, reasoning about 41%, and tool calls and outputs about 49%.
 - Expected behavior: the import fits the budget and leaves room to work (AC-5), because the 90% that
   is reasoning and result bodies never crosses.
+
+**T-COD-20 — serialize is deterministic and never reads the clock**
+- Scenario (a): serialize is called twice with identical fixed deps (`cwd` and `newSessionId`).
+  Expected: the two output buffers are byte-equal and the paths match.
+- Scenario (b): `cwd` is injected as `/fixed/repo`. Expected: `session_meta.cwd === "/fixed/repo"`,
+  not whatever `process.cwd()` returns.
+- Scenario (fallback): `marker.importedAt` is not a valid date string, but
+  `session.provenance.updatedAt` is. Expected: the stamp in the rollout equals
+  `provenance.updatedAt`, never the result of `new Date()`.
+- Scenario (terminal fallback): `importedAt`, `updatedAt`, and `startedAt` are all unparsable.
+  Expected: the stamp is the Unix epoch — serialize stays deterministic with no clock read.
