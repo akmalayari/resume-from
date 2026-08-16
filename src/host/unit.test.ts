@@ -9,7 +9,8 @@ import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { AGENTS } from "./agents.js";
-import type { AgentId } from "./contract.js";
+import { createCliRunner } from "./cli/index.js";
+import type { AgentId, ImportPipeline, ListRequest } from "./contract.js";
 import { createTargetProfileBuilder } from "./profile.js";
 import { createAgentRegistry } from "./registry.js";
 import {
@@ -162,5 +163,34 @@ describe("the target profile", () => {
 
   it("rejects an agent with no adapter, rather than defaulting the profile", () => {
     expect(() => builder().build("pi", null, testConfig())).toThrow(/pi/);
+  });
+
+  it("T-HOS-6 — the runner delivers the resolved home to the pipeline for a ~/… shim path (FR-3)", async () => {
+    // Proves the full chain: profile builder resolves "~/alt-home" and the runner
+    // prefers that resolved value over the raw invocation.targetHome (T-CLI-24).
+    const profile = builder().build(agent, "~/alt-home", testConfig());
+    expect(profile.home).toBe(join(homedir(), "alt-home"));
+
+    const listed: ListRequest[] = [];
+    const pipeline: ImportPipeline = {
+      list: (req) => {
+        listed.push(req);
+        return Promise.resolve({ rows: [], failures: [] });
+      },
+      preview: () => Promise.reject(new Error("not called")),
+      commit: () => Promise.reject(new Error("not called")),
+    };
+
+    await createCliRunner(profile).run(
+      {
+        argv: [],
+        cwd: "/cwd",
+        targetAgent: agent,
+        targetHome: "~/alt-home",
+      },
+      pipeline,
+    );
+
+    expect(listed[0]?.target.home).toBe(join(homedir(), "alt-home"));
   });
 });

@@ -137,6 +137,15 @@ describe("T-CLI-11 exit codes", () => {
           },
         }),
     },
+    {
+      name: "a wrong confirmation token",
+      argv: ["1", "--confirm", `v1-sha256-${"a".repeat(64)}`],
+      exit: 2,
+      stub: () =>
+        stubPipeline({
+          commitRejects: new Error("confirmation token mismatch"),
+        }),
+    },
   ];
 
   it.each(cases)("$name exits $exit", async ({ argv, exit, stub }) => {
@@ -195,6 +204,24 @@ describe("T-CLI-12 errors go to standard error with a next step", () => {
 
     expect(outcome.stdout).toEqual([]);
     expect(outcome.stderr.join("\n")).toContain("No repository here");
+    expect(outcome.exitCode).toBe(2);
+  });
+
+  it("keeps standard output empty and tells the user to preview again after a wrong confirmation token", async () => {
+    const wrongToken = `v1-sha256-${"a".repeat(64)}`;
+    const { pipeline, calls } = stubPipeline({
+      commitRejects: new Error("confirmation token mismatch"),
+    });
+
+    const outcome = await createCliRunner().run(
+      invocation({ argv: ["1", "--confirm", wrongToken] }),
+      pipeline,
+    );
+
+    expect(calls.order).toEqual(["preview", "commit"]);
+    expect(calls.commit[0]?.confirmationToken).toBe(wrongToken);
+    expect(outcome.stdout).toEqual([]);
+    expect(outcome.stderr.join("\n")).toContain("preview again");
     expect(outcome.exitCode).toBe(2);
   });
 

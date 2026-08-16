@@ -473,3 +473,10 @@ is spawned and no terminal is required.
 - Scenario: a fake fourth agent declaring `"numbered-list"` is used as the target.
 - Expected behavior: it gets the numbered list and the handover with no edit to this module (FR-58,
   AC-7).
+
+**T-CLI-24 — the shim home is resolved before reaching the pipeline**
+- Scenario: `createCliRunner` is given a `TargetProfile` whose `home` is the resolved form of
+  `invocation.targetHome` (e.g. `~/alt-home` resolved to `/Users/me/alt-home` by the profile
+  builder). The invocation carries the raw tilde path.
+- Expected behavior: the pipeline receives the resolved absolute home, not the raw string. Proves
+  that preferring `fallback?.home` over `invocation.targetHome` is the correct precedence (FR-3).

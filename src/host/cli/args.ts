@@ -40,14 +40,14 @@ export function parseArgs(argv: string[], cwd: string): ParseResult {
     const arg = argv[index];
     if (arg === undefined) continue;
 
-    if (arg === "--confirm") {
-      const value = argv[index + 1];
+    if (arg === "--confirm" || arg.startsWith("--confirm=")) {
       if (confirmationToken !== null) {
         return {
           ok: false,
           problem: "--confirm was given twice. Use the token from one preview.",
         };
       }
+      const value = arg.startsWith("--confirm=") ? arg.slice("--confirm=".length) : argv[index + 1];
       if (value === undefined || !/^v1-sha256-[0-9a-f]{64}$/.test(value)) {
         return {
           ok: false,
@@ -56,7 +56,7 @@ export function parseArgs(argv: string[], cwd: string): ParseResult {
         };
       }
       confirmationToken = value;
-      index += 1;
+      if (!arg.startsWith("--confirm=")) index += 1;
       continue;
     }
 
