@@ -1,5 +1,5 @@
 /**
- * T-ROO-14 to T-ROO-22 — the acceptance criteria, run against the composed system.
+ * T-ROO-14 to T-ROO-23 — the acceptance criteria, run against the composed system.
  *
  * Everything here goes through the root's own entry point: `createHost()` builds the real agent
  * list, the real pipeline and the real adapters, and the only thing replaced is where the homes
@@ -749,6 +749,72 @@ describe("T-ROO-22 — a platform service can be replaced without touching a con
       .map((source) => repoRelative(source.path));
     expect(naming).toEqual([]);
   });
+});
+
+describe("T-ROO-23 — a windowOverrides config shrinks the budget end-to-end (FR-18)", () => {
+  // Exercises the full chain: config.windowOverrides → host profile builder →
+  // TargetProfile.windowTokens → pipeline rules → fewer turns in the plan.
+  let scene: Bench;
+
+  beforeAll(async () => {
+    scene = await bench({ session: hugeSession() });
+  }, 60_000);
+
+  afterAll(async () => {
+    scene?.guard.restore();
+    await cleanupTempDirs();
+  });
+
+  it("keeps fewer turns under a smaller window than a larger one", async () => {
+    const [source] = [...scene.seeded.keys()];
+    const [target] = scene.host.registry().targets();
+    expect(source).toBeDefined();
+    expect(target).toBeDefined();
+    if (source === undefined || target === undefined) return;
+
+    const agent = agentOf(target);
+    const base = scene.host.config();
+
+    // Two profiles built through the profile builder with different windowOverrides —
+    // the config setting this test exercises end-to-end.
+    const smallProfile = scene.host.profiles().build(agent, join(scene.root, "window-small"), {
+      ...base,
+      windowOverrides: [{ agent, windowTokens: 20_000 }],
+    });
+    const largeProfile = scene.host.profiles().build(agent, join(scene.root, "window-large"), {
+      ...base,
+      windowOverrides: [{ agent, windowTokens: 200_000 }],
+    });
+
+    expect(smallProfile.windowTokens).toBe(20_000);
+    expect(largeProfile.windowTokens).toBe(200_000);
+
+    const smallPipeline = await scene.host.pipelineFor(smallProfile);
+    const largePipeline = await scene.host.pipelineFor(largeProfile);
+
+    const smallRequest = importRequest(scene, source, smallProfile);
+    const largeRequest = importRequest(scene, source, largeProfile);
+
+    const smallReport = await smallPipeline.preview(smallRequest);
+    const largeReport = await largePipeline.preview(largeRequest);
+    expect(smallReport.blocked).toBe(false);
+    expect(largeReport.blocked).toBe(false);
+
+    const smallResult = await smallPipeline.commit(
+      smallRequest,
+      runtimeFor(target, REPO_ROOT, smallProfile.home),
+      smallReport.confirmationToken,
+    );
+    const largeResult = await largePipeline.commit(
+      largeRequest,
+      runtimeFor(target, REPO_ROOT, largeProfile.home),
+      largeReport.confirmationToken,
+    );
+
+    expect(smallResult.itemsSent).toBeGreaterThan(0);
+    // The larger window must carry strictly more turns than the smaller one (FR-18).
+    expect(largeResult.itemsSent).toBeGreaterThan(smallResult.itemsSent);
+  }, 120_000);
 });
 
 // ---------------------------------------------------------------------------

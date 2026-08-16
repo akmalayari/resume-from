@@ -357,7 +357,8 @@ describe.skipIf(!live)("T-ROO-13 — live: the acceptance test", () => {
       .map((name) => join(profile.home, name))
       .find((path) => path.includes(result.ref.id));
     expect(landedFile, "the landed session file must exist in the throwaway home").toBeDefined();
-    if (landedFile === undefined) return;
+    // expect() above throws on undefined; this narrows the type for the compiler.
+    if (landedFile === undefined) throw new Error("unreachable: expect above would have thrown");
     const sessionDir = dirname(landedFile);
 
     const listed = await module.SessionManager.list(REPO_ROOT, sessionDir);
@@ -376,5 +377,6 @@ describe.skipIf(!live)("T-ROO-13 — live: the acceptance test", () => {
   // The last line of the scenario — type the next instruction and watch the agent continue
   // without being told anything again — is a real turn against a real model. It is run by hand
   // before release (docs/plans/2026-08-04-implement-resume-from.md, Post-Completion).
+  // cannot be automated — needs a live model call and human verification
   it.todo("the agent continues the task and the user explains nothing again — run by hand");
 });
