@@ -222,8 +222,12 @@ describe("integration contract", () => {
       expect(error.refusal).toBe(refusal);
       expect(error.path).toBe(destination);
       expect(error.message).toContain(destination);
-      // FR-56: the message says what the user can do next.
-      expect(error.message).toMatch(/remove|rename|choose|check|free|pass/i);
+      // FR-56: the message names the specific next step for the refusal type.
+      expect(error.message).toContain(
+        refusal === "path-exists"
+          ? "Remove or rename the existing file"
+          : "Check the path and the free space",
+      );
     },
   );
 

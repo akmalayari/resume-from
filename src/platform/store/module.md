@@ -138,7 +138,10 @@ Changes that require **only this module** to change:
 - **Created files are private.** New files use mode `0600` and new directories use mode `0700`,
   independent of the process umask.
 - **Cleanup favors preservation over guessing.** Published paths are preserved for manual inspection;
-  temporary-file cleanup checks device and inode and reports any path it cannot clean up.
+  temporary-file cleanup checks device and inode and reports any path it cannot clean up. When
+  placement succeeds but the temporary staging file cannot be removed, the error message names the
+  destination as published and lists only the temporary paths in `remainingPaths`; a retry will
+  report path-exists because the destination already exists.
 
 ## Test Specification
 
