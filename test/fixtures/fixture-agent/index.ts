@@ -159,6 +159,8 @@ function threadTurns(thread: FixtureThread): { turns: CanonicalTurn[]; skipped: 
           outcomeLine: bodyDropped ? `${ran.outcome} ${FIXTURE_DROPPED_NOTE}` : ran.outcome,
           effect: IMPACTS[ran.impact] ?? "unknown",
           bodyDropped,
+          // FR-54: this agent always records an outcome for every call it runs.
+          resultRecorded: true,
         },
         timestamp,
       });

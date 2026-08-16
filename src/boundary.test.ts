@@ -123,12 +123,13 @@ describe("T-ROO-9 — there is no field for a tool result body", () => {
     (member) => member.owner === "ToolCallRecord",
   );
 
-  it("holds exactly the five fields the design names", () => {
+  it("holds exactly the six fields the design names", () => {
     expect(members.map((member) => member.name).sort()).toEqual([
       "argumentsText",
       "bodyDropped",
       "effect",
       "outcomeLine",
+      "resultRecorded",
       "toolName",
     ]);
   });

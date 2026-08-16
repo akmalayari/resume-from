@@ -100,6 +100,12 @@ interface ToolCallRecord {
   effect: ToolEffect;
   /** True when the source had a result body and it was dropped (FR-25). */
   bodyDropped: boolean;
+  /**
+   * True when the source recorded any answer to this call (even an empty or error result).
+   * False when no result entry exists at all — the broken-tail signal (FR-54).
+   * This is a presence flag, not a content field; it cannot hold a result body.
+   */
+  resultRecorded?: boolean;
 }
 
 /** One turn of the canonical session. */

@@ -121,6 +121,12 @@ interface ToolCallRecord {
   effect: ToolEffect;
   /** True when the source had a result body and it was dropped (FR-25). */
   bodyDropped: boolean;
+  /**
+   * True when the source recorded any answer to this call (even an empty or error result).
+   * False when no result entry exists at all — the broken-tail signal (FR-54).
+   * This is a presence flag, not a content field; it cannot hold a result body.
+   */
+  resultRecorded?: boolean;
 }
 
 /** One turn of the canonical session. */
@@ -222,7 +228,8 @@ The changes this boundary is designed to absorb:
 
 - **`ToolCallRecord` must never gain a field that can hold a result body**, in any form: no `output`,
   no `resultText`, no `preview`, no `bytes`. FR-24 and FR-60 depend on this. `outcomeLine` is one
-  line and is validated as one line.
+  line and is validated as one line. `resultRecorded` is a boolean presence flag only — it records
+  whether a result entry existed, not the result itself.
 - **No field may hold a secret.** There is no field for tokens, passwords, environment values,
   hidden reasoning, system prompts or vendor state, and none may be added (FR-28, NG-7, NG-8).
   Adapters preserve their own parsing rules, but pass tool inputs through their local pure redactor
@@ -259,8 +266,9 @@ module owns the _invariants_ the fixtures must satisfy, and asserts them.
 **T-SES-1 — a tool call record has no field for a result body**
 - Scenario: a compile-time assertion lists the keys of `ToolCallRecord`.
 - Expected behavior: the key set is exactly `toolName`, `argumentsText`, `outcomeLine`, `effect`,
-  `bodyDropped`. Adding any other key fails the build. This is the mechanical guard on FR-24 and
-  FR-60.
+  `bodyDropped`, `resultRecorded`. Adding any other key fails the build. This is the mechanical
+  guard on FR-24 and FR-60. `resultRecorded` is a presence flag (boolean), not a content field,
+  so it cannot hold a result body.
 
 **T-SES-2 — no type carries excluded content**
 - Scenario: a compile-time assertion lists the keys of every type in the Public Contract.

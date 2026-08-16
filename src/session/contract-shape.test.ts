@@ -45,7 +45,14 @@ const CONTRACT_KEYS = {
     "repoPath",
     "filePath",
   ],
-  ToolCallRecord: ["toolName", "argumentsText", "outcomeLine", "effect", "bodyDropped"],
+  ToolCallRecord: [
+    "toolName",
+    "argumentsText",
+    "outcomeLine",
+    "effect",
+    "bodyDropped",
+    "resultRecorded",
+  ],
   CanonicalTurn: ["index", "role", "kind", "text", "toolCall", "timestamp"],
   RepoSnapshot: ["commit", "branch", "changedPaths"],
   SourceProvenance: ["ref", "title", "startedAt", "updatedAt", "repo"],
@@ -108,7 +115,14 @@ describe("contract shape", () => {
 
   it("gives a tool call record no field for a result body (T-SES-1)", () => {
     expect([...CONTRACT_KEYS.ToolCallRecord].sort()).toEqual(
-      ["toolName", "argumentsText", "outcomeLine", "effect", "bodyDropped"].sort(),
+      [
+        "toolName",
+        "argumentsText",
+        "outcomeLine",
+        "effect",
+        "bodyDropped",
+        "resultRecorded",
+      ].sort(),
     );
   });
 
