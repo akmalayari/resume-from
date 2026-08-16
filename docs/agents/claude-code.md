@@ -53,7 +53,7 @@ Use `--help` to show all selectors and options.
 
 ## Use another Claude Code profile
 
-Claude Code reads `CLAUDE_CONFIG_DIR`. The default home is `~/.claude`.
+Claude Code reads `CLAUDE_CONFIG_DIR`. The default home is `~/.claude`. When `CLAUDE_CONFIG_DIR` is set, `resume-from` also uses it as the default home for Claude Code sessions.
 
 Start Claude Code with another target profile:
 

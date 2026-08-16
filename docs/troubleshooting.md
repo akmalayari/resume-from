@@ -42,8 +42,10 @@ value.
 Use this form for direct CLI work:
 
 ```sh
-resume-from --target-agent codex
+resume-from --target-agent codex --
 ```
+
+Everything after `--` is the selection: a row number, session ID, or file path.
 
 Use `resume-from --help` to show the complete syntax.
 

@@ -71,6 +71,7 @@ codex resume <thread-id>
 The command accepts one row number, session ID, or session file path.
 
 ```text
+# Pi
 /resume-from <session-id>
 /resume-from /absolute/path/to/session.jsonl
 ```
@@ -78,6 +79,7 @@ The command accepts one row number, session ID, or session file path.
 Claude Code and Codex also support source filters:
 
 ```text
+# Claude Code / Codex
 /resume-from --agent pi
 /resume-from --agent claude --home ~/.claude-team
 ```
