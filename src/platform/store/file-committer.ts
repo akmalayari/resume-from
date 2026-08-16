@@ -110,11 +110,10 @@ async function commit(root: string, files: PendingFile[]): Promise<CommitHandle>
 
   const remainingTemporaryPaths = await discard(staged);
   if (remainingTemporaryPaths.length > 0) {
-    const remainingPaths = [
-      ...remainingTemporaryPaths,
-      ...createdPathNames(createdFiles, createdDirs),
-    ];
-    throw cleanupFailure(remainingPaths);
+    // Placement succeeded: the published destination is real. Only the temporary staging file(s)
+    // could not be removed. Pass them separately so the message is honest about what happened.
+    const publishedPaths = createdPathNames(createdFiles, createdDirs);
+    throw cleanupFailure(remainingTemporaryPaths, publishedPaths);
   }
 
   return { createdPaths: createdFiles.map(({ path }) => path) };
@@ -462,12 +461,15 @@ function remainingFrom(error: unknown): string[] {
   return error.remainingPaths.filter((path): path is string => typeof path === "string");
 }
 
-function cleanupFailure(remainingPaths: string[]): CommitFailure {
+// FR-53: after successful placement the temporary staging file(s) failed to remove. The published
+// destination is already on disk — only the temps need manual removal. `remainingPaths` carries
+// only the temps so callers do not list a successfully committed file as a leftover.
+function cleanupFailure(temporaryPaths: string[], publishedPaths: string[]): CommitFailure {
   return new CommitFailure(
     "write-failed",
     null,
-    `Cleanup was incomplete. These paths were retained or may still exist; inspect them before retrying: ${remainingPaths.join(", ")}.`,
-    remainingPaths,
+    `The file was placed successfully, but the temporary staging file could not be removed. Only these paths need inspection or manual removal: ${temporaryPaths.join(", ")}. The destination was published successfully: ${publishedPaths.join(", ")}. A retry will report path-exists because the import already landed.`,
+    temporaryPaths,
   );
 }
 

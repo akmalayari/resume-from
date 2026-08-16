@@ -1,3 +1,19 @@
+/**
+ * Credential redaction — shared implementation kept in three adapter subfolders.
+ *
+ * Files:
+ *   src/adapters/claude-code/redaction.ts
+ *   src/adapters/codex/redaction.ts
+ *   src/adapters/pi/redaction.ts
+ *
+ * These three files are byte-identical by design. A fix in one MUST be applied to all three.
+ * src/adapters/boundary.test.ts asserts byte equality and will fail if they drift.
+ *
+ * Why not a single shared module: src/adapters/contract.ts is types-only (no behaviour). A
+ * platform service would be imported as behaviour, and T-ROO-7 requires adapter-to-platform
+ * cross-module imports to go through contract.js — which can only export types, not functions.
+ */
+
 /** Stable replacement used for credentials that must not cross an adapter boundary. */
 export const REDACTED_VALUE = "[REDACTED]";
 
@@ -29,8 +45,11 @@ const FLAG_PATTERN =
   /(--(?:api[-_]?key|access[-_]?token|auth[-_]?token|token|password|passwd|secret|client[-_]?secret|private[-_]?key))(=|\s+)("[^"\r\n]*"|'[^'\r\n]*'|[^\s;&|]+)/gi;
 const USER_CREDENTIAL_PATTERN = /(^|[\s;&|])(-u|--user)(=|\s+)("[^"\r\n]*"|'[^'\r\n]*'|[^\s;&|]+)/g;
 const URI_USERINFO_PATTERN = /\b([a-z][a-z0-9+.-]*:\/\/)([^\s/:@]+):([^\s/@]+)@/gi;
+// Unquoted value requires a structural delimiter or line/string end following it, OR a digit
+// somewhere in the token (C-RED-1: "token: expired" is plain English and stays, while
+// "password: hunter2 # prod" carries a credential that must not cross even mid-line).
 const JSON_LIKE_PATTERN =
-  /(["']?)([A-Za-z_][A-Za-z0-9_-]*)\1(\s*:\s*)("[^"\r\n]*"|'[^'\r\n]*'|[^\s,;}]+)/g;
+  /(["']?)([A-Za-z_][A-Za-z0-9_-]*)\1(\s*:\s*)("[^"\r\n]*"|'[^'\r\n]*'|[^\s,;}]+(?=[,;}]|[\r\n]|$)|[^\s,;}]*\d[^\s,;}]*)/g;
 
 function normalizedKey(key: string): string {
   return key.toLowerCase().replaceAll(/[^a-z0-9]/g, "");

@@ -9,7 +9,9 @@ import { setTimeout as delay } from "node:timers/promises";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { makeHome, removeHome } from "./test-support.js";
 
-// Enough bytes that the child is still staging the one allowed file when the kill lands.
+// 256 MB keeps the write in flight when SIGKILL lands (T-STO-17): the commit cannot complete
+// before the OS flushes the buffer, so the kill reliably arrives before the link step.
+// This test intentionally takes up to 30 seconds and is not suited for fast-feedback loops.
 const FILE_SIZE = 256 * 1024 * 1024;
 
 let home: string;

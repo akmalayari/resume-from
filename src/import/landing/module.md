@@ -22,7 +22,7 @@ including agents that do not exist yet.
   of the import, and what was dropped (FR-47).
 - Ask the target adapter to serialize the plan into its own format (FR-40, FR-41).
 - Validate the serialized session before it reaches the target home (FR-50).
-- Commit the adapter's zero-or-one file output, add-only and atomically published (FR-49, FR-53).
+- Commit the adapter's exactly-one file output, add-only and atomically published (FR-49, FR-53).
 - Read the session back and compare the number of items sent with the number stored (FR-52), and
   check the target can open it (FR-51).
 - If reconciliation or openability fails after commit, preserve the published paths and report them
@@ -100,6 +100,12 @@ interface ToolCallRecord {
   effect: ToolEffect;
   /** True when the source had a result body and it was dropped (FR-25). */
   bodyDropped: boolean;
+  /**
+   * True when the source recorded any answer to this call (even an empty or error result).
+   * False when no result entry exists at all — the broken-tail signal (FR-54).
+   * This is a presence flag, not a content field; it cannot hold a result body.
+   */
+  resultRecorded?: boolean;
 }
 
 /** One turn of the canonical session. */
@@ -505,8 +511,9 @@ None of these touch a rule, a preview, or an adapter.
   reproducible in tests.
 - **A plan with a non-null `blockedReason` is refused before serialization** (FR-33). The preview
   should already have stopped it; this is the second gate.
-- **One session serializes to at most one file.** A target adapter that returns more is refused before
-  validation or placement because multi-path process-interruption atomicity is not portable.
+- **One session serializes to exactly one file.** A target adapter that returns zero or more than
+  one file is refused before validation or placement. Zero files produces vacuous success and
+  confusing read-back results; more than one file breaks multi-path process-interruption atomicity.
 - **Errors name the stage and the next step** (FR-56). "Write failed" alone is not an acceptable
   message.
 

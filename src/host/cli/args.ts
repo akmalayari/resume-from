@@ -18,6 +18,14 @@ const AGENT_NAMES: Record<string, AgentId> = {
 
 const KNOWN_AGENTS = Object.keys(AGENT_NAMES).join(", ");
 
+/** The one confirmation flag. `runner.ts` strips it from re-run hints with the same predicate. */
+export const CONFIRM_FLAG = "--confirm";
+
+/** True for both accepted forms: `--confirm <token>` and `--confirm=<token>`. */
+export function isConfirmFlag(arg: string): boolean {
+  return arg === CONFIRM_FLAG || arg.startsWith(`${CONFIRM_FLAG}=`);
+}
+
 export interface ParsedArgs {
   /** Null when the user asked for the list (FR-10). */
   selection: SelectionInput | null;
@@ -40,14 +48,16 @@ export function parseArgs(argv: string[], cwd: string): ParseResult {
     const arg = argv[index];
     if (arg === undefined) continue;
 
-    if (arg === "--confirm") {
-      const value = argv[index + 1];
+    if (isConfirmFlag(arg)) {
       if (confirmationToken !== null) {
         return {
           ok: false,
           problem: "--confirm was given twice. Use the token from one preview.",
         };
       }
+      const value = arg.startsWith(`${CONFIRM_FLAG}=`)
+        ? arg.slice(CONFIRM_FLAG.length + 1)
+        : argv[index + 1];
       if (value === undefined || !/^v1-sha256-[0-9a-f]{64}$/.test(value)) {
         return {
           ok: false,
@@ -56,7 +66,7 @@ export function parseArgs(argv: string[], cwd: string): ParseResult {
         };
       }
       confirmationToken = value;
-      index += 1;
+      if (!arg.startsWith(`${CONFIRM_FLAG}=`)) index += 1;
       continue;
     }
 

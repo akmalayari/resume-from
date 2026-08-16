@@ -53,7 +53,10 @@ it("T-DIS-1 — the search list is the defaults plus the extras", async () => {
   const adapters = [
     makeStubAdapter({ agent: "pi", defaultHome: defaults[0] as string }),
     makeStubAdapter({ agent: "codex", defaultHome: defaults[1] as string }),
-    makeStubAdapter({ agent: "claude-code", defaultHome: defaults[2] as string }),
+    makeStubAdapter({
+      agent: "claude-code",
+      defaultHome: defaults[2] as string,
+    }),
   ];
 
   await finderOf(adapters, [
@@ -108,7 +111,11 @@ it("T-DIS-3 — only source adapters are searched", async () => {
     repoPath: repoA,
   });
   const source = makeStubAdapter({ agent: "pi", defaultHome: sourceHome });
-  const target = makeStubAdapter({ agent: "codex", defaultHome: targetHome, roles: ["target"] });
+  const target = makeStubAdapter({
+    agent: "codex",
+    defaultHome: targetHome,
+    roles: ["target"],
+  });
 
   const listing = await finderOf([source, target]).list(scopeFor(repoA));
 
@@ -136,7 +143,11 @@ it("T-DIS-4 — the listing is newest first", async () => {
     [3, "cc-2", 4],
   ];
   for (const [homeIndex, id, day] of plan) {
-    await writeSession(homes[homeIndex] as string, { id, updatedAt: minute(day), repoPath: repoA });
+    await writeSession(homes[homeIndex] as string, {
+      id,
+      updatedAt: minute(day),
+      repoPath: repoA,
+    });
   }
   const adapters = [
     makeStubAdapter({ agent: "pi", defaultHome: homes[0] as string }),
@@ -168,9 +179,21 @@ it("T-DIS-5 — the ordering is deterministic on a tie", async () => {
   const home = await makeDir(root, "pi-home");
   const other = await makeDir(root, "codex-home");
   const tie = "2026-04-01T12:00:00.000Z";
-  await writeSession(home, { id: "b-session", updatedAt: tie, repoPath: repoA });
-  await writeSession(home, { id: "a-session", updatedAt: tie, repoPath: repoA });
-  await writeSession(other, { id: "c-session", updatedAt: tie, repoPath: repoA });
+  await writeSession(home, {
+    id: "b-session",
+    updatedAt: tie,
+    repoPath: repoA,
+  });
+  await writeSession(home, {
+    id: "a-session",
+    updatedAt: tie,
+    repoPath: repoA,
+  });
+  await writeSession(other, {
+    id: "c-session",
+    updatedAt: tie,
+    repoPath: repoA,
+  });
 
   const permutations = [
     (rows: unknown[]) => rows,
@@ -179,8 +202,16 @@ it("T-DIS-5 — the ordering is deterministic on a tie", async () => {
   const seen = new Set<string>();
   for (const permute of permutations) {
     const adapters = [
-      makeStubAdapter({ agent: "pi", defaultHome: home, permute: permute as never }),
-      makeStubAdapter({ agent: "codex", defaultHome: other, permute: permute as never }),
+      makeStubAdapter({
+        agent: "pi",
+        defaultHome: home,
+        permute: permute as never,
+      }),
+      makeStubAdapter({
+        agent: "codex",
+        defaultHome: other,
+        permute: permute as never,
+      }),
     ];
     const finder = finderOf(adapters);
     for (let run = 0; run < 50; run++) {
@@ -196,8 +227,16 @@ it("T-DIS-5 — the ordering is deterministic on a tie", async () => {
 
 it("T-DIS-6 — only sessions of this repository are listed", async () => {
   const home = await makeDir(root, "pi-home");
-  await writeSession(home, { id: "in-a", updatedAt: "2026-01-02T10:00:00.000Z", repoPath: repoA });
-  await writeSession(home, { id: "in-b", updatedAt: "2026-01-03T10:00:00.000Z", repoPath: repoB });
+  await writeSession(home, {
+    id: "in-a",
+    updatedAt: "2026-01-02T10:00:00.000Z",
+    repoPath: repoA,
+  });
+  await writeSession(home, {
+    id: "in-b",
+    updatedAt: "2026-01-03T10:00:00.000Z",
+    repoPath: repoB,
+  });
   const adapter = makeStubAdapter({ agent: "pi", defaultHome: home });
 
   const listing = await finderOf([adapter]).list(scopeFor(repoA));
@@ -213,7 +252,11 @@ it("T-DIS-7 — a session with no repository is out of scope", async () => {
     updatedAt: "2026-01-02T10:00:00.000Z",
     repoPath: null,
   });
-  await writeSession(home, { id: "in-a", updatedAt: "2026-01-01T10:00:00.000Z", repoPath: repoA });
+  await writeSession(home, {
+    id: "in-a",
+    updatedAt: "2026-01-01T10:00:00.000Z",
+    repoPath: repoA,
+  });
   const adapter = makeStubAdapter({ agent: "pi", defaultHome: home });
 
   const listing = await finderOf([adapter]).list(scopeFor(repoA));
@@ -278,4 +321,65 @@ it("T-DIS-9 — naming one home narrows the search", async () => {
 
   expect(adapter.calls).toEqual([team]);
   expect(listing.rows.map((r) => r.ref.id)).toEqual(["team-1"]);
+});
+
+it("T-DIS-25 — a named home outside every default and extra home is still searched (FR-2)", async () => {
+  process.env.HOME = root;
+  const main = await makeDir(root, ".claude");
+  const team = await makeDir(root, ".claude-team");
+  await writeSession(team, {
+    id: "team-1",
+    updatedAt: "2026-01-04T10:00:00.000Z",
+    repoPath: repoA,
+  });
+  const adapter = makeStubAdapter({ agent: "claude-code", defaultHome: main });
+
+  // No extraHomes entry: the named home is known to no configuration.
+  const listing = await finderOf([adapter]).list(scopeFor(repoA, { onlyHome: "~/.claude-team" }));
+
+  expect(adapter.calls).toEqual([team]);
+  expect(listing.rows.map((r) => r.ref.id)).toEqual(["team-1"]);
+});
+
+it("T-DIS-26 — an unlisted named home narrowed by agent searches only that agent", async () => {
+  process.env.HOME = root;
+  const team = await makeDir(root, ".claude-team");
+  await writeSession(team, {
+    id: "team-1",
+    updatedAt: "2026-01-04T10:00:00.000Z",
+    repoPath: repoA,
+  });
+  const claude = makeStubAdapter({
+    agent: "claude-code",
+    defaultHome: await makeDir(root, ".claude"),
+  });
+  const codex = makeStubAdapter({
+    agent: "codex",
+    defaultHome: await makeDir(root, ".codex"),
+  });
+
+  const listing = await finderOf([claude, codex]).list(
+    scopeFor(repoA, { onlyHome: "~/.claude-team", onlyAgent: "claude-code" }),
+  );
+
+  expect(claude.calls).toEqual([team]);
+  expect(codex.calls).toEqual([]);
+  expect(listing.rows.map((r) => r.ref.id)).toEqual(["team-1"]);
+});
+
+it("T-DIS-27 — a named home that does not exist is reported, never silently empty (FR-2)", async () => {
+  process.env.HOME = root;
+  const adapter = makeStubAdapter({
+    agent: "claude-code",
+    defaultHome: await makeDir(root, ".claude"),
+  });
+
+  // A typo'd --home: nothing at that path. Adapters swallow a missing directory,
+  // so the finder must say why the listing is empty.
+  const listing = await finderOf([adapter]).list(scopeFor(repoA, { onlyHome: "~/.claude-tem" }));
+
+  expect(listing.rows).toEqual([]);
+  expect(listing.failures.length).toBeGreaterThan(0);
+  expect(listing.failures[0]?.message).toContain("no such directory");
+  expect(adapter.calls).toEqual([]);
 });

@@ -15,7 +15,7 @@ import {
   writeFixtureSession,
 } from "./fixtures.js";
 import { UNREADABLE_TITLE_PREFIX } from "./format.js";
-import { changedPathsFromEntries, entriesToTurns } from "./parse.js";
+import { changedPathsFromEntries, entriesToTurns, titleFromEntries } from "./parse.js";
 
 const homes: string[] = [];
 
@@ -198,6 +198,33 @@ describe("T-PI-3 — tool results become one outcome line", () => {
     expect(record?.outcomeLine).toContain("result recorded");
     expect(record?.outcomeLine).toContain("content dropped");
     expect(JSON.stringify(record)).not.toContain("base64-data");
+  });
+
+  it("redacts a credential typed as a user message turn (FR-28, security)", () => {
+    // A credential pasted into chat must not cross to a different model vendor.
+    const bearer = "sk-1234567890abcdef1234";
+    const built = piSessionText([
+      piUserDraft(`run: curl -H "Authorization: Bearer ${bearer}" https://api.example.com`),
+      piAssistantTextDraft("On it."),
+    ]);
+    const loaded = entriesToTurns(built.entries);
+    const canonical = JSON.stringify(loaded.turns);
+
+    expect(canonical).not.toContain(bearer);
+    expect(canonical).toContain("[REDACTED]");
+    // Normal assistant reply is not disturbed.
+    expect(loaded.turns[1]?.text).toBe("On it.");
+  });
+
+  it("redacts a credential that appears as the session title (FR-28, security)", () => {
+    // Pi derives the title from the first user message via titleFromEntries.
+    // A credential in that text would otherwise flow unredacted into SourceProvenance.title.
+    const bearer = "sk-1234567890abcdef1234";
+    const built = piSessionText([piUserDraft(`call with Authorization: Bearer ${bearer}`)]);
+    const derived = titleFromEntries(built.entries);
+
+    expect(derived).not.toContain(bearer);
+    expect(derived).toContain("[REDACTED]");
   });
 });
 

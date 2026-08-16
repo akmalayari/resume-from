@@ -37,7 +37,8 @@ describe("T-TRA-21 an empty session", () => {
     expect(plan.bodiesDropped).toBe(0);
     expect(plan.estimatedTokens).toBe(0);
     expect(plan.brokenTailDropped).toBe(false);
-    expect(plan.blockedReason).toBeNull();
+    // A plan that would keep zero turns is blocked, never silently empty (FR-33).
+    expect(plan.blockedReason).toMatch(/nothing to import/i);
   });
 });
 
@@ -84,7 +85,8 @@ describe("T-TRA-24 one turn larger than the whole budget", () => {
     expect(droppedIndexes(plan)).toEqual([0]);
     expect(plan.turns).toEqual([]);
     expect(plan.estimatedTokens).toBeLessThanOrEqual(plan.budgetTokens);
-    expect(plan.blockedReason).toBeNull();
+    // Dropping the only turn leaves nothing to import, and an empty plan is blocked (FR-33).
+    expect(plan.blockedReason).toMatch(/nothing to import/i);
   });
 
   test("pinned, the plan is blocked and the turn is never truncated", () => {

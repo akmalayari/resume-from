@@ -19,7 +19,14 @@ For Claude Code or Codex, open the plugin manager and make sure that
 `resume-from` lists sessions for the current Git repository. Run the command
 from the repository that owns the source session.
 
-If the source uses another profile, add that home to `extraHomes`. See
+If the source uses another profile, name its home with `--home`:
+
+```text
+/resume-from --home ~/.claude-team
+```
+
+For a profile you import from often, add that home to `extraHomes` instead, so
+every listing includes it. See
 [Configuration](configuration.md#add-another-profile).
 
 The tool reports each home that it cannot read. Correct the path or its file
@@ -34,6 +41,12 @@ Increase `budgetShare`, reduce `pinnedRecentTurns`, or correct the target
 context-window size. See
 [Configuration](configuration.md#change-the-import-budget).
 
+## `nothing to import`
+
+The source session has no turns that can cross over. A session that holds only
+slash commands — for example a session created by `/clear` — reads as empty.
+Choose a session that holds conversation.
+
 ## `--target-agent is missing`
 
 The direct binary needs the target agent. Installed host commands supply this
@@ -42,8 +55,10 @@ value.
 Use this form for direct CLI work:
 
 ```sh
-resume-from --target-agent codex
+resume-from --target-agent codex --
 ```
+
+Everything after `--` is the selection: a row number, session ID, or file path.
 
 Use `resume-from --help` to show the complete syntax.
 

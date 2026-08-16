@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { REFERENCE_SESSION } from "../../../test/fixtures/reference-session.js";
-import type { ProvenanceMarker, TargetProfile } from "./contract.js";
+import type { CanonicalSession, ProvenanceMarker, TargetProfile } from "./contract.js";
 import { codexAdapterFactory } from "./index.js";
 import type { RolloutEntry } from "./rollout.js";
 import {
@@ -154,6 +154,17 @@ describe("T-COD-5 picker metadata", () => {
     expect(file.absolutePath).toContain(serialized.sessionId);
     expect(file.absolutePath.endsWith(".jsonl")).toBe(true);
   });
+
+  it("takes cwd from the injected dep, not from process.cwd() (b)", () => {
+    const fixed = codexAdapterFactory.create({ cwd: () => "/fixed/repo" });
+    const serialized = fixed.serialize(REFERENCE_SESSION, TARGET, MARKER);
+    const file = serialized.files[0];
+    if (file === undefined) throw new Error("no file");
+    const entries = entriesOf(file.bytes);
+    const meta = entries[0];
+    if (meta === undefined) throw new Error("no metadata");
+    expect(meta.payload.cwd).toBe("/fixed/repo");
+  });
 });
 
 /** T-COD-6 — no response_item entries are written. */
@@ -172,6 +183,56 @@ describe("T-COD-6 no response_item entries", () => {
     }
     const serialized = adapter.serialize(REFERENCE_SESSION, TARGET, MARKER);
     expect(serialized.files[0]?.bytes.toString("utf8")).not.toContain("encrypted_content");
+  });
+});
+
+/** T-COD-20 — serialize is deterministic given fixed deps (a) and falls back to provenance when
+ *  importedAt is unparsable — never reads the clock. */
+describe("T-COD-20 deterministic serialize", () => {
+  const FIXED_ID = "00000000-0000-4000-8000-000000000001";
+  const fixedDeps = { cwd: () => "/fixed/repo", newSessionId: () => FIXED_ID };
+
+  it("produces byte-equal output on two calls with the same deps (a)", () => {
+    const fixed = codexAdapterFactory.create(fixedDeps);
+    const first = fixed.serialize(REFERENCE_SESSION, TARGET, MARKER);
+    const second = fixed.serialize(REFERENCE_SESSION, TARGET, MARKER);
+    expect(first.files[0]?.bytes).toEqual(second.files[0]?.bytes);
+    expect(first.files[0]?.absolutePath).toBe(second.files[0]?.absolutePath);
+    expect(first.sessionId).toBe(second.sessionId);
+  });
+
+  it("falls back to provenance.updatedAt when importedAt is not a valid date", () => {
+    const badMarker: ProvenanceMarker = { ...MARKER, importedAt: "not-a-date" };
+    const updatedAt = REFERENCE_SESSION.provenance.updatedAt;
+    const fixed = codexAdapterFactory.create(fixedDeps);
+    const serialized = fixed.serialize(REFERENCE_SESSION, TARGET, badMarker);
+    const file = serialized.files[0];
+    if (file === undefined) throw new Error("no file");
+    const entries = entriesOf(file.bytes);
+    const meta = entries[0];
+    if (meta === undefined) throw new Error("no metadata");
+    // The stamp must come from provenance.updatedAt, not from new Date()
+    expect(meta.payload.timestamp).toBe(new Date(updatedAt).toISOString());
+  });
+
+  it("falls back to Unix epoch when importedAt, updatedAt, and startedAt are all unparsable", () => {
+    const badMarker: ProvenanceMarker = { ...MARKER, importedAt: "bad" };
+    const badSession: CanonicalSession = {
+      ...REFERENCE_SESSION,
+      provenance: {
+        ...REFERENCE_SESSION.provenance,
+        updatedAt: "bad",
+        startedAt: "bad",
+      },
+    };
+    const fixed = codexAdapterFactory.create(fixedDeps);
+    const serialized = fixed.serialize(badSession, TARGET, badMarker);
+    const file = serialized.files[0];
+    if (file === undefined) throw new Error("no file");
+    const entries = entriesOf(file.bytes);
+    const meta = entries[0];
+    if (meta === undefined) throw new Error("no metadata");
+    expect(meta.payload.timestamp).toBe(new Date(0).toISOString());
   });
 });
 

@@ -242,6 +242,8 @@ function toolCallRecord(
     ),
     effect: toolEffectFor(name),
     bodyDropped,
+    // FR-54: false when no toolResult entry existed for this call id (broken tail signal).
+    resultRecorded: result !== undefined,
   };
 }
 
@@ -252,7 +254,10 @@ function contextEntriesToTurns(entries: PiEntry[]): Omit<LoadedTurns, "unreadabl
   let skippedCount = 0;
 
   const push = (turn: Omit<CanonicalTurn, "index">): void => {
-    turns.push({ ...turn, index: turns.length });
+    // FR-28, security: credentials pasted as message text must not cross to a different vendor.
+    // Tool-call turns carry text: "" so the condition is a no-op there (no double-redaction).
+    const text = turn.text.length > 0 ? redactSensitiveText(turn.text) : turn.text;
+    turns.push({ ...turn, text, index: turns.length });
   };
 
   const skip = (type: string): void => {
@@ -380,7 +385,9 @@ export function titleFromEntries(entries: PiEntry[]): string | null {
     const message = entryMessage(entry);
     if (message?.role !== "user") continue;
     const text = visibleText(message.content);
-    if (text.trim().length > 0) return text;
+    // FR-28, security: the title flows into SourceProvenance and is shown in the selection list.
+    // A credential typed as the first message must not appear there unredacted.
+    if (text.trim().length > 0) return redactSensitiveText(text);
   }
   return null;
 }

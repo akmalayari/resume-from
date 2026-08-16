@@ -192,9 +192,11 @@ export function createPipelineFromStages(stages: PipelineStages): ImportPipeline
       }
 
       if (plan.blockedReason !== null) {
+        // blockedReason already ends in a sentence and carries the cause-specific
+        // advice (FR-33, FR-56); this adds only what the pipeline alone knows.
         throw new ImportFailure(
           "blocked",
-          `The import cannot run: ${plan.blockedReason}. Nothing was written to ${request.target.home}. Raise the budget share, or lower the number of pinned recent turns, then preview again.`,
+          `The import cannot run: ${plan.blockedReason} Nothing was written to ${request.target.home}. ${PREVIEW_AGAIN}`,
         );
       }
 

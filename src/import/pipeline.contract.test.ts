@@ -247,7 +247,7 @@ describe("T-IMP-11 — one error shape for every stage", () => {
 
     expect(failure).toBeInstanceOf(ImportFailure);
     expect(failure.stage).toBe("blocked");
-    expect(failure.message).toMatch(/preview again/i);
+    expect(failure.message).toMatch(/preview it again/i);
   });
 
   it("turns a validation defect into an ImportFailure that carries the defects", async () => {

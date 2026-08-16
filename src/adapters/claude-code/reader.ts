@@ -169,6 +169,8 @@ function toolCallRecord(
     outcomeLine: redactSensitiveText(bodyDropped ? `${line} ${DROPPED_MARKER}` : line),
     effect: effectOf(toolName),
     bodyDropped,
+    // FR-54: false when no tool_result block existed for this call id (broken tail signal).
+    resultRecorded: result !== undefined,
   };
 }
 
@@ -210,12 +212,20 @@ function messageText(content: unknown): string {
   return texts.join("\n");
 }
 
-/** Claude records local slash-command stdout as a user-shaped carrier in some versions. */
+/**
+ * Claude records slash commands, their stdout, and !-prefixed shell input as user-shaped
+ * carriers. None of it is conversation, so none of it crosses (FR-28) — a carrier kept as a
+ * turn would also become the session title when it is the first user-shaped entry.
+ */
 function isLocalCommandCarrier(content: unknown): boolean {
   const text = messageText(content).trim();
   return (
     /(?:^|\n)<local-command-stdout>[\s\S]*<\/local-command-stdout>(?:\n|$)/.test(text) ||
-    /(?:^|\n)<local-command-caveat>[\s\S]*<\/local-command-caveat>(?:\n|$)/.test(text)
+    /(?:^|\n)<local-command-caveat>[\s\S]*<\/local-command-caveat>(?:\n|$)/.test(text) ||
+    // Tag order varies by Claude Code version: <command-message> may come first.
+    /^<command-(?:name|message|args)>[\s\S]*<\/command-(?:name|message|args)>/.test(text) ||
+    /^<bash-input>[\s\S]*<\/bash-input>(?:\n|$)/.test(text) ||
+    /^<bash-std(?:out|err)>[\s\S]*<\/bash-std(?:out|err)>(?:\n|$)/.test(text)
   );
 }
 
@@ -241,7 +251,10 @@ export function readSessionText(text: string): SessionReadResult {
   let branch: string | null = null;
 
   const push = (turn: Omit<CanonicalTurn, "index">): void => {
-    turns.push({ ...turn, index: turns.length });
+    // FR-28, security: credentials pasted as message text must not cross to a different vendor.
+    // Tool-call turns carry text: "" so the condition is a no-op there (no double-redaction).
+    const text = turn.text.length > 0 ? redactSensitiveText(turn.text) : turn.text;
+    turns.push({ ...turn, text, index: turns.length });
   };
 
   for (const entry of active.entries) {
@@ -401,6 +414,10 @@ export function readSessionText(text: string): SessionReadResult {
 /** One row per session file of the home, newest first (FR-11, FR-14). */
 export async function listSessions(home: HomePath): Promise<SessionDescriptor[]> {
   const descriptors: SessionDescriptor[] = [];
+  // Whole-file read and full parse per file: title, turn count, and updatedAt all require
+  // parsing the entire JSONL (FR-11). Benchmarked at ≈ 5 ms per 2 MB file (warm OS cache);
+  // 200 such files cost ≈ 1 s. Ceiling accepted; revisit if a home with thousands of
+  // large sessions makes the listing noticeably slow to users.
   for (const file of await listSessionFiles(home)) {
     let text: string;
     let modified: string;

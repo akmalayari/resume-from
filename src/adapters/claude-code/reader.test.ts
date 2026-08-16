@@ -293,6 +293,73 @@ describe("T-CC-14 — excluded content never crosses", () => {
     expect(JSON.stringify(read)).not.toContain(secret);
     expect(read.skipped).toBe(1);
   });
+
+  it("excludes slash-command and shell-input carriers (FR-28)", () => {
+    // A /clear-only session must read as zero turns, and a carrier must never
+    // become the session title in place of the first real request.
+    const read = readSessionText(
+      textOf([
+        userEntry(
+          CTX,
+          uuidFor(13),
+          "2026-08-01T09:14:04.000Z",
+          "<command-name>/clear</command-name>\n<command-message>clear</command-message>\n<command-args></command-args>",
+        ),
+        userEntry(
+          CTX,
+          uuidFor(14),
+          "2026-08-01T09:14:05.000Z",
+          "<bash-input>ls docs/plans</bash-input>",
+        ),
+        userEntry(
+          CTX,
+          uuidFor(15),
+          "2026-08-01T09:14:06.000Z",
+          "<bash-stdout>plan-a.md</bash-stdout><bash-stderr></bash-stderr>",
+        ),
+        // Tag order varies by version: some sessions put <command-message> first.
+        userEntry(
+          CTX,
+          uuidFor(17),
+          "2026-08-01T09:14:06.500Z",
+          "<command-message>planning:make</command-message>\n<command-name>/planning:make</command-name>\n<command-args>a plan</command-args>",
+        ),
+        // Stderr-only shell output has no <bash-stdout> opener.
+        userEntry(
+          CTX,
+          uuidFor(18),
+          "2026-08-01T09:14:06.700Z",
+          "<bash-stderr>permission denied</bash-stderr>",
+        ),
+        userEntry(CTX, uuidFor(16), "2026-08-01T09:14:07.000Z", "real request"),
+      ]),
+    );
+
+    expect(read.turns.map((turn) => turn.text)).toEqual(["real request"]);
+    expect(read.title).toBe("real request");
+    expect(read.skipped).toBe(5);
+  });
+
+  it("redacts a credential typed as a user message (FR-28, security)", () => {
+    // A credential pasted into chat must not cross to a different model vendor.
+    const bearer = "sk-1234567890abcdef1234";
+    const read = readSessionText(
+      textOf([
+        userEntry(
+          CTX,
+          uuidFor(20),
+          "2026-08-01T09:14:10.000Z",
+          `run: curl -H "Authorization: Bearer ${bearer}" https://api.example.com`,
+        ),
+        assistantTextEntry(CTX, uuidFor(21), "2026-08-01T09:14:11.000Z", "On it."),
+      ]),
+    );
+
+    expect(JSON.stringify(read.turns)).not.toContain(bearer);
+    expect(JSON.stringify(read.turns)).toContain("[REDACTED]");
+    // Normal assistant reply is not disturbed.
+    expect(read.turns[1]?.text).toBe("On it.");
+  });
 });
 
 describe("T-CC-15 — a truncated or unknown-typed session", () => {

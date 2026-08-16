@@ -157,6 +157,7 @@ const AGENT_SESSIONS: Record<AgentId, CanonicalSession> = {
       outcomeLine: "read_file('src/fetch.ts') → 88 lines (body dropped)",
       effect: "read-only",
       bodyDropped: true,
+      resultRecorded: true,
     },
   }),
   codex: sessionFor({
@@ -175,6 +176,7 @@ const AGENT_SESSIONS: Record<AgentId, CanonicalSession> = {
       outcomeLine: "shell('git mv src/loader.ts src/config.ts') → ok",
       effect: "unknown",
       bodyDropped: false,
+      resultRecorded: true,
     },
   }),
   "claude-code": sessionFor({
@@ -197,6 +199,7 @@ const AGENT_SESSIONS: Record<AgentId, CanonicalSession> = {
       outcomeLine: "Write('src/router/routes.ts') → 120 lines written",
       effect: "mutating",
       bodyDropped: false,
+      resultRecorded: true,
     },
   }),
 };
@@ -212,16 +215,19 @@ const EMPTY_SESSION: CanonicalSession = {
   turns: [],
 };
 
+// Format produced by src/import/landing/marker.ts buildMarker() and summariseDrops() (FR-47).
 const REFERENCE_MARKER: ProvenanceMarker = {
   sourceAgent: REFERENCE_REF.agent,
   sourceHome: REFERENCE_REF.home,
   sourceSessionId: REFERENCE_REF.id,
   importedAt: "2026-08-01T09:20:00Z",
-  droppedSummary: "3 tool result bodies dropped, 0 turns dropped",
+  droppedSummary: "Dropped on import: 3 tool result bodies.",
   lines: [
-    `Resumed from ${REFERENCE_REF.agent} (${REFERENCE_REF.home})`,
-    `Source session ${REFERENCE_REF.id}, imported at 2026-08-01T09:20:00Z`,
-    "3 tool result bodies dropped, 0 turns dropped",
+    `Imported from ${REFERENCE_REF.agent}`,
+    `Source home: ${REFERENCE_REF.home}`,
+    `Source session: ${REFERENCE_REF.id}`,
+    `Imported at: 2026-08-01T09:20:00Z`,
+    "Dropped on import: 3 tool result bodies.",
   ],
 };
 
@@ -350,8 +356,28 @@ describe("boundary shapes", () => {
     expect(REFERENCE_MARKER.sourceHome.length).toBeGreaterThan(0);
     expect(REFERENCE_MARKER.sourceSessionId.length).toBeGreaterThan(0);
     expect(isIsoUtc(REFERENCE_MARKER.importedAt)).toBe(true);
-    expect(REFERENCE_MARKER.droppedSummary.length).toBeGreaterThan(0);
-    expect(REFERENCE_MARKER.lines.length).toBeGreaterThan(0);
+
+    // FR-47: droppedSummary must be one of the two forms summariseDrops() produces.
+    expect(REFERENCE_MARKER.droppedSummary).toMatch(/^(Nothing was dropped: |Dropped on import: )/);
+    if (REFERENCE_MARKER.droppedSummary.startsWith("Dropped on import: ")) {
+      // When a numeric part is present it must be a counted noun in the exact grammar.
+      const hasCountedNoun = /\d+ (turns?|tool result bod(?:y|ies))/.test(
+        REFERENCE_MARKER.droppedSummary,
+      );
+      const hasTrailingToolCall = REFERENCE_MARKER.droppedSummary.includes(
+        "an incomplete trailing tool call",
+      );
+      expect(hasCountedNoun || hasTrailingToolCall).toBe(true);
+    }
+
+    // FR-47: lines carry the four provenance facts in the order buildMarker() declares,
+    // with the droppedSummary as the fifth element.
+    expect(REFERENCE_MARKER.lines).toHaveLength(5);
+    expect(REFERENCE_MARKER.lines[0] ?? "").toMatch(/^Imported from /);
+    expect(REFERENCE_MARKER.lines[1] ?? "").toMatch(/^Source home: /);
+    expect(REFERENCE_MARKER.lines[2] ?? "").toMatch(/^Source session: /);
+    expect(REFERENCE_MARKER.lines[3] ?? "").toMatch(/^Imported at: /);
+    expect(REFERENCE_MARKER.lines[4]).toBe(REFERENCE_MARKER.droppedSummary);
   });
 });
 

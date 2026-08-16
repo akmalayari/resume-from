@@ -22,5 +22,7 @@ export default defineConfig({
     environment: "node",
     // A module's tests are run scoped: pnpm vitest run src/<module-path>
     passWithNoTests: false,
+    // Git-spawning tests can take several seconds each under full-suite parallelism.
+    testTimeout: 15_000,
   },
 });

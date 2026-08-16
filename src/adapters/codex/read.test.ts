@@ -343,6 +343,25 @@ describe("T-COD-3 tool outputs become one outcome line", () => {
     expect(bytes).not.toContain(userPassword);
     expect(bytes).not.toContain("postgres://user:password@localhost/db");
   });
+
+  it("redacts a credential typed as a user message turn (FR-28, security)", async () => {
+    // A credential pasted into chat must not cross to a different model vendor.
+    const home = tempHome();
+    const id = "77777777-7777-4777-8777-777777777777";
+    const cred = "sk-1234567890abcdef1234";
+    writeRollout(home, id, [
+      metaEntry(id),
+      userEvent(`run: curl -H "Authorization: Bearer ${cred}" https://api.example.com`),
+      agentEvent("On it."),
+    ]);
+    const session = await adapter.loadSession(await loadOnly(home));
+    const canonical = JSON.stringify(session);
+
+    expect(canonical).not.toContain(cred);
+    expect(canonical).toContain("[REDACTED]");
+    // Normal assistant reply is not disturbed.
+    expect(session.turns[1]?.text).toBe("On it.");
+  });
 });
 
 /** T-COD-13 — encrypted reasoning is never read. */

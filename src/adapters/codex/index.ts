@@ -3,14 +3,20 @@
  * adapter implements (FR-57).
  */
 
+import { randomUUID } from "node:crypto";
 import type { AgentAdapter, AgentCapabilities, CodexAdapterFactory } from "./contract.js";
 import { listCodexSessions, loadCodexSession } from "./read.js";
 import { readBackCodex, switchToCodex } from "./readback.js";
 import { defaultCodexHome } from "./rollout.js";
-import { serializeCodex, validateCodex } from "./write.js";
+import { type CodexSerializeDeps, serializeCodex, validateCodex } from "./write.js";
 
 /** Codex's own default for the models it ships with. Configuration overrides it (FR-18). */
 const CODEX_WINDOW_TOKENS = 258_400;
+
+const DEFAULT_DEPS: CodexSerializeDeps = {
+  cwd: () => process.cwd(),
+  newSessionId: () => randomUUID(),
+};
 
 function codexCapabilities(): AgentCapabilities {
   return {
@@ -29,12 +35,13 @@ function codexCapabilities(): AgentCapabilities {
 }
 
 export const codexAdapterFactory: CodexAdapterFactory = {
-  create(): AgentAdapter {
+  create(overrides: Partial<CodexSerializeDeps> = {}): AgentAdapter {
+    const deps: CodexSerializeDeps = { ...DEFAULT_DEPS, ...overrides };
     return {
       capabilities: codexCapabilities,
       listSessions: listCodexSessions,
       loadSession: loadCodexSession,
-      serialize: serializeCodex,
+      serialize: (session, target, marker) => serializeCodex(session, target, marker, deps),
       validate: validateCodex,
       readBack: readBackCodex,
       switchTo: switchToCodex,

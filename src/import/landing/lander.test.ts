@@ -961,7 +961,29 @@ describe("behavior", () => {
     );
 
     expect(failure.stage).toBe("serialize");
-    expect(failure.message).toMatch(/2 files|at most one file/i);
+    expect(failure.message).toMatch(/2 files|exactly one file/i);
+    expect(log).not.toContain("validate");
+    expect(log).not.toContain("commit");
+    expect(await snapshot(home)).toEqual([]);
+  });
+
+  it("refuses an adapter that serializes one session to zero files", async () => {
+    // 0 files is also wrong: the committer would succeed vacuously, then readBack would
+    // return confusing results. Catch it at the serialize stage before any write (FR-49).
+    const log: string[] = [];
+
+    const failure = await failureOf(
+      createSessionLander().land(
+        makePlan(home),
+        createAdapter(log, { fileCount: 0 }),
+        createFsCommitter(log),
+        RUNTIME,
+        IMPORTED_AT,
+      ),
+    );
+
+    expect(failure.stage).toBe("serialize");
+    expect(failure.message).toContain("produced 0 files");
     expect(log).not.toContain("validate");
     expect(log).not.toContain("commit");
     expect(await snapshot(home)).toEqual([]);

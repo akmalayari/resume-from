@@ -1,6 +1,7 @@
 import { homedir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import type { SelectionInput } from "./contract.js";
+import type { SelectionInput, TargetProfile } from "./contract.js";
 import { createCliRunner } from "./index.js";
 import {
   CONFIRMATION_TOKEN,
@@ -191,5 +192,38 @@ describe("T-CLI-7 the confirmation flag commits", () => {
     expect(calls.commit[0]?.runtime).toBeNull();
     expect(calls.commit[0]?.confirmationToken).toBe(CONFIRMATION_TOKEN);
     expect(outcome.exitCode).toBe(0);
+  });
+
+  it("accepts the --confirm=<token> inline form and commits", async () => {
+    const { pipeline, calls } = stubPipeline();
+    const inlineArg = `--confirm=${CONFIRMATION_TOKEN}`;
+
+    const outcome = await createCliRunner().run(invocation({ argv: ["3", inlineArg] }), pipeline);
+
+    expect(calls.order).toEqual(["preview", "commit"]);
+    expect(calls.commit[0]?.confirmationToken).toBe(CONFIRMATION_TOKEN);
+    expect(outcome.exitCode).toBe(0);
+  });
+});
+
+describe("T-CLI-24 the shim home is resolved before reaching the pipeline", () => {
+  it("the pipeline receives the fallback's resolved home, not the raw tilde path (FR-3)", async () => {
+    // The profile builder resolves "~/alt-home" to an absolute path. The runner
+    // must prefer fallback.home over invocation.targetHome so the pipeline never
+    // sees an unresolved path.
+    const resolvedHome = join(homedir(), "alt-home");
+    const fallback: TargetProfile = {
+      agent: "claude-code",
+      home: resolvedHome,
+      windowTokens: 100_000,
+    };
+    const { pipeline, calls } = stubPipeline();
+
+    await createCliRunner(fallback).run(
+      invocation({ argv: [], targetHome: "~/alt-home" }),
+      pipeline,
+    );
+
+    expect(calls.list[0]?.target.home).toBe(resolvedHome);
   });
 });

@@ -33,7 +33,7 @@ Selectors:
 
 Options:
   --agent <name>    Filter source sessions: pi, codex, claude, or claude-code.
-  --home <path>     Filter source sessions to one agent home.
+  --home <path>     Search one source home, even one outside the configuration.
   --confirm <token> Import the exact selection and preview identified by the token.
   --target-agent    Target host ID; normally supplied by the installed plugin.
   --target-home     Target agent home; omit to use that agent's default.

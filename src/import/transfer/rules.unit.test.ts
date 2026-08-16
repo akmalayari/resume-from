@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import type { CanonicalTurn, TransferPlan } from "./contract.js";
 import {
   agentMessage,
+  brokenToolTurn,
   charEstimator,
   configOf,
   droppedIndexes,
@@ -78,7 +79,14 @@ describe("T-TRA-2 a tool call becomes a record", () => {
     expect(record.argumentsText).toBe("'src/auth.ts'");
     expect(record.outcomeLine.startsWith("Read('src/auth.ts') → 400 lines")).toBe(true);
     expect(Object.keys(record).sort()).toEqual(
-      ["argumentsText", "bodyDropped", "effect", "outcomeLine", "toolName"].sort(),
+      [
+        "argumentsText",
+        "bodyDropped",
+        "effect",
+        "outcomeLine",
+        "resultRecorded",
+        "toolName",
+      ].sort(),
     );
   });
 
@@ -116,6 +124,20 @@ describe("T-TRA-3 every result body is dropped and marked", () => {
     expect(recordOf(plan, 0).outcomeLine.endsWith(MARKER)).toBe(true);
     expect(recordOf(plan, 1).outcomeLine.endsWith(MARKER)).toBe(true);
     expect(plan.bodiesDropped).toBe(2);
+  });
+
+  test("marker is not doubled when the adapter already embedded it in outcomeLine", () => {
+    // Pi and Claude Code adapters embed MARKER in outcomeLine before normalizeRecord runs.
+    // normalizeRecord must append it only once regardless.
+    const preEmbedded = `Read('a.ts') → 5 lines ${MARKER}`;
+    const turns = [toolTurn(0, "Read", "'a.ts'", preEmbedded, "read-only", true)];
+    const { target, config } = unlimited();
+
+    const plan = rules.apply(sessionOf(turns), target, config, charEstimator);
+    const outcomeLine = recordOf(plan, 0).outcomeLine;
+
+    expect(outcomeLine.endsWith(MARKER)).toBe(true);
+    expect(outcomeLine.indexOf(MARKER)).toBe(outcomeLine.lastIndexOf(MARKER));
   });
 
   test("a body the budget later dropped is still counted: step 2 removed it either way", () => {
@@ -308,10 +330,13 @@ describe("T-TRA-12 a call and its result are never split", () => {
 
 describe("T-TRA-13 a broken tail is dropped", () => {
   test("a trailing call with no result is removed and reported", () => {
+    // brokenToolTurn has resultRecorded: false — the real shape adapters produce when a
+    // session ends mid-call with no result entry. The old outcomeLine=="" check was dead
+    // because no adapter produces an empty outcomeLine.
     const turns = [
       userMessage(0, "Fix it."),
       agentMessage(1, "Reading the file."),
-      toolTurn(2, "Edit", "'a.ts'", "", "mutating"),
+      brokenToolTurn(2, "Edit", "'a.ts'"),
     ];
 
     const plan = planOf(turns, 1_000_000, 1, 5);
@@ -321,6 +346,23 @@ describe("T-TRA-13 a broken tail is dropped", () => {
     expect(keptIndexes(plan)).toEqual([0, 1]);
   });
 
+  test("an interrupted parallel batch drops every trailing unanswered call", () => {
+    // Claude Code can issue several tool calls in one assistant turn; an interrupt
+    // leaves all of them without results, not just the last one (FR-54).
+    const turns = [
+      userMessage(0, "Fix it."),
+      brokenToolTurn(1, "Read", "'a.ts'"),
+      brokenToolTurn(2, "Edit", "'a.ts'"),
+    ];
+
+    const plan = planOf(turns, 1_000_000, 1, 5);
+
+    expect(plan.brokenTailDropped).toBe(true);
+    expect(plan.drops).toContainEqual({ index: 1, reason: "broken-tail" });
+    expect(plan.drops).toContainEqual({ index: 2, reason: "broken-tail" });
+    expect(keptIndexes(plan)).toEqual([0]);
+  });
+
   test("a complete trailing call is not a broken tail", () => {
     const turns = [userMessage(0, "Fix it."), toolTurn(1, "Edit", "'a.ts'", "1 hunk", "mutating")];
 
@@ -328,6 +370,15 @@ describe("T-TRA-13 a broken tail is dropped", () => {
 
     expect(plan.brokenTailDropped).toBe(false);
     expect(plan.drops).toEqual([]);
+  });
+
+  test("a trailing call with resultRecorded: true is not a broken tail even if outcomeLine is empty", () => {
+    // Guards against regression: the fix checks resultRecorded, not outcomeLine content.
+    const turns = [userMessage(0, "Fix it."), toolTurn(1, "Edit", "'a.ts'", "", "mutating")];
+
+    const plan = planOf(turns, 1_000_000, 1, 5);
+
+    expect(plan.brokenTailDropped).toBe(false);
   });
 });
 
@@ -377,5 +428,25 @@ describe("T-TRA-33 every kept turn has a fixed framing cost", () => {
 
     expect(plan.estimatedTokens).toBeGreaterThan(0);
     expect(plan.estimatedTokens).toBe(4);
+  });
+});
+
+describe("T-TRA-34 a zero-turn plan is blocked with an honest reason", () => {
+  test("a session with no importable turns produces a blocked plan, not a silent empty one", () => {
+    const plan = planOf([], 1_000_000, 1, 5);
+
+    expect(plan.blockedReason).not.toBeNull();
+    expect(plan.blockedReason).toContain("nothing to import");
+    expect(plan.turns).toEqual([]);
+    expect(plan.keptTurnCount).toBe(0);
+  });
+
+  test("a session whose only turn was a broken tail is also blocked", () => {
+    const plan = planOf([brokenToolTurn(0, "Edit", "'a.ts'")], 1_000_000, 1, 5);
+
+    expect(plan.brokenTailDropped).toBe(true);
+    expect(plan.blockedReason).not.toBeNull();
+    expect(plan.blockedReason).toContain("nothing to import");
+    expect(plan.turns).toEqual([]);
   });
 });

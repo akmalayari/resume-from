@@ -1,7 +1,7 @@
 // One invocation of the command binary: parse, call the pipeline, print.
 // Every decision this file appears to make is a decision the pipeline made (FR-60).
 
-import { parseArgs, USAGE } from "./args.js";
+import { CONFIRM_FLAG, isConfirmFlag, parseArgs, USAGE } from "./args.js";
 import type {
   CliInvocation,
   CliOutcome,
@@ -24,7 +24,9 @@ const WINDOW_NOT_STATED = 0;
 
 /**
  * @param target the profile the pipeline was built for, when the caller knows it.
- * The agent and the home the shim stated always win (FR-3, T-CLI-18).
+ * The shim-stated home wins, but only through the profile builder, which resolves "~/x" and
+ * relative paths to absolute form (FR-3, T-CLI-18). The resolved profile is the fallback;
+ * preferring it over the raw string ensures the pipeline never sees an unresolved path.
  */
 export function createCliRunner(target?: TargetProfile): CliRunner {
   return {
@@ -46,7 +48,7 @@ async function run(
   const target: TargetProfile = {
     // The shim states the agent. The binary never guesses it.
     agent: invocation.targetAgent,
-    home: invocation.targetHome ?? fallback?.home ?? HOME_NOT_STATED,
+    home: fallback?.home ?? invocation.targetHome ?? HOME_NOT_STATED,
     windowTokens: fallback?.windowTokens ?? WINDOW_NOT_STATED,
   };
 
@@ -132,8 +134,11 @@ function failure(what: string, nextStep: string): CliOutcome {
 }
 
 function withoutConfirmation(argv: string[]): string[] {
-  const index = argv.indexOf("--confirm");
-  return index < 0 ? argv : [...argv.slice(0, index), ...argv.slice(index + 2)];
+  const index = argv.findIndex(isConfirmFlag);
+  if (index < 0) return argv;
+  // "--confirm <token>" consumes two slots; "--confirm=<token>" consumes one.
+  const consumed = argv[index] === CONFIRM_FLAG ? 2 : 1;
+  return [...argv.slice(0, index), ...argv.slice(index + consumed)];
 }
 
 function renderCommand(argv: string[]): string {

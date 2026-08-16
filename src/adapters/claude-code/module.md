@@ -122,6 +122,12 @@ interface ToolCallRecord {
   effect: ToolEffect;
   /** True when the source had a result body and it was dropped (FR-25). */
   bodyDropped: boolean;
+  /**
+   * True when the source recorded any answer to this call (even an empty or error result).
+   * False when no result entry exists at all — the broken-tail signal (FR-54).
+   * This is a presence flag, not a content field; it cannot hold a result body.
+   */
+  resultRecorded?: boolean;
 }
 
 /** One turn of the canonical session. */
@@ -393,6 +399,10 @@ None of these touch a rule, a preview, another adapter, or the host.
   the model can read (FR-25).
 - **No system prompt, developer prompt, token, password, environment value or vendor state is read
   into the canonical model** (FR-28, NG-7, NG-8), whatever the session file contains.
+- **Credential redaction applies to message and summary turn text, not only tool inputs.** A bearer
+  token or API key typed by the user as a chat message must not reach a different model vendor. The
+  reader applies `redactSensitiveText` to every non-empty turn text in the `push` helper, so no
+  turn in the loaded session can carry a recognizable credential in its `text` field.
 - **The provenance marker is written as an entry Claude Code shows but does not send to the model**
   (FR-47, FR-48). If the installed version has no such entry, this module declares
   `provenance: "host-output-only"` rather than putting the marker into the model context.

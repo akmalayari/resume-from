@@ -205,7 +205,8 @@ function toCanonicalTurns(entries: RolloutEntry[]): {
         index: turns.length,
         role: "agent",
         kind: "summary",
-        text: message,
+        // FR-28, security: credentials in message text must not cross to a different vendor.
+        text: redactSensitiveText(message),
         toolCall: null,
         timestamp: toIsoUtc(entry.timestamp),
       });
@@ -220,7 +221,8 @@ function toCanonicalTurns(entries: RolloutEntry[]): {
         index: turns.length,
         role: type === CODEX_EVENT_USER_MESSAGE ? "user" : "agent",
         kind: "message",
-        text: message,
+        // FR-28, security: credentials in message text must not cross to a different vendor.
+        text: redactSensitiveText(message),
         toolCall: null,
         timestamp: toIsoUtc(entry.timestamp),
       });
@@ -236,8 +238,10 @@ function toCanonicalTurns(entries: RolloutEntry[]): {
       type === CODEX_ITEM_FUNCTION_CALL ? entry.payload.arguments : entry.payload.input;
     const argumentsText = typeof rawArguments === "string" ? rawArguments : "";
     const callId = entry.payload.call_id;
+    // FR-54: use has() not get() — outputs.get() can return "" for an empty result.
+    const resultRecorded = typeof callId === "string" && outputs.has(callId);
     const output = typeof callId === "string" ? (outputs.get(callId) ?? null) : null;
-    const toolCall = toolCallRecord(toolName, argumentsText, output);
+    const toolCall = toolCallRecord(toolName, argumentsText, output, resultRecorded);
     if (toolCall.effect === "mutating")
       for (const path of pathsOf(argumentsText)) changed.add(path);
     turns.push({
@@ -258,6 +262,7 @@ function toolCallRecord(
   toolName: string,
   argumentsText: string,
   output: string | null,
+  resultRecorded: boolean,
 ): ToolCallRecord {
   const safeArguments = redactSensitiveArgumentsText(argumentsText);
   const head = `${toolName}(${singleLine(safeArguments, ARGUMENTS_PREVIEW_LIMIT)})`;
@@ -271,6 +276,8 @@ function toolCallRecord(
     outcomeLine: redactSensitiveText(outcomeLine),
     effect: effectOf(toolName),
     bodyDropped: output !== null,
+    // FR-54: false when no *_call_output entry existed for this call_id (broken tail signal).
+    resultRecorded,
   };
 }
 

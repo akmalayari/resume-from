@@ -94,4 +94,37 @@ describe.each(IMPLEMENTATIONS)("%s credential redaction", (_name, redaction) => 
     expect(canonical).not.toContain("object-secret");
     expect(canonical).toContain(redaction.REDACTED_VALUE);
   });
+
+  it("redacts a credential pasted as plain message text (FR-28, security)", () => {
+    // A user who types 'curl -H "Authorization: Bearer sk-abc123" ...' as a message turn must
+    // not have that token forwarded to a different model vendor when the session is resumed.
+    const bearer = "sk-1234567890abcdef1234";
+    const source = `can you run: curl -H "Authorization: Bearer ${bearer}" https://api.example.com`;
+    const redacted = redaction.redactSensitiveText(source);
+
+    expect(redacted).not.toContain(bearer);
+    expect(redacted).toContain(redaction.REDACTED_VALUE);
+  });
+
+  // JSON_LIKE_PATTERN must not fire on bare prose words that follow a sensitive key name.
+  // "token: word" in natural language is not a credential; only "token: word" in JSON/YAML
+  // structure (where the value is bounded by ,;} or line-end) should be redacted (C-RED-1).
+  it.each([
+    ["no colon after key word", "please refactor the auth token refresh logic in src/auth.ts"],
+    ["colon but value followed by space", "The current token: expired (error 401)"],
+    ["colon but value mid-sentence", "The auth token: refresh the cache"],
+  ])("leaves normal prose untouched: %s", (_label, prose) => {
+    expect(redaction.redactSensitiveText(prose)).toBe(prose);
+  });
+
+  // The delimiter rule alone would also skip a real secret sitting mid-line; a digit in the
+  // value keeps recall: opaque tokens carry digits, English words do not (C-RED-1).
+  it.each([
+    ["shell comment after the value", "password: hunter2 # prod box"],
+    ["more flags after the value", "token: abc123 verbose true"],
+  ])("still redacts a digit-bearing secret mid-line: %s", (_label, text) => {
+    const redacted = redaction.redactSensitiveText(text);
+    expect(redacted).toContain(redaction.REDACTED_VALUE);
+    expect(redacted).not.toMatch(/hunter2|abc123/);
+  });
 });

@@ -38,7 +38,13 @@ Valid agent names are `pi`, `codex`, and `claude-code`.
 
 ## Add another profile
 
-Add each profile to `extraHomes`.
+For a one-off import, name the profile home directly:
+
+```text
+/resume-from --home ~/.claude-team
+```
+
+For a profile you import from often, add it to `extraHomes`.
 
 ```json
 {

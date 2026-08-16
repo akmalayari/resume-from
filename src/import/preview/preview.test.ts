@@ -322,8 +322,11 @@ describe("behavior", () => {
   });
 
   it("T-PRE-21: the blocked case tells the user what to do", async () => {
+    // blockedReason now carries the advice inline (builder.ts no longer appends a fixed string).
     const plan = makePlan({
-      blockedReason: "The pinned turns need 82k tokens, more than the 60k budget.",
+      blockedReason:
+        "Pinned content needs 82k tokens, more than the 60k budget. " +
+        "Raise the budget share, or lower the number of pinned recent turns.",
       estimatedTokens: 82000,
       budgetTokens: 60000,
     });

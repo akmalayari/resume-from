@@ -89,6 +89,11 @@ describe("T-CLI-15 malformed arguments fail with a usage message", () => {
       argv: ["--agent", "emacs"],
       names: "emacs",
     },
+    {
+      name: "--confirm= with a malformed token",
+      argv: ["1", "--confirm=not-a-valid-token"],
+      names: "--confirm",
+    },
   ];
 
   it.each(cases)("$name exits 2 with a message naming the problem", async ({ argv, names }) => {

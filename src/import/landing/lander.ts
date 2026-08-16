@@ -87,7 +87,8 @@ async function runLanding(
   if (plan.blockedReason !== null) {
     throw new LandingFailure(
       "serialize",
-      `The plan cannot be imported: ${plan.blockedReason}. Nothing was written to ${home}. Reduce what the import must carry, or raise the budget, then run the import again.`,
+      // blockedReason ends in a sentence and carries the cause-specific advice (FR-33, FR-56).
+      `The plan cannot be imported: ${plan.blockedReason} Nothing was written to ${home}. ${RETRY}`,
     );
   }
 
@@ -107,10 +108,10 @@ async function runLanding(
       `The ${target} adapter could not turn the plan into its own session format: ${reasonOf(cause)}. Nothing was written to ${home}. ${RETRY}`,
     );
   }
-  if (serialized.files.length > 1) {
+  if (serialized.files.length !== 1) {
     throw new LandingFailure(
       "serialize",
-      `The ${target} adapter produced ${serialized.files.length} files for one session. Atomic placement supports at most one file, so nothing was written to ${home}. Report this as an adapter bug.`,
+      `The ${target} adapter produced ${serialized.files.length} files for one session. Exactly one file is required for atomic placement, so nothing was written to ${home}. Report this as an adapter bug.`,
     );
   }
 
