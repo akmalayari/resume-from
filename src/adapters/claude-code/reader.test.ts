@@ -294,6 +294,38 @@ describe("T-CC-14 — excluded content never crosses", () => {
     expect(read.skipped).toBe(1);
   });
 
+  it("excludes slash-command and shell-input carriers (FR-28)", () => {
+    // A /clear-only session must read as zero turns, and a carrier must never
+    // become the session title in place of the first real request.
+    const read = readSessionText(
+      textOf([
+        userEntry(
+          CTX,
+          uuidFor(13),
+          "2026-08-01T09:14:04.000Z",
+          "<command-name>/clear</command-name>\n<command-message>clear</command-message>\n<command-args></command-args>",
+        ),
+        userEntry(
+          CTX,
+          uuidFor(14),
+          "2026-08-01T09:14:05.000Z",
+          "<bash-input>ls docs/plans</bash-input>",
+        ),
+        userEntry(
+          CTX,
+          uuidFor(15),
+          "2026-08-01T09:14:06.000Z",
+          "<bash-stdout>plan-a.md</bash-stdout><bash-stderr></bash-stderr>",
+        ),
+        userEntry(CTX, uuidFor(16), "2026-08-01T09:14:07.000Z", "real request"),
+      ]),
+    );
+
+    expect(read.turns.map((turn) => turn.text)).toEqual(["real request"]);
+    expect(read.title).toBe("real request");
+    expect(read.skipped).toBe(3);
+  });
+
   it("redacts a credential typed as a user message (FR-28, security)", () => {
     // A credential pasted into chat must not cross to a different model vendor.
     const bearer = "sk-1234567890abcdef1234";

@@ -212,12 +212,19 @@ function messageText(content: unknown): string {
   return texts.join("\n");
 }
 
-/** Claude records local slash-command stdout as a user-shaped carrier in some versions. */
+/**
+ * Claude records slash commands, their stdout, and !-prefixed shell input as user-shaped
+ * carriers. None of it is conversation, so none of it crosses (FR-28) — a carrier kept as a
+ * turn would also become the session title when it is the first user-shaped entry.
+ */
 function isLocalCommandCarrier(content: unknown): boolean {
   const text = messageText(content).trim();
   return (
     /(?:^|\n)<local-command-stdout>[\s\S]*<\/local-command-stdout>(?:\n|$)/.test(text) ||
-    /(?:^|\n)<local-command-caveat>[\s\S]*<\/local-command-caveat>(?:\n|$)/.test(text)
+    /(?:^|\n)<local-command-caveat>[\s\S]*<\/local-command-caveat>(?:\n|$)/.test(text) ||
+    /^<command-name>[\s\S]*<\/command-name>/.test(text) ||
+    /^<bash-input>[\s\S]*<\/bash-input>(?:\n|$)/.test(text) ||
+    /^<bash-stdout>[\s\S]*<\/bash-std(?:out|err)>(?:\n|$)/.test(text)
   );
 }
 
