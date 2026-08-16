@@ -34,8 +34,12 @@ const packages = [
       ".claude-plugin/plugin.json",
       "commands/resume-from.md",
       "dist/bin.js",
+      "THIRD-PARTY-NOTICES.md",
     ],
-    maxUnpackedBytes: 300_000,
+    // Ships a self-contained esbuild bundle because Claude Code unpacks the tarball without
+    // installing dependencies, so the budget carries the whole gpt-tokenizer encoding table.
+    // Raise only for that table; a jump beyond it means something else was bundled in.
+    maxUnpackedBytes: 3_500_000,
     forbidden: (path) => path.endsWith(".d.ts") || path.endsWith(".map"),
   },
   {
@@ -122,13 +126,20 @@ function smokeTestRoot(tarball, directory) {
   });
 }
 
+/**
+ * Runs the Claude binary the way Claude Code does: from an unpacked tarball with no node_modules
+ * anywhere. `npm install` would resolve the dependencies and hide a bare import, which is exactly
+ * how a missing gpt-tokenizer once reached the plugin cache. The extraction root must stay outside
+ * the repository, or Node walks up to the repo's own node_modules and the check passes for free.
+ */
 function smokeTestClaude(tarball, directory) {
-  const consumer = installPackage(tarball, directory, "claude");
-  execFileSync(
-    process.execPath,
-    [resolve(consumer, "node_modules/@alexeiled/resume-from-claude/dist/bin.js"), "--help"],
-    { cwd: consumer, stdio: "pipe" },
-  );
+  const unpacked = resolve(directory, "claude-unpacked");
+  mkdirSync(unpacked);
+  execFileSync("tar", ["-xzf", tarball, "-C", unpacked], { stdio: "pipe" });
+  execFileSync(process.execPath, [resolve(unpacked, "package/dist/bin.js"), "--help"], {
+    cwd: unpacked,
+    stdio: "pipe",
+  });
 }
 
 function assertNoRawArgumentInterpolation(path) {
