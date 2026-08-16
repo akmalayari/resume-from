@@ -21,7 +21,9 @@ from the repository that owns the source session.
 
 If the source uses another profile, name its home with `--home`:
 
-    /resume-from --home ~/.claude-team
+```text
+/resume-from --home ~/.claude-team
+```
 
 For a profile you import from often, add that home to `extraHomes` instead, so
 every listing includes it. See
@@ -38,6 +40,12 @@ written.
 Increase `budgetShare`, reduce `pinnedRecentTurns`, or correct the target
 context-window size. See
 [Configuration](configuration.md#change-the-import-budget).
+
+## `nothing to import`
+
+The source session has no turns that can cross over. A session that holds only
+slash commands — for example a session created by `/clear` — reads as empty.
+Choose a session that holds conversation.
 
 ## `--target-agent is missing`
 
