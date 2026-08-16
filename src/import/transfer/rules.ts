@@ -48,9 +48,15 @@ function normalizeRecord(record: ToolCallRecord): ToolCallRecord {
   return {
     toolName: record.toolName,
     argumentsText: record.argumentsText,
-    outcomeLine: record.bodyDropped ? `${stated} ${DROPPED_BODY_MARKER}` : stated,
+    // Append only when the adapter did not already embed it (Pi, Claude Code embed it;
+    // Codex does not). toSingleLine runs first so trailing whitespace cannot defeat endsWith.
+    outcomeLine:
+      record.bodyDropped && !stated.endsWith(DROPPED_BODY_MARKER)
+        ? `${stated} ${DROPPED_BODY_MARKER}`
+        : stated,
     effect: record.effect,
     bodyDropped: record.bodyDropped,
+    ...(record.resultRecorded !== undefined ? { resultRecorded: record.resultRecorded } : {}),
   };
 }
 
@@ -74,7 +80,13 @@ function normalizeTurn(turn: CanonicalTurn): CanonicalTurn {
 function hasBrokenTail(turns: readonly CanonicalTurn[]): boolean {
   const last = turns[turns.length - 1];
   if (last?.kind !== "tool-call") return false;
-  return !last.toolCall || toSingleLine(last.toolCall.outcomeLine) === "";
+  // Check resultRecorded directly; outcomeLine is always non-empty (adapters fill it with a
+  // fallback text), so the old outcomeLine=="" check was dead and never caught real broken tails.
+  //
+  // Use === false, not !resultRecorded: an absent flag (undefined) means "unknown, treat as
+  // recorded" — construction sites outside this module may omit the field (e.g. test fixtures),
+  // and we must not silently break tails that were never broken. Only an explicit false fires. (FR-54)
+  return !last.toolCall || last.toolCall.resultRecorded === false;
 }
 
 /** Adapters understand their native tool schema; this layer only normalizes their path list. */
@@ -203,6 +215,19 @@ function apply(
 
   // 7. Report (FR-17, FR-18, FR-35).
   const turns = selected.filter((_, position) => kept[position]);
+
+  // 7a. Block a plan that would import nothing: a zero-turn result is an import that cannot
+  // succeed regardless of budget, and "Nothing to import" is the honest diagnosis (FR-17, FR-33).
+  // The cause determines the advice: budget-driven drops suggest raising the budget;
+  // an empty-content session (no budget drops) means the session itself has nothing to offer.
+  if (blockedReason === null && turns.length === 0) {
+    const budgetDriven = drops.some((d) => d.reason === "budget");
+    blockedReason = budgetDriven
+      ? "nothing to import — the budget removed all turns. " +
+        "Raise budgetShare, lower pinnedRecentTurns, or choose a target with a larger window."
+      : "nothing to import — the session has no importable content. Choose a different session.";
+  }
+
   drops.sort((left, right) => left.index - right.index);
   return {
     target: {

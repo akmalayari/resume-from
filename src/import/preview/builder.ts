@@ -13,9 +13,8 @@ const MAX_PATH_LENGTH = 160;
 const MAX_REASON_LENGTH = 200;
 const UNTITLED = "(untitled)";
 
-/** What to change when the pinned content alone does not fit (FR-33, FR-56). */
-const BLOCKED_ADVICE =
-  "Raise the budget share, or lower the number of pinned recent turns, then preview again.";
+// Each blockedReason now carries its own cause-specific advice (FR-33, FR-56), so no
+// single fallback string is accurate for all block causes.
 
 function headerLines(plan: TransferPlan): string[] {
   const source = plan.provenance.ref;
@@ -54,7 +53,7 @@ function dropLines(plan: TransferPlan): string[] {
 
 function blockedLines(blockedReason: string | null): string[] {
   if (blockedReason === null) return [];
-  return [`✖ The import cannot run: ${oneLine(blockedReason, MAX_REASON_LENGTH)}`, BLOCKED_ADVICE];
+  return [`✖ The import cannot run: ${oneLine(blockedReason, MAX_REASON_LENGTH)}`];
 }
 
 /**

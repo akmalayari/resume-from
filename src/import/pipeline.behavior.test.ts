@@ -303,7 +303,14 @@ describe("T-IMP-24 — adding a fake fourth agent changes nothing here", () => {
 
 describe("T-IMP-25 — the canonical vocabulary survives a round trip", () => {
   const TURN_KEYS = ["index", "kind", "role", "text", "timestamp", "toolCall"].sort();
-  const TOOL_KEYS = ["toolName", "argumentsText", "outcomeLine", "effect", "bodyDropped"].sort();
+  const TOOL_KEYS = [
+    "toolName",
+    "argumentsText",
+    "outcomeLine",
+    "effect",
+    "bodyDropped",
+    "resultRecorded",
+  ].sort();
 
   it("adds no field and needs none the vocabulary does not have", async () => {
     const world = await newWorld();
@@ -373,5 +380,26 @@ describe("T-IMP-26 — swapping the estimator changes only the numbers", () => {
     expect(narrowPlan?.estimatedTokens).not.toBe(widePlan?.estimatedTokens);
     expect(narrowPlan?.keptTurnCount ?? 0).toBeGreaterThan(widePlan?.keptTurnCount ?? 0);
     expect(narrowReport.headerLines).toHaveLength(wideReport.headerLines.length);
+  });
+});
+
+describe("T-IMP-27 — a session with no importable turns is blocked", () => {
+  it("preview reports blocked; commit refuses and says Nothing was written", async () => {
+    const world = await newWorld();
+    await writeSession(
+      world.homeOf("codex"),
+      referenceSpec({ id: SOURCE_ID, repoPath: world.repoRoot, turns: [] }),
+    );
+    const pipeline = createImportPipeline(worldDeps(world));
+
+    const report = await pipeline.preview(importRequest(world, "pi"));
+    expect(report.blocked).toBe(true);
+    expect(report.blockedReason).toMatch(/nothing to import/i);
+    // Session is empty (not budget-driven); cause-specific message must not suggest a budget fix.
+    expect(report.blockedReason).not.toMatch(/budget/i);
+
+    await expect(
+      pipeline.commit(importRequest(world, "pi"), null, report.confirmationToken),
+    ).rejects.toThrow(/Nothing was written/);
   });
 });

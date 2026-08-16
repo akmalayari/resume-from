@@ -40,13 +40,41 @@ export function toolTurn(
   outcomeLine: string,
   effect: ToolEffect = "read-only",
   bodyDropped = true,
+  resultRecorded = true,
 ): CanonicalTurn {
   return {
     index,
     role: "agent",
     kind: "tool-call",
     text: "",
-    toolCall: { toolName, argumentsText, outcomeLine, effect, bodyDropped },
+    toolCall: { toolName, argumentsText, outcomeLine, effect, bodyDropped, resultRecorded },
+    timestamp: null,
+  };
+}
+
+/**
+ * A tool-call turn that the source never answered — the broken-tail shape (FR-54).
+ * The outcomeLine is non-empty (adapters always set a fallback) and resultRecorded is false.
+ */
+export function brokenToolTurn(
+  index: number,
+  toolName: string,
+  argumentsText: string,
+  effect: ToolEffect = "mutating",
+): CanonicalTurn {
+  return {
+    index,
+    role: "agent",
+    kind: "tool-call",
+    text: "",
+    toolCall: {
+      toolName,
+      argumentsText,
+      outcomeLine: `${toolName}(${argumentsText}) → (interrupted, no result recorded)`,
+      effect,
+      bodyDropped: false,
+      resultRecorded: false,
+    },
     timestamp: null,
   };
 }

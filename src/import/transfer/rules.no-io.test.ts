@@ -7,6 +7,7 @@ import { describe, expect, test, vi } from "vitest";
 import type { CanonicalTurn } from "./contract.js";
 import {
   agentMessage,
+  brokenToolTurn,
   charEstimator,
   configOf,
   sessionOf,
@@ -115,7 +116,7 @@ describe("T-TRA-27 no input or output", () => {
         charEstimator,
       ),
       broken: rules.apply(
-        sessionOf([userMessage(0, "Go."), toolTurn(1, "Edit", "'a.ts'", "", "mutating")]),
+        sessionOf([userMessage(0, "Go."), brokenToolTurn(1, "Edit", "'a.ts'")]),
         targetOf(200_000),
         configOf(0.3, 5),
         charEstimator,
@@ -126,6 +127,7 @@ describe("T-TRA-27 no input or output", () => {
     expect(plans.tight.estimatedTokens).toBeLessThanOrEqual(plans.tight.budgetTokens);
     expect(plans.blocked.blockedReason).not.toBeNull();
     expect(plans.broken.brokenTailDropped).toBe(true);
+    expect(plans.empty.blockedReason).not.toBeNull();
     expect(plans.empty.turns).toEqual([]);
   });
 
