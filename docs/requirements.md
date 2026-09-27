@@ -145,6 +145,30 @@ C-7 to C-11 were tested on 2026-08-03. Their results are below.**
   footer: `TypeError: Cannot read properties of undefined (reading 'input')`. This is the reason
   for FR-50.
 
+- **C-12** — Newer Codex clients record the visible history with a second schema. Observed on
+  2026-09-03 with codex-cli 0.151.0-alpha (`originator: "codex_vscode"`), and again on 0.153.x and
+  0.154.0-alpha: such a rollout holds **no** `user_message` or `agent_message` `event_msg` entries
+  at all. Every turn is one `event_msg` of type `item_completed`, wrapping an `item` whose own
+  `type` says which kind of turn it is:
+
+  | `item.type`                                | What it holds                                                       |
+  | ------------------------------------------ | ------------------------------------------------------------------- |
+  | `UserMessage` / `AgentMessage`             | the dialogue; text in `content[].text`                              |
+  | `CommandExecution`                         | a shell command, its exit code and its output                       |
+  | `FileChange`                               | the paths changed and, for an added file, its whole content         |
+  | `Extension`                                | a tool action such as `web.search`, with its queries and results    |
+  | `ImageView`                                | an image path                                                       |
+  | `Reasoning`                                | encrypted reasoning (C-4)                                           |
+  | `ContextCompaction`                        | that a compaction happened; it carries no summary text              |
+
+  In one measured session recorded by `codex_vscode` (3,761 entries, 68 MB), 1257
+  `item_completed` entries carried 44 user messages, 109 agent messages and 509 tool-like actions,
+  and not one `user_message`/`agent_message` entry existed. The parallel `response_item`
+  stream repeated the same actions as 461 `custom_tool_call` entries, so a reader that reads both
+  streams as turns would cross every action twice. This session's `compacted` entries also carried
+  an empty `message`, and their `replacement_history` holds the context Codex rebuilt after the
+  compaction — which this tool deliberately does not read, because it restates vendor system text.
+
 ---
 
 ## A. Agents and homes
