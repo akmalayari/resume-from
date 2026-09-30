@@ -585,7 +585,32 @@ describe("T-PIX-13 — an empty listing does not open a picker", () => {
   });
 });
 
-describe("T-PIX-14 — skipped homes are shown", () => {
+describe("T-PIX-14 — discovery failures are shown", () => {
+  it("reports a session exclusion without claiming its home was skipped", async () => {
+    const home = "/Users/me/.claude-team";
+    const rows = [row("claude-code", "accepted", home)];
+    const failure: HomeFailure = {
+      home,
+      agent: "claude-code",
+      message: "session excluded has conflicting repository identity evidence",
+    };
+    const sessions = listing(rows, [failure]);
+    const pipeline = stubPipeline({ listing: sessions });
+    const picked = stubPicker({ choice: "cancelled", selected: null });
+    const ui = stubUi();
+    const { ctx } = stubContext();
+
+    await createResumeFromCommand(deps({ picker: picked.picker, ui: ui.ui })).run(
+      ctx,
+      [],
+      pipeline.pipeline,
+    );
+
+    expect(ui.blocks.flat()).toContain(`claude-code ${home}: ${failure.message}`);
+    expect(ui.blocks.flat().join("\n")).not.toContain("Skipped claude-code home");
+    expect(picked.calls).toEqual([sessions]);
+  });
+
   it("shows every failure alongside the picker", async () => {
     const failures: HomeFailure[] = [
       {

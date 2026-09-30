@@ -1,3 +1,4 @@
+import { realpath } from "node:fs/promises";
 import { afterEach, expect, test, vi } from "vitest";
 import { createRepoReader } from "../platform/repo/index.js";
 import { createImportPipeline } from "./index.js";
@@ -13,6 +14,11 @@ import {
   writeSession,
 } from "./test-support.js";
 
+vi.mock("node:fs/promises", async (original) => {
+  const fs = await original<typeof import("node:fs/promises")>();
+  return { ...fs, realpath: vi.fn(fs.realpath) };
+});
+
 function deferred<T>() {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>((done) => {
@@ -22,7 +28,10 @@ function deferred<T>() {
 }
 
 let world: World;
-afterEach(async () => world?.cleanup());
+afterEach(async () => {
+  vi.mocked(realpath).mockRestore();
+  await world?.cleanup();
+});
 
 test.each([null, "/metadata"])(
   "destination identity %s is resolved once per request and refreshed next request",
@@ -90,6 +99,52 @@ test("aborting while commit enumerates cached destination sessions prevents load
   expect(world.calls).not.toContain("pi.serialize");
   expect(await checksumTree(world.targetHomeOf("pi"))).toEqual({});
 });
+
+test.each(["pi", "claude-code"] as const)(
+  "aborting during the preview directory lookup of a %s source without a commit prevents writing",
+  async (source) => {
+    world = await createWorld();
+    const spec = referenceSpec({ repoPath: world.repoRoot, commit: null });
+    await writeSession(world.homeOf(source), spec);
+    const controller = new AbortController();
+    const pipeline = createImportPipeline(
+      worldDeps(world, { repo: createRepoReader({ signal: controller.signal }) }),
+    );
+    const request = {
+      destinationCwd: world.repoRoot,
+      target: world.targetFor("pi"),
+      selection: { by: "session-id" as const, id: spec.id },
+      onlyAgent: source,
+      onlyHome: null,
+    };
+    const preview = await pipeline.preview(request);
+    const canonicalCwd = await realpath(world.repoRoot);
+    const entered = deferred<void>();
+    const pending = deferred<string>();
+    const adapter = world.adapterOf(source);
+    const load = adapter.loadSession.bind(adapter);
+    adapter.loadSession = async (ref) => {
+      const session = await load(ref);
+      // The next realpath after loading is the preview's directory warning, not discovery.
+      vi.mocked(realpath).mockImplementationOnce(() => {
+        entered.resolve();
+        return pending.promise;
+      });
+      return session;
+    };
+    world.calls.length = 0;
+    const result = pipeline.commit(request, null, preview.confirmationToken);
+    await entered.promise;
+    controller.abort("stop preview");
+    pending.resolve(canonicalCwd);
+    await expect(result).rejects.toMatchObject({
+      stage: "preview",
+      cause: { name: "AbortError", cause: "stop preview" },
+    });
+    expect(world.calls).not.toContain("pi.serialize");
+    expect(await checksumTree(world.targetHomeOf("pi"))).toEqual({});
+  },
+);
 
 test("bare destinations are refused before any import is created", async () => {
   world = await createWorld();

@@ -45,6 +45,8 @@ export interface DestinationContext {
 
 /** The four stages, and the services they are driven with. `wiring.ts` builds them. */
 export interface PipelineStages {
+  /** Observe the repository reader's cancellation even when no Git lookup is needed. */
+  checkCancellation(): void;
   finder: SessionFinder;
   rules: TransferRules;
   /** Resolve fresh destination facts, without replacing the host's native cwd spelling. */
@@ -172,6 +174,7 @@ export function createPipelineFromStages(stages: PipelineStages): ImportPipeline
     let report: PreviewContent;
     try {
       report = await stages.previewFor(destination, descriptor).build(plan);
+      stages.checkCancellation();
     } catch (cause) {
       throw new ImportFailure(
         "preview",
@@ -249,6 +252,7 @@ export function createPipelineFromStages(stages: PipelineStages): ImportPipeline
       }
 
       try {
+        stages.checkCancellation();
         return await stages.lander.land(
           plan,
           adapter,

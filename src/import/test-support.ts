@@ -567,6 +567,7 @@ export function recordingStages(overrides: Partial<PipelineStages> = {}): StageR
   };
 
   const stages: PipelineStages = {
+    checkCancellation() {},
     finder: {
       async list() {
         calls.push("finder.list");

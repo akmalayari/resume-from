@@ -113,6 +113,34 @@ describe("T-IMP-3 — commit repeats the preview then lands", () => {
   });
 });
 
+it("checks cancellation again between computed preview and landing", async () => {
+  const controller = new AbortController();
+  const reason = new Error("stop before landing");
+  let abortAfterPreview = false;
+  const { stages, landed } = recordingStages({
+    checkCancellation() {
+      controller.signal.throwIfAborted();
+      if (abortAfterPreview) queueMicrotask(() => controller.abort(reason));
+    },
+  });
+  const pipeline = createPipelineFromStages(stages);
+  const request = {
+    destinationCwd: "/repo",
+    target: { agent: "pi" as const, home: "/homes/pi", windowTokens: 200_000 },
+    selection: { by: "row" as const, row: 1 },
+    onlyAgent: null,
+    onlyHome: null,
+  };
+  const report = await pipeline.preview(request);
+  abortAfterPreview = true;
+
+  await expect(pipeline.commit(request, null, report.confirmationToken)).rejects.toMatchObject({
+    stage: "landing",
+    cause: reason,
+  });
+  expect(landed).toEqual([]);
+});
+
 describe("T-IMP-4 — the source adapter is chosen by the session's agent", () => {
   it.each(AGENTS)("loads a %s session with the adapter of that agent", async (agent) => {
     const world = await newWorld();

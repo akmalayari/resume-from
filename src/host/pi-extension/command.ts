@@ -140,7 +140,7 @@ async function resolveSelection(
   const listing = await withDiagnostic(deps.ui, "listing", () => pipeline.list(scope));
   if (listing === null) return null;
   if (listing.failures.length > 0) {
-    deps.ui.show(listing.failures.map(formatFailure)); // Skipped homes are never silent.
+    deps.ui.show(listing.failures.map(formatFailure)); // Home and session failures are never silent.
   }
   if (listing.rows.length === 0) {
     deps.ui.show([`No sessions to import for ${scope.destinationCwd}.`]);
@@ -165,7 +165,7 @@ function parseArgument(argument: string): SelectionInput {
 }
 
 function formatFailure(failure: HomeFailure): string {
-  return `Skipped ${failure.agent} home ${failure.home}: ${failure.message}`;
+  return `${failure.agent} ${failure.home}: ${failure.message}`;
 }
 
 /**
