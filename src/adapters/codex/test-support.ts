@@ -27,12 +27,15 @@ import {
   CODEX_EVENT_ITEM_COMPLETED,
   CODEX_EVENT_USER_MESSAGE,
   CODEX_THREAD_ITEM_AGENT_MESSAGE,
+  CODEX_THREAD_ITEM_COLLAB_AGENT_TOOL_CALL,
   CODEX_THREAD_ITEM_COMMAND_EXECUTION,
   CODEX_THREAD_ITEM_CONTEXT_COMPACTION,
   CODEX_THREAD_ITEM_EXTENSION,
   CODEX_THREAD_ITEM_FILE_CHANGE,
   CODEX_THREAD_ITEM_IMAGE_VIEW,
+  CODEX_THREAD_ITEM_MCP_TOOL_CALL,
   CODEX_THREAD_ITEM_REASONING,
+  CODEX_THREAD_ITEM_SUB_AGENT_ACTIVITY,
   CODEX_THREAD_ITEM_USER_MESSAGE,
   rolloutFilePath,
 } from "./rollout.js";
@@ -183,6 +186,65 @@ export function itemCompletedExtension(
 
 export function itemCompletedImageView(path: string, timestamp = TS): RolloutEntry {
   return itemCompleted(CODEX_THREAD_ITEM_IMAGE_VIEW, { id: "exec-image", path }, timestamp);
+}
+
+/** A call to a server tool, as codex-cli 0.159.2 records one: name in `server`/`tool`. */
+export function itemCompletedMcpToolCall(
+  server: string,
+  tool: string,
+  args: Record<string, unknown>,
+  result: unknown,
+  timestamp = TS,
+): RolloutEntry {
+  return itemCompleted(
+    CODEX_THREAD_ITEM_MCP_TOOL_CALL,
+    {
+      id: "exec-mcp",
+      server,
+      tool,
+      arguments: args,
+      readOnlyHint: false,
+      status: "completed",
+      result: { content: result },
+    },
+    timestamp,
+  );
+}
+
+/** An action on another agent of the same client. */
+export function itemCompletedCollabAgentToolCall(
+  tool: string,
+  receiverAgents: string[],
+  receiverThreadIds: string[] = [],
+  timestamp = TS,
+): RolloutEntry {
+  return itemCompleted(
+    CODEX_THREAD_ITEM_COLLAB_AGENT_TOOL_CALL,
+    {
+      id: "call-collab",
+      tool,
+      status: "completed",
+      sender_thread_id: "01a0e754-4ccf-7d61-94e4-9442e6ebc194",
+      receiver_thread_ids: receiverThreadIds,
+      receiver_agents: receiverAgents,
+      agents_states: { "/root/migration_read": { status: "completed" } },
+    },
+    timestamp,
+  );
+}
+
+/** A progress marker of another agent; it carries no turn of its own. */
+export function itemCompletedSubAgentActivity(timestamp = TS): RolloutEntry {
+  return itemCompleted(
+    CODEX_THREAD_ITEM_SUB_AGENT_ACTIVITY,
+    {
+      id: "call-activity",
+      kind: "started",
+      agent_thread_id: "01a0e756-5ce8-7e62-b67c-78b20fa2cacf",
+      agent_path: "/root/migration_read",
+    },
+    timestamp,
+  );
 }
 
 /** Encrypted reasoning, exactly as the new schema records it (C-4). */

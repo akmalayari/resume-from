@@ -2,10 +2,10 @@
  * What a Codex rollout file is: where it lives, how it is named, and which entries it holds.
  *
  * Every fact here was confirmed against codex-cli 0.146.0, and the `item_completed` schema below
- * against codex-cli 0.151.0-alpha (Constraints: "Facts about Codex are verified against the
- * installed version, never assumed"). The entry names are the ones C-7, C-8 and C-12 measured:
- * `event_msg` drives the visible history and the picker preview, `response_item` drives the model
- * history only.
+ * against codex-cli 0.151.0-alpha and again against 0.157.1, 0.158.0 and 0.159.2 (Constraints:
+ * "Facts about Codex are verified against the installed version, never assumed"). The entry names
+ * are the ones C-7, C-8 and C-12 measured: `event_msg` drives the visible history and the picker
+ * preview, `response_item` drives the model history only.
  */
 
 import { lstat, readdir } from "node:fs/promises";
@@ -48,9 +48,22 @@ export const CODEX_THREAD_ITEM_FILE_CHANGE = "FileChange";
 export const CODEX_THREAD_ITEM_EXTENSION = "Extension";
 export const CODEX_THREAD_ITEM_IMAGE_VIEW = "ImageView";
 
-/** Item kinds that carry no turn: reasoning cannot move (C-4), and a compaction has no text. */
+/** A call to a server tool, named by `server` and `tool` rather than by a model-visible name. */
+export const CODEX_THREAD_ITEM_MCP_TOOL_CALL = "McpToolCall";
+
+/** An action on another agent of the same client, named by its own `tool` field. */
+export const CODEX_THREAD_ITEM_COLLAB_AGENT_TOOL_CALL = "CollabAgentToolCall";
+
+/**
+ * Item kinds that carry no turn: reasoning cannot move (C-4), a compaction has no text, and a
+ * subagent activity marker reports progress that its own tool call already records.
+ */
 export const CODEX_THREAD_ITEM_REASONING = "Reasoning";
 export const CODEX_THREAD_ITEM_CONTEXT_COMPACTION = "ContextCompaction";
+export const CODEX_THREAD_ITEM_SUB_AGENT_ACTIVITY = "SubAgentActivity";
+
+/** The one `Extension.kind` measured to be a read: a web search (C-12). */
+export const CODEX_EXTENSION_KIND_WEB_SEARCH = "web.search";
 
 export const CODEX_ITEM_FUNCTION_CALL = "function_call";
 export const CODEX_ITEM_FUNCTION_CALL_OUTPUT = "function_call_output";

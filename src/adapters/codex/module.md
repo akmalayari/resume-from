@@ -33,7 +33,7 @@ files. It does not inject.
 
 **Supporting, conformist to Codex.** No competitive advantage lives here, and no off-the-shelf
 solution exists. Volatility is **high** and externally driven: C-7, C-8 and C-12 were measured
-against codex-cli 0.146.0 and 0.151.0-alpha, and the rollout format is an internal detail.
+against codex-cli 0.146.0, 0.151.0-alpha and 0.159.2, and the rollout format is an internal detail.
 
 C-6 raises the volatility further: Codex stores an injected item without validating it and drops an
 unknown item type in silence. A format change would therefore fail quietly. That is the reason FR-52
@@ -50,9 +50,14 @@ exists, and the reason this module's `readBack` is not optional.
   `response_item` `function_call`/`custom_tool_call` entries carry the calls. The newer schema is
   C-12's: every turn — user text, agent text and every tool-like action — is one `item_completed`
   `event_msg` whose `payload.item.type` says which kind of turn it is, and no
-  `user_message`/`agent_message` entry exists at all. That client repeats the same actions in
-  `response_item`, so when its dialogue is present the `item_completed` stream is the sole source of
-  turns; reading the other as well would cross every turn twice.
+  `user_message`/`agent_message` entry exists at all. Every measured client writes the newer one,
+  so a reader of the older names alone reads every current session as zero dialogue. The kinds
+  this module carries are `UserMessage`, `AgentMessage`, `CommandExecution`, `FileChange`,
+  `McpToolCall`, `Extension`, `ImageView` and `CollabAgentToolCall`; `Reasoning`,
+  `ContextCompaction` and `SubAgentActivity` are understood and carry no turn. That client repeats
+  the same actions in `response_item` at a coarser granularity — one outer call can run several
+  commands — so when its dialogue is present the `item_completed` stream is the sole source of
+  turns; reading the other as well would cross actions twice.
 - **Which entry type the picker reads.** That `thread/list` shows a thread only when it has session
   metadata **and** a preview, and that the preview comes from an `event_msg` entry. A thread without
   one is invisible even though the file exists (C-7).
@@ -435,11 +440,15 @@ None of these touch a rule, a preview, another adapter, or the host.
 - **Tool names cross unchanged** (FR-27), and the effect of a structured item is read from the item
   kind itself, never guessed from a tool name (FR-26). The newer schema records no tool name: a
   `CommandExecution` is reported as `exec` and a `FileChange` as `apply_patch`, the names the same
-  client uses for those actions in the older schema.
+  client uses for those actions in the older schema. A `McpToolCall` is named `server.tool`, the
+  only name the record holds. An `Extension.kind` settles `read-only` only when the kind is a
+  measured read (`web.search`); any other kind, and every `McpToolCall` and `CollabAgentToolCall`,
+  stays `unknown`, because a kind that does not say cannot be made to say.
 - **When a rollout speaks the `item_completed` schema, that schema is the sole source of turns**
-  (C-12). Its `response_item` stream repeats every action, so a reader that takes turns from both
-  crosses each of them twice. Which schema a rollout speaks is decided from the rollout itself:
-  `item_completed` dialogue selects the newer one, and its absence keeps the older pairing.
+  (C-12). Its `response_item` stream repeats the same actions at a coarser granularity, so a reader
+  that takes turns from both crosses actions twice. Which schema a rollout speaks is decided from
+  the rollout itself: `item_completed` dialogue selects the newer one, and its absence keeps the
+  older pairing.
 - **A `FileChange` patch is a tool argument, not a result body.** FR-24 protects the result, and the
   older schema's `apply_patch` call already carries the patch text it was given; the newer schema's
   `FileChange` item is the same kind of argument, so its content crosses.
@@ -540,15 +549,17 @@ says Codex fails silently, so nothing here may be inferred from the absence of a
 
 **T-COD-21 — the item_completed dialogue schema**
 - Scenario: a rollout recorded with the newer schema (C-12) — `item_completed` user and agent
-  messages, a `CommandExecution`, a `FileChange`, an `Extension`, an `ImageView`, a `Reasoning` and
-  a `ContextCompaction`, with no `user_message`/`agent_message` entry and a duplicated
-  `response_item` stream.
+  messages, a `CommandExecution`, a `FileChange`, a `McpToolCall`, an `Extension`, an `ImageView`, a
+  `CollabAgentToolCall`, a `SubAgentActivity`, a `Reasoning` and a `ContextCompaction`, with no
+  `user_message`/`agent_message` entry and a duplicated `response_item` stream.
 - Expected behavior: the messages and the tool-like items become canonical turns in source order;
-  the command and extension result bodies are dropped while their arguments cross; the `FileChange`
-  patch crosses as a tool argument and its paths reach `changedPaths`; reasoning and compaction
-  produce no turn and are not counted as skipped; the duplicated `response_item` stream is not read
-  as a second set of turns; and a rollout whose `item_completed` carries no dialogue is still read as
-  the older schema.
+  the command, server and extension result bodies are dropped while their arguments cross; the
+  server call is named `server.tool` and the other-agent call carries the agents it addressed; the
+  `FileChange` patch crosses as a tool argument and its paths reach `changedPaths`; reasoning,
+  compaction and activity markers produce no turn and are not counted as skipped; the duplicated
+  `response_item` stream is not read as a second set of turns; an extension kind that is not a
+  measured read keeps effect `unknown`; and a rollout whose `item_completed` carries no dialogue is
+  still read as the older schema.
 
 **T-COD-15 — live: the default home is what Codex uses**
 - Scenario: an installed Codex writes a thread; the declared default home is compared with where it

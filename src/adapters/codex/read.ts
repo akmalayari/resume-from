@@ -24,17 +24,21 @@ import {
   CODEX_EVENT_AGENT_MESSAGE,
   CODEX_EVENT_ITEM_COMPLETED,
   CODEX_EVENT_USER_MESSAGE,
+  CODEX_EXTENSION_KIND_WEB_SEARCH,
   CODEX_ITEM_CUSTOM_TOOL_CALL,
   CODEX_ITEM_CUSTOM_TOOL_CALL_OUTPUT,
   CODEX_ITEM_FUNCTION_CALL,
   CODEX_ITEM_FUNCTION_CALL_OUTPUT,
   CODEX_THREAD_ITEM_AGENT_MESSAGE,
+  CODEX_THREAD_ITEM_COLLAB_AGENT_TOOL_CALL,
   CODEX_THREAD_ITEM_COMMAND_EXECUTION,
   CODEX_THREAD_ITEM_CONTEXT_COMPACTION,
   CODEX_THREAD_ITEM_EXTENSION,
   CODEX_THREAD_ITEM_FILE_CHANGE,
   CODEX_THREAD_ITEM_IMAGE_VIEW,
+  CODEX_THREAD_ITEM_MCP_TOOL_CALL,
   CODEX_THREAD_ITEM_REASONING,
+  CODEX_THREAD_ITEM_SUB_AGENT_ACTIVITY,
   CODEX_THREAD_ITEM_USER_MESSAGE,
   isNotFoundError,
   KNOWN_ENTRY_TYPES,
@@ -66,6 +70,12 @@ const MUTATING_TOOLS: ReadonlySet<string> = new Set([
   "create_file",
   "delete_file",
 ]);
+
+/**
+ * `Extension.kind` values that are reads by their own name. Any other kind is a call whose kind
+ * does not settle the question, so it stays "unknown" (FR-26).
+ */
+const READ_ONLY_EXTENSION_KINDS: ReadonlySet<string> = new Set([CODEX_EXTENSION_KIND_WEB_SEARCH]);
 
 export interface CodexRollout {
   filePath: string;
@@ -334,6 +344,7 @@ function usesItemCompletedDialogue(entries: RolloutEntry[]): boolean {
 const IGNORED_ITEM_TYPES: ReadonlySet<string> = new Set([
   CODEX_THREAD_ITEM_REASONING,
   CODEX_THREAD_ITEM_CONTEXT_COMPACTION,
+  CODEX_THREAD_ITEM_SUB_AGENT_ACTIVITY,
 ]);
 
 /** Everything one `item_completed` item contributes to a canonical turn. */
@@ -391,17 +402,51 @@ function turnFromItemCompleted(item: Record<string, unknown>): ItemTurn | null {
       };
     }
     case CODEX_THREAD_ITEM_EXTENSION: {
+      const kind = firstNonEmptyString(item.kind) ?? "extension";
       const results = Array.isArray(item.results) ? item.results.length : 0;
       return {
         role: "agent",
         kind: "tool-call",
         text: "",
         toolCall: itemToolCallRecord(
-          firstNonEmptyString(item.kind) ?? "extension",
+          kind,
           extensionArguments(item),
           `${results} result(s) dropped`,
-          "read-only",
+          READ_ONLY_EXTENSION_KINDS.has(kind) ? "read-only" : "unknown",
           true,
+        ),
+        changedPaths: [],
+      };
+    }
+    case CODEX_THREAD_ITEM_MCP_TOOL_CALL: {
+      const call = mcpToolCall(item);
+      return {
+        role: "agent",
+        kind: "tool-call",
+        text: "",
+        toolCall: itemToolCallRecord(
+          call.toolName,
+          call.argumentsText,
+          mcpOutcome(item),
+          // A server's own `readOnlyHint` is a claim by another party, not the item kind (FR-26).
+          "unknown",
+          item.result !== undefined && item.result !== null,
+        ),
+        changedPaths: [],
+      };
+    }
+    case CODEX_THREAD_ITEM_COLLAB_AGENT_TOOL_CALL: {
+      const call = collabAgentToolCall(item);
+      return {
+        role: "agent",
+        kind: "tool-call",
+        text: "",
+        toolCall: itemToolCallRecord(
+          call.toolName,
+          call.argumentsText,
+          call.outcome,
+          "unknown",
+          objectKeys(item.agents_states).length > 0,
         ),
         changedPaths: [],
       };
@@ -481,6 +526,66 @@ function extensionArguments(item: Record<string, unknown>): string {
     }
   }
   return firstNonEmptyString(item.query) ?? "";
+}
+
+/**
+ * A server tool call names itself in `server` and `tool` and states its arguments as JSON. Both
+ * are kept: the name unchanged (FR-27) and the arguments redacted like any other call (FR-24).
+ */
+function mcpToolCall(item: Record<string, unknown>): {
+  toolName: string;
+  argumentsText: string;
+} {
+  const server = firstNonEmptyString(item.server);
+  const tool = firstNonEmptyString(item.tool);
+  const toolName =
+    server !== null && tool !== null ? `${server}.${tool}` : (tool ?? server ?? "mcp");
+  return { toolName, argumentsText: jsonArguments(item.arguments) };
+}
+
+/** The recorded status of a server call, plus how many result items were dropped (FR-24, FR-25). */
+function mcpOutcome(item: Record<string, unknown>): string {
+  const result = item.result;
+  const record =
+    typeof result === "object" && result !== null ? (result as Record<string, unknown>) : null;
+  const content = record === null ? null : record.content;
+  const results = Array.isArray(content) ? content.length : record === null ? 0 : 1;
+  const dropped = `${results} result(s) dropped`;
+  const status = firstNonEmptyString(item.status);
+  return status === null ? dropped : `${status}, ${dropped}`;
+}
+
+/**
+ * An action on another agent. Its `tool` field names the action, and the agents it addresses are
+ * the argument; the per-agent states it records are that call's result and are dropped (FR-24).
+ */
+function collabAgentToolCall(item: Record<string, unknown>): {
+  toolName: string;
+  argumentsText: string;
+  outcome: string;
+} {
+  const targets = [
+    ...stringValues(item.receiver_agents),
+    ...stringValues(item.receiver_thread_ids),
+  ];
+  return {
+    toolName: firstNonEmptyString(item.tool) ?? "collab-agent",
+    argumentsText: targets.join("\n"),
+    outcome: firstNonEmptyString(item.status) ?? "no status recorded",
+  };
+}
+
+/** Tool arguments as the recorded JSON text, or as they already are when they are a string. */
+function jsonArguments(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (typeof value !== "object" || value === null) return "";
+  return JSON.stringify(value);
+}
+
+/** The non-empty strings of an array field, in source order. */
+function stringValues(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((part): part is string => typeof part === "string" && part !== "");
 }
 
 /** Non-empty string keys of an object, in source order — the paths a change touched. */

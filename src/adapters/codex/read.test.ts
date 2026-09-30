@@ -9,12 +9,15 @@ import {
   functionCall,
   functionCallOutput,
   itemCompletedAgentMessage,
+  itemCompletedCollabAgentToolCall,
   itemCompletedCommandExecution,
   itemCompletedContextCompaction,
   itemCompletedExtension,
   itemCompletedFileChange,
   itemCompletedImageView,
+  itemCompletedMcpToolCall,
   itemCompletedReasoning,
+  itemCompletedSubAgentActivity,
   itemCompletedUserMessage,
   makeTempHome,
   metaEntry,
@@ -408,6 +411,14 @@ describe("T-COD-21 the item_completed dialogue schema", () => {
       itemCompletedFileChange({
         "/repo/demo/report.md": { type: "add", content: "# Report\n\nbody text" },
       }),
+      itemCompletedMcpToolCall(
+        "context-mode",
+        "ctx_execute",
+        { language: "javascript", code: "console.log(1)" },
+        [{ type: "text", text: "SECRET-MCP-RESULT" }],
+      ),
+      itemCompletedCollabAgentToolCall("wait", ["/root/migration_read"]),
+      itemCompletedSubAgentActivity(),
       itemCompletedExtension(
         "web.search",
         ["site:example.com law"],
@@ -431,6 +442,8 @@ describe("T-COD-21 the item_completed dialogue schema", () => {
       ["agent", "message", "I'll read the context first."],
       ["agent", "tool-call", "exec"],
       ["agent", "tool-call", "apply_patch"],
+      ["agent", "tool-call", "context-mode.ctx_execute"],
+      ["agent", "tool-call", "wait"],
       ["agent", "tool-call", "web.search"],
       ["agent", "tool-call", "view_image"],
       ["agent", "message", "Here is the report."],
@@ -445,7 +458,45 @@ describe("T-COD-21 the item_completed dialogue schema", () => {
     const session = await adapter.loadSession(await loadOnly(home));
     expect(
       session.turns.filter((t) => t.kind === "tool-call").map((t) => t.toolCall?.effect),
-    ).toEqual(["unknown", "mutating", "read-only", "read-only"]);
+    ).toEqual(["unknown", "mutating", "unknown", "unknown", "read-only", "read-only"]);
+  });
+
+  it("names a server tool by its server and tool, and drops its results (FR-24, FR-27)", async () => {
+    const home = tempHome();
+    writeRollout(home, id, newSchemaThread(id));
+    const session = await adapter.loadSession(await loadOnly(home));
+    const call = session.turns.find(
+      (turn) => turn.toolCall?.toolName === "context-mode.ctx_execute",
+    )?.toolCall;
+
+    expect(call?.argumentsText).toContain('"language":"javascript"');
+    expect(call?.outcomeLine).toContain("completed");
+    expect(call?.outcomeLine).toContain("1 result(s) dropped");
+    expect(call?.bodyDropped).toBe(true);
+    expect(JSON.stringify(session)).not.toContain("SECRET-MCP-RESULT");
+  });
+
+  it("carries the agents another-agent call addressed (FR-23, FR-24)", async () => {
+    const home = tempHome();
+    writeRollout(home, id, newSchemaThread(id));
+    const session = await adapter.loadSession(await loadOnly(home));
+    const call = session.turns.find((turn) => turn.toolCall?.toolName === "wait")?.toolCall;
+
+    expect(call?.argumentsText).toBe("/root/migration_read");
+    expect(call?.outcomeLine).toContain("completed");
+  });
+
+  it("keeps an extension kind that is not a measured read at unknown effect (FR-26)", async () => {
+    const home = tempHome();
+    writeRollout(home, id, [
+      metaEntry(id),
+      itemCompletedUserMessage("open it"),
+      itemCompletedExtension("browser.open", ["https://example.com"], [{ type: "text_result" }]),
+    ]);
+    const session = await adapter.loadSession(await loadOnly(home));
+
+    expect(session.turns[1]?.toolCall?.toolName).toBe("browser.open");
+    expect(session.turns[1]?.toolCall?.effect).toBe("unknown");
   });
 
   it("drops the command and extension result bodies without carrying a fragment", async () => {
@@ -482,7 +533,7 @@ describe("T-COD-21 the item_completed dialogue schema", () => {
     expect(session.provenance.repo.changedPaths).toEqual(["/repo/demo/report.md"]);
   });
 
-  it("reads reasoning and compaction as no turn, without counting them as skipped", async () => {
+  it("reads reasoning, compaction and activity markers as no turn, without counting them as skipped", async () => {
     const home = tempHome();
     const path = writeRollout(home, id, newSchemaThread(id));
     const rollout = await readRollout(path);

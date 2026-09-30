@@ -57,7 +57,7 @@ Grok, Cursor CLI. They are not in this release. Section J states what "later" mu
 These facts come from tests of the installed software. They limit the design.
 
 **C-1 to C-6 come from the deleted design documents. They were not tested again in this session.
-C-7 to C-11 were tested on 2026-08-03. Their results are below.**
+C-7 to C-11 were tested on 2026-08-03. C-12 was measured on 2026-09-03 and again on 2026-09-30.**
 
 - **C-1** — Our command cannot open its own picker inside Codex or Claude Code. Their command set
   is fixed. The native picker of each agent still works, and it shows an imported session.
@@ -145,29 +145,49 @@ C-7 to C-11 were tested on 2026-08-03. Their results are below.**
   footer: `TypeError: Cannot read properties of undefined (reading 'input')`. This is the reason
   for FR-50.
 
-- **C-12** — Newer Codex clients record the visible history with a second schema. Observed on
-  2026-09-03 with codex-cli 0.151.0-alpha (`originator: "codex_vscode"`), and again on 0.153.x and
-  0.154.0-alpha: such a rollout holds **no** `user_message` or `agent_message` `event_msg` entries
-  at all. Every turn is one `event_msg` of type `item_completed`, wrapping an `item` whose own
-  `type` says which kind of turn it is:
+- **C-12** — Codex moved its visible history to a second schema, and every measured client now writes
+  it. Observed on 2026-09-03 with codex-cli 0.151.0-alpha (`originator: "codex_vscode"`), on
+  0.153.x and 0.154.0-alpha, and again on 2026-09-30 with 0.157.1, 0.158.0 and 0.159.2 writing
+  `codex_vscode`, `codex_exec` and `codex-tui` rollouts. Such a rollout holds **no**
+  `user_message` or `agent_message` `event_msg` entries at all. Every turn is one `event_msg` of
+  type `item_completed`, wrapping an `item` whose own `type` says which kind of turn it is:
 
   | `item.type`                                | What it holds                                                       |
   | ------------------------------------------ | ------------------------------------------------------------------- |
   | `UserMessage` / `AgentMessage`             | the dialogue; text in `content[].text`                              |
   | `CommandExecution`                         | a shell command, its exit code and its output                       |
   | `FileChange`                               | the paths changed and, for an added file, its whole content         |
+  | `McpToolCall`                              | a server tool call: `server`, `tool`, `arguments`, `result`         |
   | `Extension`                                | a tool action such as `web.search`, with its queries and results    |
   | `ImageView`                                | an image path                                                       |
+  | `CollabAgentToolCall`                      | an action on another agent: `tool`, receivers, `agents_states`      |
+  | `SubAgentActivity`                         | a progress marker of another agent; it carries no turn              |
   | `Reasoning`                                | encrypted reasoning (C-4)                                           |
   | `ContextCompaction`                        | that a compaction happened; it carries no summary text              |
 
-  In one measured session recorded by `codex_vscode` (3,761 entries, 68 MB), 1257
-  `item_completed` entries carried 44 user messages, 109 agent messages and 509 tool-like actions,
-  and not one `user_message`/`agent_message` entry existed. The parallel `response_item`
-  stream repeated the same actions as 461 `custom_tool_call` entries, so a reader that reads both
-  streams as turns would cross every action twice. This session's `compacted` entries also carried
-  an empty `message`, and their `replacement_history` holds the context Codex rebuilt after the
-  compaction — which this tool deliberately does not read, because it restates vendor system text.
+  Two measurements fix what this means for the tool. In one session recorded by `codex_vscode`
+  (3,761 entries, 68 MB), 1257 `item_completed` entries carried 44 user messages, 109 agent
+  messages and 509 tool-like actions, and not one `user_message`/`agent_message` entry existed. In
+  one developer home on 2026-09-30, 1953 of 2023 rollout files carried `item_completed`, 4 still
+  carried the older shape, and **no** file carried both; over the 60 most recent files the kinds
+  counted were `Reasoning` 600, `CommandExecution` 487, `McpToolCall` 480, `AgentMessage` 184,
+  `SubAgentActivity` 63, `UserMessage` 49, `CollabAgentToolCall` 24, `Extension` 23 and
+  `FileChange` 2. A reader that still looks only for `user_message`/`agent_message` therefore reads
+  **every current Codex session as zero dialogue**.
+
+  The parallel `response_item` stream repeats the same actions, but not one for one: in one measured
+  session, 10 `custom_tool_call` entries covered 17 structured actions, because one outer call can
+  run several commands. Its `message` entries also hold vendor and system text. A reader that takes
+  turns from both streams would cross the same action twice, so when `item_completed` dialogue is
+  present that stream is the sole source of turns.
+
+  This session's `compacted` entries also carried an empty `message`, and their `replacement_history`
+  holds the context Codex rebuilt after the compaction — which this tool deliberately does not read,
+  because it restates vendor system text.
+
+  The schema moved on the reading side only: a thread written with C-8's `event_msg` messages is
+  still listed, still resumable and still shows native turns on codex-cli 0.159.2 (re-tested
+  2026-09-30).
 
 ---
 
