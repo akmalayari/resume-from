@@ -50,7 +50,7 @@ export interface PipelineStages {
   /** Resolve fresh destination facts, without replacing the host's native cwd spelling. */
   destinationFor(cwd: string): Promise<DestinationContext>;
   /** A preview builder that reads the repository the request names. */
-  previewFor(destination: DestinationContext): PreviewBuilder;
+  previewFor(destination: DestinationContext, descriptor: SessionDescriptor): PreviewBuilder;
   lander: SessionLander;
   /** Every adapter the composition root constructed. This module only looks one up. */
   adapters: readonly AgentAdapter[];
@@ -168,7 +168,7 @@ export function createPipelineFromStages(stages: PipelineStages): ImportPipeline
 
     let report: PreviewContent;
     try {
-      report = await stages.previewFor(destination).build(plan);
+      report = await stages.previewFor(destination, descriptor).build(plan);
     } catch (cause) {
       throw new ImportFailure(
         "preview",

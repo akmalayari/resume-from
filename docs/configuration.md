@@ -38,13 +38,13 @@ Valid agent names are `pi`, `codex`, and `claude-code`.
 
 ## Add another profile
 
-For a one-off import, name the profile home directly:
+For a one-off import in Claude Code or Codex, name the source profile home directly:
 
 ```text
-/resume-from --home ~/.claude-team
+/resume-from claude --home ~/.claude-team
 ```
 
-For a profile you import from often, add it to `extraHomes`.
+`--home` selects a source profile; it does not change the destination profile or checkout. The same repository membership check applies across profiles and linked worktrees. In Pi, or for a profile you import from often, add it to `extraHomes`.
 
 ```json
 {

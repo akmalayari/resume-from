@@ -710,3 +710,58 @@ describe("T-PIX-20 — a cancelled switch is not a loss", () => {
     expect(context.sendMessage).not.toHaveBeenCalled();
   });
 });
+
+describe("pipeline failure diagnostics", () => {
+  it.each(["list", "preview", "commit"] as const)(
+    "shows one sanitized %s failure and stops without a false write-status claim",
+    async (stage) => {
+      const pipeline = stubPipeline();
+      const failure = new Error(
+        "ambiguous repository\n\u001b[31mCheck recorded directories; recover with pi --session /saved",
+      );
+      pipeline.pipeline[stage] = vi.fn().mockRejectedValue(failure);
+      const ui = stubUi(["selected"]);
+      const picked = stubPicker({ choice: "selected", selected: descriptor() });
+      const { ctx, switches } = stubContext();
+      await createResumeFromCommand(deps({ picker: picked.picker, ui: ui.ui })).run(
+        ctx,
+        stage === "list" ? [] : ["s-1"],
+        pipeline.pipeline,
+      );
+      const diagnostics = ui.blocks.flat().filter((line) => line.includes("ambiguous repository"));
+      expect(diagnostics).toHaveLength(1);
+      expect(diagnostics[0]).toContain(
+        "Check recorded directories; recover with pi --session /saved",
+      );
+      expect(diagnostics[0]).not.toContain("\n");
+      expect(diagnostics[0]).not.toContain("\u001b");
+      expect(ui.blocks.flat().join("\n")).not.toContain("Nothing was written");
+      expect(pipeline.commitCalls).toEqual([]);
+      expect(switches).toEqual([]);
+      expect(ui.asked).toHaveLength(stage === "commit" ? 1 : 0);
+      expect(picked.calls).toEqual([]);
+    },
+  );
+
+  it.each([false, true])(
+    "propagates cancellation (wrapped: %s) rather than presenting it as a failure",
+    async (wrapped) => {
+      const pipeline = stubPipeline();
+      const cancellation = new Error("cancelled", { cause: "user" });
+      cancellation.name = "AbortError";
+      const failure = wrapped ? new Error("preview failed", { cause: cancellation }) : cancellation;
+      pipeline.pipeline.preview = vi.fn().mockRejectedValue(failure);
+      const ui = stubUi();
+      const picked = stubPicker({ choice: "cancelled", selected: null });
+      await expect(
+        createResumeFromCommand(deps({ picker: picked.picker, ui: ui.ui })).run(
+          stubContext().ctx,
+          ["s-1"],
+          pipeline.pipeline,
+        ),
+      ).rejects.toBe(failure);
+      expect(ui.blocks).toEqual([]);
+      expect(ui.asked).toEqual([]);
+    },
+  );
+});

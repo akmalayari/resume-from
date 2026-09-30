@@ -16,21 +16,46 @@ For Claude Code or Codex, open the plugin manager and make sure that
 
 ## No sessions are listed
 
-`resume-from` lists sessions for the current Git repository. Run the command
-from the repository that owns the source session.
+Start the destination agent in the directory whose files you intend to edit.
+`resume-from` lists sessions for that Git repository, including linked worktrees in
+nested, sibling, or arbitrary external locations and checkout subdirectories.
+Independent clones, submodules, and nested independent repositories do not match.
 
-If the source uses another profile, name its home with `--home`:
+In Claude Code or Codex, if the source uses another profile, name its home with `--home`:
 
 ```text
-/resume-from --home ~/.claude-team
+/resume-from claude --home ~/.claude-team
 ```
 
 For a profile you import from often, add that home to `extraHomes` instead, so
 every listing includes it. See
 [Configuration](configuration.md#add-another-profile).
 
-The tool reports each home that it cannot read. Correct the path or its file
-permissions.
+`--home` changes only the source profile, not the destination checkout. In Pi,
+use `extraHomes` and the picker rather than CLI source filters.
+
+The tool reports unreadable homes and sessions skipped for missing, unresolved,
+conflicting, or operationally failed directory evidence. Read the diagnostic in the
+listing or selection error; an explicit session ID or path does not bypass it.
+Correct unreadable paths or permissions rather than retrying with guessed selectors.
+A completed nonzero Git lookup means unresolved identity, not proof of a non-Git directory.
+
+### The source worktree was removed or moved
+
+Discovery can use another surviving directory recorded by the active conversation.
+If all recorded paths are missing, even a removed worktree nested in the main
+checkout cannot be identified by its parent. A moved worktree needs a recorded path
+that resolves at its new location. There is no automatic path remapping or registry
+recovery. Imports do not recreate removed worktrees or transfer uncommitted work.
+
+### The preview names another destination or rejects confirmation
+
+Check `Destination:` before confirming. If it is not where you intend to edit,
+restart the destination agent in the right directory and obtain a fresh preview.
+Different recorded directories can mean worktrees or merely subdirectories. Imports
+do not switch branches. A token from a different worktree is invalid even when HEAD
+and branch match. Source or destination changes can also require a new preview.
+A bare repository is not a destination; use one of its linked working trees.
 
 ## The preview is blocked
 
@@ -79,7 +104,8 @@ satisfy that command after one successful download.
 ## The import is complete, but the agent did not switch
 
 Claude Code and Codex create a new native session but cannot switch the current
-process. Run the landing command that `resume-from` prints.
+process. Run the landing command that `resume-from` prints from the preview's
+destination directory, using the same target profile.
 
 ```sh
 claude --resume <session-id>

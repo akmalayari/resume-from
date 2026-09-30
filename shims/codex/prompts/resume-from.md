@@ -16,6 +16,27 @@ shell-quoted argv item after `--`. Never interpolate the raw argument string int
 Show the output **exactly as printed**. Do not summarize it, do not reorder it, and do not reword any
 line. The preview has one fixed shape for every source and target agent; rewriting it defeats that.
 
+## Destination and source profiles
+
+Start the destination agent in the directory whose files you intend to edit, including a checkout
+subdirectory. Sessions from the main checkout and linked worktrees match through their shared Git
+repository identity, whether the worktree is nested, sibling, or in an arbitrary external directory.
+Independent clones, nested independent repositories, and submodules do not share that identity.
+
+Use `claude --home /path/to/alternate-profile` or `codex --home /path/to/alternate-profile` as the
+source arguments to import from another profile; `--home` selects the source home, not the destination
+directory or target profile. The same repository check applies to lists, rows, session IDs, and file paths.
+
+Check `Destination:` in the preview and show all directory warnings and selection diagnostics.
+Conversation imports do not transfer uncommitted work, switch branches, or recreate removed
+worktrees. A missing or moved worktree is discoverable only when another recorded directory still
+identifies this repository (or a recorded path resolves at its new location); historical paths alone
+cannot prove membership. Never infer membership from a missing path's parent or remap it yourself.
+
+Preview and confirm in the same destination directory. If the destination or repository evidence
+changes, get a fresh preview and let the user confirm again. Run the native resume command from that
+destination directory with the same target profile.
+
 What comes back:
 
 - **Help text** — `--help` or `-h` was given. Show the selectors, options, and examples exactly as
@@ -23,7 +44,7 @@ What comes back:
 - **A numbered list** — no argument was given. Tell the user to run the command again with a row
   number. Each row shows the agent, the home, the time, the title and the turn count.
 - **A preview** — a session was named. It states the turns that cross over, the turns dropped, the
-  token budget against this window, and any warnings. Nothing is written yet. Ask the user to
+  destination directory, token budget against this window, and any warnings. Nothing is written yet. Ask the user to
   confirm with the exact token-bearing command printed by the tool.
 - **A landing result** — the import ran. Codex cannot move the user between threads, so print the
   new thread ID and the native command that opens it, normally `codex resume <id>`, and say plainly

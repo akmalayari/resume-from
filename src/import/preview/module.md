@@ -22,7 +22,8 @@ adapter is asked to serialize anything.
 - Compare the source commit with the current HEAD and warn with the distance when they differ
   (FR-37, FR-38), in the form
   `⚠ Source ran at 3f2a1bc. The tree is now at 9d81e04 (14 commits ahead).`
-- List every warning, with the repository warning first (FR-19).
+- List every warning, with repository-state warnings first (FR-19).
+- Warn when any existing recorded source directory canonicalizes differently from the destination: conversation import does not transfer uncommitted work, switch branches, or recreate removed worktrees.
 - State that a broken tail was dropped (FR-55).
 - State what the budget dropped (FR-35), in the form `12 older turns dropped`.
 - State how many tool result bodies did not cross over (FR-25), in the form
@@ -343,6 +344,7 @@ are.
 ## Constraints and Invariants
 
 - **The header shows canonical destination cwd.** The pipeline supplies fresh canonical directory and identity facts for the request. Commit distance receives the native request cwd explicitly; it never uses the directory where a host or reader was constructed.
+- **Recorded directory differences are non-blocking `repo-state` warnings.** The pipeline supplies the selected descriptor's `repoPaths` to the builder. Compare filesystem realpaths against canonical destination cwd without new Git lookups or membership inference. Missing (ENOENT) historical candidates are neutral; other operational failures propagate. Empty candidates and identical symlink aliases do not invent a difference. A differing subdirectory qualifies, so wording must not claim a distinct repository or checkout. Emit one warning in both `warnings` and `lines` before confirmation hashing.
 
 - **This module writes nothing** (FR-16). Building a preview has no effect on any home or repository.
   Cancelling at the preview leaves no new session.
@@ -407,9 +409,9 @@ because those lines appear in the requirements.
   in that reverse order.
 - Expected behavior: `warnings[0].kind` is `"repo-state"` (FR-19).
 
-**T-PRE-7 — no difference, no warning**
+**T-PRE-7 — no commit difference, no commit warning**
 - Scenario: the source commit equals HEAD.
-- Expected behavior: no `"repo-state"` warning (FR-38 fires only on a difference).
+- Expected behavior: no commit-distance `"repo-state"` warning (FR-38 fires only on a difference). A recorded-directory difference can still warn at identical HEAD.
 
 **T-PRE-8 — an unknown source commit is said to be unknown**
 - Scenario: `RepoSnapshot.commit` is null; and separately, the commit is not in this repository.

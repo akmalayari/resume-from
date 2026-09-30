@@ -1,3 +1,4 @@
+import { realpath } from "node:fs/promises";
 import type {
   CommitDistance,
   PreviewWarning,
@@ -77,6 +78,26 @@ export async function repoWarning(
   return repoState(
     `${GLYPH} Source ran at ${source}. The tree is now at ${head}${describeGap(distance)}.`,
   );
+}
+
+/** Missing historical paths are neutral; only an existing canonical path proves a difference. */
+export async function directoryWarning(
+  recordedDirectories: readonly string[],
+  canonicalCwd: string,
+): Promise<PreviewWarning | null> {
+  let differs = false;
+  for (const directory of recordedDirectories) {
+    try {
+      if ((await realpath(directory)) !== canonicalCwd) differs = true;
+    } catch (cause) {
+      if ((cause as NodeJS.ErrnoException).code !== "ENOENT") throw cause;
+    }
+  }
+  return differs
+    ? repoState(
+        `${GLYPH} The source session records a different directory. Conversation import does not transfer uncommitted work, switch branches, or recreate removed worktrees.`,
+      )
+    : null;
 }
 
 /** The warnings that come from the plan alone. */

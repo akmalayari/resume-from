@@ -11,6 +11,7 @@ import type {
   SessionPicker,
   TargetProfile,
 } from "./contract.js";
+import { safeText } from "./presentation.js";
 import type { PiUi } from "./ui.js";
 
 /** The name Pi shows for the command (FR-7). */
@@ -66,7 +67,8 @@ async function runResumeFrom(
   if (selection === null) return;
 
   const request: ImportRequest = { ...scope, selection };
-  const report = await pipeline.preview(request);
+  const report = await withDiagnostic(deps.ui, "preview", () => pipeline.preview(request));
+  if (report === null) return;
   deps.ui.show(report.lines); // Verbatim and unreordered (FR-21).
 
   if (report.blocked) {
@@ -80,8 +82,35 @@ async function runResumeFrom(
   }
 
   // Pi's own context is the runtime handle the Pi adapter switches with (FR-44).
-  const landing = await pipeline.commit(request, ctx, report.confirmationToken);
-  if (!landing.switched) present(deps.ui, landing);
+  const landing = await withDiagnostic(deps.ui, "import", () =>
+    pipeline.commit(request, ctx, report.confirmationToken),
+  );
+  if (landing !== null && !landing.switched) present(deps.ui, landing);
+}
+
+/** Catch only pipeline failures, not UI errors or presentation after a successful switch. */
+async function withDiagnostic<T>(
+  ui: PiUi,
+  stage: string,
+  operation: () => Promise<T>,
+): Promise<T | null> {
+  try {
+    return await operation();
+  } catch (error) {
+    // Pipeline errors may wrap an abort; preserve cancellation rather than relabel it.
+    const seen = new Set<Error>();
+    for (
+      let cause: unknown = error;
+      cause instanceof Error && !seen.has(cause);
+      cause = cause.cause
+    ) {
+      if (cause.name === "AbortError") throw error;
+      seen.add(cause);
+    }
+    const message = error instanceof Error ? error.message : String(error);
+    ui.show([`The ${stage} failed: ${safeText(message)}`]);
+    return null;
+  }
 }
 
 /** The import target is always the Pi home the user is in (FR-1, FR-2). */
@@ -108,7 +137,8 @@ async function resolveSelection(
   const [only] = given;
   if (only !== undefined) return parseArgument(only); // An argument skips the picker (FR-12).
 
-  const listing = await pipeline.list(scope);
+  const listing = await withDiagnostic(deps.ui, "listing", () => pipeline.list(scope));
+  if (listing === null) return null;
   if (listing.failures.length > 0) {
     deps.ui.show(listing.failures.map(formatFailure)); // Skipped homes are never silent.
   }

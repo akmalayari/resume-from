@@ -795,6 +795,7 @@ Adding an agent does not change this module. Changing a rule does not change thi
 
 ## Constraints and Invariants
 
+- **The preview receives selected recorded directories separately from provenance.** Internal `previewFor(destination, descriptor)` supplies `descriptor.repoPaths` for canonical source-directory comparison. Directory warnings are included in preview content before hashing and recomputed on confirmation; they do not change repository membership or add destination fields to source provenance.
 - **One request destination drives discovery, preview, distance, and landing.** Derive `SearchScope.repoRoot` from `destinationCwd`, not from the checkout root. Resolve canonical cwd and repository identity afresh for each request. Refuse bare repositories with advice to use a linked worktree; destination filesystem and Git operational failures stop the request before writing. `commit` uses its existing `compute()` result, passing the native cwd through landing as required serialization context.
 
 - **`list` and `preview` never write** (FR-16). Only `commit` reaches `SessionLander`, which is the

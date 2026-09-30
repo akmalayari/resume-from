@@ -384,6 +384,7 @@ Pi's **session file** changing does not touch this module — that is `src/adapt
 - **Nothing is written before the user confirms** (FR-16, FR-20). Cancelling at the picker or at the
   preview calls `commit` never, and leaves no new session.
 - **A blocked preview cannot be confirmed** (FR-33). The confirmation is not offered.
+- **Listing, preview, and commit failures are shown once at their pipeline boundary.** Sanitize terminal controls while retaining the stage, reason, and recovery instructions. Stop without retry, confirmation, or further landing actions. Do not claim no files were written for an arbitrary landing failure. AbortError cancellation (including wrapped causes) still propagates. UI errors and presentation after successful switching are not caught and re-rendered.
 - **After landing, the prompt is empty** (FR-46). This module sends no message and runs no tool. The
   `withSession` callback of C-10 must not be used to send anything.
 - **A successful switch invalidates the command context.** The command must not call its old UI after

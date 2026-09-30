@@ -58,6 +58,29 @@ Example:
 }
 ```
 
+For a one-off source profile in Claude Code or Codex, run:
+
+```text
+/resume-from claude --home ~/.claude-team
+/resume-from claude 1 --home ~/.claude-team
+```
+
+The first command lists; the second previews. Confirm only with the exact token-bearing command printed by the preview. `--home` selects the source, not the destination profile or checkout, and does not bypass repository membership. Pi uses `extraHomes` and its picker instead of these CLI filters.
+
+## Continue in another worktree
+
+Start the destination agent in the directory whose files you intend to edit. That may be the main checkout, a linked worktree, or a subdirectory of either. Linked worktrees match using their canonical Git common directory regardless of placement: nested (such as `.worktrees/task`), sibling, or an arbitrary external directory. Main-to-worktree, worktree-to-main, and sibling-worktree transfers all use the same rule for lists, rows, session IDs, and file paths, including alternate source profiles.
+
+Independent clones do not qualify, even with the same remote or shared Git objects. Submodules and nested independent repositories remain separate. A bare repository itself cannot receive an import; start the agent in one of its linked working trees.
+
+Read `Destination:` in the preview. It shows the canonical destination; native imports retain the directory supplied by the destination agent, including a subdirectory or symlink spelling. A directory-difference warning can also reflect two subdirectories, not necessarily different checkouts. Conversation import does not transfer uncommitted work, switch branches, or recreate removed worktrees. Inspect the destination's files before continuing the task.
+
+Keep preview and confirmation in the same destination directory. A token from one worktree cannot confirm an import in another, even at the same HEAD. If the directory, source, or repository evidence changes, preview again. In Claude Code or Codex, run the printed native resume command from that destination directory with the same target profile; Pi confirms and switches in process.
+
+### Missing or moved worktrees
+
+A session whose first recorded directory has disappeared can still be found if another recorded active-conversation directory identifies this repository. A Git-moved worktree works when a recorded path resolves at its new location. Missing historical paths alone cannot establish membership; the importer does not walk to an existing parent, consult a worktree registry for recovery, or remap paths. If a session records two resolved unrelated repositories, it is excluded with an ambiguity diagnostic. Current paths cannot prove historical ownership when an old path has been reused.
+
 ## Start a fresh context without losing the task
 
 The importer budgets history against the destination context window. By default it may use 30% of that window.
@@ -85,7 +108,7 @@ The two sessions do not synchronize after import. New messages and tool activity
 - Discovery only lists sessions that record the current Git repository.
 - Sessions without repository metadata are reported but cannot be selected.
 - Selection by file path does not bypass repository scope.
-- Repository files are not copied. The destination needs access to the working tree.
+- Repository files and uncommitted changes are not copied. The destination needs its own accessible checkout; imports neither switch branches nor recreate worktrees.
 - Credentials, model selection, hidden reasoning, system prompts, environment data, telemetry, and vendor runtime state do not transfer.
 - Tool-result bodies do not transfer.
 - Pi can switch in process. Claude Code and Codex require the printed native resume command.

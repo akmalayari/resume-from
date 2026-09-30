@@ -206,6 +206,9 @@ async function previewToken(scene: Scene, selector: string = scene.id): Promise<
   expect(preview.stderr).toEqual([]);
   expect(preview.exitCode).toBe(0);
   expect(preview.stdout).toContain(`Destination: ${scene.destinationCwd}`);
+  expect(preview.stdout.join("\n")).toContain(
+    "The source session records a different directory. Conversation import does not transfer uncommitted work, switch branches, or recreate removed worktrees.",
+  );
   const token = preview.stdout.join("\n").match(/v1-sha256-[0-9a-f]{64}/)?.[0];
   expect(token).toBeDefined();
   if (!token) throw new Error("CLI preview did not print a confirmation token");
@@ -259,6 +262,9 @@ test.each([
   "CLI %s: list, %s preview, confirmation and native Claude readback",
   async (direction, selection) => {
     const scene = await bench(direction);
+    expect(git(scene.sourceCwd, "rev-parse", "HEAD")).toBe(
+      git(scene.destination, "rev-parse", "HEAD"),
+    );
     expect(process.cwd()).not.toBe(scene.destinationCwd);
     const unchanged = await unchangedAfter(scene);
     const listed = await scene.run([]);
@@ -298,6 +304,8 @@ test("Pi command context drives real discovery, preview and native writer instea
       },
       async confirm() {
         expect(shown).toContain(`Destination: ${scene.destinationCwd}`);
+        expect(shown.join("\n")).toContain("The source session records a different directory");
+        expect(shown.join("\n")).toContain("does not transfer uncommitted work, switch branches");
         expect(await snapshot(scene.targetHome)).toEqual({});
         confirmed = true;
         return "selected";
@@ -371,3 +379,58 @@ test("CLI previews and imports a removed worktree using surviving active-convers
   await readNativeImport(scene, "claude-code");
   await unchanged();
 });
+
+test.each(["missing", "conflicting"] as const)(
+  "CLI and Pi expose %s recorded-directory selection diagnostics without importing",
+  async (evidence) => {
+    const scene = await bench("sibling-to-external", "pi");
+    if (evidence === "missing") {
+      git(scene.main, "worktree", "remove", "--force", scene.linked);
+    } else {
+      const unrelated = join(scene.root, "unrelated repository");
+      await mkdir(unrelated);
+      git(unrelated, "init", "-b", "main");
+      await scene.transcript([scene.main, unrelated]);
+    }
+    const diagnostic =
+      evidence === "missing"
+        ? "has only missing recorded directories"
+        : "has conflicting repository identity evidence";
+    const listed = await scene.run([]);
+    expect(listed.stdout.join("\n")).toContain(diagnostic);
+    const preview = await scene.run([scene.id]);
+    expect(preview.exitCode).toBe(2);
+    expect(preview.stderr.join("\n")).toContain(diagnostic);
+    const shown: string[] = [];
+    const command = createResumeFromCommand({
+      windowTokens: scene.target.windowTokens,
+      picker: {
+        async pick() {
+          throw new Error("must not offer excluded sessions");
+        },
+      },
+      ui: {
+        show(lines) {
+          shown.push(...lines);
+        },
+        async confirm() {
+          throw new Error("must not confirm a rejected selection");
+        },
+      },
+    });
+    const ctx: PiCommandContext = {
+      cwd: scene.destinationCwd,
+      home: scene.targetHome,
+      async switchSession() {
+        throw new Error("must not switch after rejection");
+      },
+    };
+    await command.run(ctx, [], scene.pipeline);
+    expect(shown.join("\n")).toContain(diagnostic);
+    shown.length = 0;
+    await command.run(ctx, [scene.id], scene.pipeline);
+    expect(shown).toHaveLength(1);
+    expect(shown[0]).toContain(diagnostic);
+    expect(await snapshot(scene.targetHome)).toEqual({});
+  },
+);

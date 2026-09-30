@@ -7,7 +7,7 @@ import type {
   TransferPlan,
 } from "./contract.js";
 import { formatTokens, oneLine, plural } from "./format.js";
-import { planWarnings, repoWarning, sortWarnings } from "./warnings.js";
+import { directoryWarning, planWarnings, repoWarning, sortWarnings } from "./warnings.js";
 
 /** Paths are longer than titles and are not shortened to the same length. */
 const MAX_PATH_LENGTH = 160;
@@ -67,10 +67,13 @@ export function createPreviewBuilder(
   cwd: string,
   canonicalCwd: string = cwd,
   identity?: RepoIdentity,
+  recordedDirectories: readonly string[] = [],
 ): PreviewBuilder {
   return {
     async build(plan: TransferPlan): Promise<PreviewContent> {
       const collected: PreviewWarning[] = planWarnings(plan);
+      const fromDirectory = await directoryWarning(recordedDirectories, canonicalCwd);
+      if (fromDirectory !== null) collected.push(fromDirectory);
       const fromRepo = await repoWarning(plan, repo, cwd, identity);
       if (fromRepo !== null) collected.push(fromRepo);
       const warnings = sortWarnings(collected);

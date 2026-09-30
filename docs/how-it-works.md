@@ -60,9 +60,13 @@ If pinned content exceeds the budget, the preview is blocked. The error names th
 
 ## Repository scope
 
-Discovery compares each session's recorded repository path with the current repository. This prevents a row number, session ID, or file path from selecting unrelated work.
+Discovery compares canonical Git common-directory identities, not checkout names or path prefixes. Main checkouts and linked worktrees match regardless of placement, including subdirectories and symlink aliases. Independent clones, submodules, and nested independent repositories remain separate. Lists, rows, session IDs, and file paths all apply this same check, including alternate source profiles.
 
-A session without repository metadata is reported as skipped. A source home that cannot be read is also reported; one bad home does not hide sessions from other homes.
+Claude supplies distinct directories recorded by its active main conversation, excluding sidechains and discarded ancestry. Codex and Pi supply the directory from their session header. At least one matching directory is required, and any resolved conflicting repository excludes the session. Existing exact-directory matching remains available when there is no conflicting Git identity. Missing paths and unresolved Git lookups are not positive evidence; the importer never infers membership from a missing path's parent.
+
+Sessions without usable metadata, conflicting directory evidence, source lookup failures, and unreadable homes are reported without hiding unaffected sessions. Destination operational failures stop the request. A bare repository cannot be the destination, but its linked worktrees can.
+
+The preview shows the canonical destination directory and warns if a surviving recorded directory differs, even at identical HEAD. Conversation import does not transfer uncommitted work, switch branches, or recreate removed worktrees. Writers retain the destination agent's native directory spelling. Confirmation binds the canonical destination and repository identity and rechecks current membership; it cannot move an import to another worktree using an old token.
 
 ## Commit and landing
 

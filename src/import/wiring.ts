@@ -47,8 +47,8 @@ export function buildStages(deps: ImportPipelineDeps): PipelineStages {
       const identity = await deps.repo.identify(canonicalCwd);
       return { cwd, canonicalCwd, identity };
     },
-    previewFor: ({ cwd, canonicalCwd, identity }) =>
-      createPreviewBuilder(deps.repo, cwd, canonicalCwd, identity),
+    previewFor: ({ cwd, canonicalCwd, identity }, descriptor) =>
+      createPreviewBuilder(deps.repo, cwd, canonicalCwd, identity, descriptor.repoPaths),
     lander: createSessionLander(
       deps.handoverCommand === undefined ? {} : { handoverCommand: deps.handoverCommand },
     ),

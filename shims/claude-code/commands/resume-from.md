@@ -20,6 +20,27 @@ shell-quoted argv item after `--`. Never interpolate the raw argument string int
 
     node "${CLAUDE_PLUGIN_ROOT}/dist/bin.js" --target-agent claude-code --
 
+## Destination and source profiles
+
+Start the destination agent in the directory whose files you intend to edit, including a checkout
+subdirectory. Sessions from the main checkout and linked worktrees match through their shared Git
+repository identity, whether the worktree is nested, sibling, or in an arbitrary external directory.
+Independent clones, nested independent repositories, and submodules do not share that identity.
+
+Use `claude --home /path/to/alternate-profile` as the source arguments to import from another
+Claude Code profile; `--home` selects the source home, not the destination directory or target profile.
+The same repository check applies to lists, rows, session IDs, and file paths.
+
+Check `Destination:` in the preview and show all directory warnings and selection diagnostics.
+Conversation imports do not transfer uncommitted work, switch branches, or recreate removed
+worktrees. A missing or moved worktree is discoverable only when another recorded directory still
+identifies this repository (or a recorded path resolves at its new location); historical paths alone
+cannot prove membership. Never infer membership from a missing path's parent or remap it yourself.
+
+Preview and confirm in the same destination directory. If the destination or repository evidence
+changes, get a fresh preview and let the user confirm again. Run the native resume command from that
+destination directory with the same target profile.
+
 ## How to read what came back
 
 **Help text** — the user passed `--help` or `-h`. Show the selectors, options, and examples exactly
@@ -29,7 +50,7 @@ as printed. No follow-up is required.
 they want. Each row shows the agent, the home, the time, the title and the turn count.
 
 **A preview** — the user named a session. It states how many turns cross over, how many were
-dropped, the token budget against this window, and any warnings. **Nothing has been written yet.**
+dropped, the destination directory, the token budget against this window, and any warnings. **Nothing has been written yet.**
 The tool prints the exact confirmation command, including its opaque token. Show that command unchanged.
 
 **A landing result** — the import ran. The tool prints the new session ID and the native command

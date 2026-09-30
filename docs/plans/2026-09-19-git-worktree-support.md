@@ -210,11 +210,11 @@ Depends on Task 4. Scope: host/CLI/Pi integration tests and fixture support.
 Depends on Task 5. Scope: command/prompt instruction sources, user docs, package
 checks, and final verification of this change.
 
-- [ ] Update `shims/claude-code/commands/resume-from.md`, `shims/codex/prompts/resume-from.md`, and relevant README/workflow/troubleshooting docs. This checkout has no standalone `SKILL.md`; update these actual packaged instruction sources rather than inventing a new skill entrypoint.
-- [ ] Explain alternate-profile imports and all worktree placements. Tell users to start the destination agent in the directory whose files they intend to edit; describe missing-worktree limitations and that imports do not move uncommitted changes or switch branches. Preserve the existing preview/confirmation flow.
-- [ ] Ensure preview/selection diagnostics are exposed consistently by CLI and Pi; add or update instruction/package assertions where existing checks cover these outputs.
-- [ ] Run all final validation commands below and verify staged Claude/Codex packages contain the changed instruction sources and runtime. Do not publish, merge, install plugins, or modify real profile data.
-- [ ] Perform the fixture CLI preview/confirmed-import verification, review the final diff against the acceptance matrix, and record passed checks plus any explicit skips. Mark tasks complete only after their required checks pass.
+- [x] Update `shims/claude-code/commands/resume-from.md`, `shims/codex/prompts/resume-from.md`, and relevant README/workflow/troubleshooting docs. This checkout has no standalone `SKILL.md`; update these actual packaged instruction sources rather than inventing a new skill entrypoint.
+- [x] Explain alternate-profile imports and all worktree placements. Tell users to start the destination agent in the directory whose files they intend to edit; describe missing-worktree limitations and that imports do not move uncommitted changes or switch branches. Preserve the existing preview/confirmation flow.
+- [x] Ensure preview/selection diagnostics are exposed consistently by CLI and Pi; add or update instruction/package assertions where existing checks cover these outputs.
+- [x] Run all final validation commands below and verify staged Claude/Codex packages contain the changed instruction sources and runtime. Do not publish, merge, install plugins, or modify real profile data.
+- [x] Perform the fixture CLI preview/confirmed-import verification, review the final diff against the acceptance matrix, and record passed checks plus any explicit skips. Mark tasks complete only after their required checks pass.
 
 ## Acceptance tests
 

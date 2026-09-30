@@ -245,3 +245,34 @@ if (codexPrompt.includes("__RESUME_FROM_VERSION__") || !codexPrompt.includes(`re
   throw new Error("Codex prompt does not pin the matching core CLI version.");
 }
 assertNoRawArgumentInterpolation(resolve(repoRoot, "build/npm/codex/prompts/resume-from.md"));
+
+// Check the actual staged instructions, including Codex's sole intentional transformation.
+for (const [contents, source] of [
+  [claudeCommand, "shims/claude-code/commands/resume-from.md"],
+  [codexPrompt, "shims/codex/prompts/resume-from.md"],
+]) {
+  const expected = readFileSync(resolve(repoRoot, source), "utf8")
+    .replaceAll("__RESUME_FROM_VERSION__", version);
+  if (contents !== expected) throw new Error(`${source} was not faithfully packaged.`);
+  for (const required of [
+    "Start the destination agent in the directory whose files you intend to edit",
+    "nested, sibling, or in an arbitrary external directory",
+    "--home",
+    "historical paths alone",
+    "Destination:",
+    "selection diagnostics",
+    "transfer uncommitted work, switch branches, or recreate removed",
+    "Never add `--confirm`",
+  ]) {
+    if (!contents.includes(required)) throw new Error(`${source} is missing instruction: ${required}`);
+  }
+}
+
+// Claude bundles the runtime; Codex deliberately uses the version-pinned core package above.
+for (const runtime of ["build/npm/claude/dist/bin.js", "dist/import/preview/warnings.js"]) {
+  const contents = readFileSync(resolve(repoRoot, runtime), "utf8");
+  if (!contents.includes("The source session records a different directory")) {
+    throw new Error(`${runtime} is missing the worktree preview runtime.`);
+  }
+}
+console.log("packaged instruction sources and worktree preview runtime checks passed");

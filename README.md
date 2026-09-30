@@ -33,7 +33,7 @@ The source session is never changed.
 - **The current context is too large.** Import a budgeted history into a fresh native session.
 - **You want an independent handoff.** Create a target-side copy for continued work or review while preserving the original session.
 
-`resume-from` moves conversation context. It does not copy the repository or migrate a running process. The target agent must have access to the same working tree.
+`resume-from` moves conversation context. It does not copy the repository, transfer uncommitted work, switch branches, recreate removed worktrees, or migrate a running process. The destination can be the same checkout or another linked worktree of the same Git repository.
 
 ## Supported transfers
 
@@ -105,7 +105,11 @@ The Codex prompt runs the matching published `resume-from` package through `npx`
 
 ## Run the first transfer
 
-Run the command from the Git repository that owns the source session.
+Start the destination agent in the directory whose files you intend to edit, including a checkout subdirectory. Main checkouts and linked worktrees share session discovery regardless of nested, sibling, or arbitrary external placement. Independent clones, submodules, and nested independent repositories remain separate.
+
+For an alternate source profile in Claude Code or Codex, use `/resume-from claude --home ~/.claude-team`; this changes the source home, not the target profile or destination directory. In Pi, configure the source profile in [`extraHomes`](docs/configuration.md#add-another-profile).
+
+Check the preview's canonical `Destination:` directory and warnings before confirming. Imports keep the destination agent's directory. A removed or moved source worktree needs a surviving recorded path that still identifies this repository; missing historical paths alone are insufficient. See [worktree workflows](docs/workflows.md#continue-in-another-worktree).
 
 ### In Pi
 

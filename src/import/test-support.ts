@@ -813,8 +813,8 @@ export function instrument(deps: ImportPipelineDeps): Instrumented {
       },
       plans,
     ),
-    previewFor: (destination) => {
-      const builder = stages.previewFor(destination);
+    previewFor: (destination, descriptor) => {
+      const builder = stages.previewFor(destination, descriptor);
       return {
         build: (plan) => {
           order.push("preview.build");

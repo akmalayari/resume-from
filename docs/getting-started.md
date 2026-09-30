@@ -32,7 +32,7 @@ The Codex prompt uses a pinned package through `npx`. Its first use needs access
 
 ## 2. Open the repository in the destination agent
 
-Start the destination agent in the same Git repository as the source session. Choose the destination model, provider, and profile before importing.
+Start the destination agent in the directory whose files you intend to edit, including a checkout subdirectory. It may be the source checkout or another linked worktree of the same Git repository, whether nested, sibling, or at an arbitrary external location. Choose the destination model, provider, and profile before importing. Conversation import does not transfer uncommitted work, switch branches, or recreate removed worktrees. See [worktree limitations](workflows.md#continue-in-another-worktree).
 
 Session discovery is repository-scoped. A known session ID or file path still has to belong to the current repository.
 
@@ -91,6 +91,7 @@ Pi uses its native picker for discovery and accepts a session ID or path directl
 Before confirmation, verify:
 
 - Source agent, profile, session, repository, and commit warning.
+- Canonical `Destination:` directory and any recorded-directory warning. Confirm in this same directory and use it for the native resume command.
 - Kept and dropped turn counts.
 - Tool-result bodies removed.
 - Estimated tokens and target budget.
