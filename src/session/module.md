@@ -93,6 +93,11 @@ interface SessionDescriptor {
   repoPath: string | null;
   /** Distinct absolute recorded directories, ordered by first appearance in the active conversation. */
   repoPaths: string[];
+  /**
+   * Absolute directory of the session’s earliest non-sidechain record, when the format records one.
+   * Discovery matches it as a last resort, so a session that started here is still listed here.
+   */
+  startDirectory: string | null;
   /** Absolute path of the source file. Lets the user select by path (FR-12). */
   filePath: string;
 }
@@ -248,6 +253,11 @@ The changes this boundary is designed to absorb:
   required array of distinct absolute recorded directories in first-appearance order. Keep native
   spelling and missing paths; do not resolve, canonicalize, or infer paths during extraction.
   `repoPath` is always `repoPaths[0] ?? null`, even when the first candidate no longer exists.
+- **`SessionDescriptor.startDirectory` is the session's own first directory, not a candidate.** It is
+  the absolute directory of the earliest record that is not a sidechain, or null when the format
+  records none. Discovery checks it only when no recorded candidate matched and none conflicted, so a
+  session that started in this directory stays listed here after its active conversation moved into a
+  subdirectory. It never contributes conflicting-identity evidence.
   Claude uses only the active main ancestry, excluding sidechains before extracting metadata.
   Codex and Pi use a singleton header cwd, or an empty array without valid absolute metadata.
   Prose, tool arguments and encoded project directory names never supply candidates. Repository

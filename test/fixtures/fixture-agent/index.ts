@@ -249,6 +249,7 @@ export function createFixtureAgentAdapter(options: FixtureAgentOptions = {}): Ag
             turnCount: 0,
             repoPath: null,
             repoPaths: [],
+            startDirectory: null,
             filePath,
           });
           continue;
@@ -261,6 +262,7 @@ export function createFixtureAgentAdapter(options: FixtureAgentOptions = {}): Ag
           turnCount: threadTurns(thread).turns.length,
           repoPath: path.isAbsolute(thread.workspace) ? thread.workspace : null,
           repoPaths: path.isAbsolute(thread.workspace) ? [thread.workspace] : [],
+          startDirectory: path.isAbsolute(thread.workspace) ? thread.workspace : null,
           filePath,
         });
       }

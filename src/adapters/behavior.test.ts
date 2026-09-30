@@ -181,6 +181,7 @@ describe("T-ADA-22 — an adapter with one role only", () => {
         turnCount: 0,
         repoPath: null,
         repoPaths: [],
+        startDirectory: null,
         filePath: path.join(home, `x${FIXTURE_FILE_SUFFIX}`),
       }),
     ).rejects.toThrow(/source/);

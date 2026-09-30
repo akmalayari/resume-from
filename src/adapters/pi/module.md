@@ -93,6 +93,11 @@ interface SessionDescriptor {
   repoPath: string | null;
   /** Distinct absolute recorded directories, ordered by first appearance in the active conversation. */
   repoPaths: string[];
+  /**
+   * Absolute directory of the session’s earliest non-sidechain record, when the format records one.
+   * Discovery matches it as a last resort, so a session that started here is still listed here.
+   */
+  startDirectory: string | null;
   /** Absolute path of the source file. Lets the user select by path (FR-12). */
   filePath: string;
 }
@@ -412,7 +417,7 @@ None of these touch a rule, a preview, another adapter, or the host.
 
 ## Constraints and Invariants
 
-- **Directory candidates come only from the session header cwd.** Emit `repoPaths` as a singleton for a valid absolute cwd, otherwise `[]`; `repoPath = repoPaths[0] ?? null`. Preserve missing paths without filesystem lookup. Body entries, tool arguments, prose and encoded session-directory names never supply candidates. Valid header evidence is retained even for truncated or broken-graph sessions; these keep their unreadable title, zero turns and load refusal.
+- **Directory candidates come only from the session header cwd.** Emit `repoPaths` as a singleton for a valid absolute cwd, otherwise `[]`; `repoPath = repoPaths[0] ?? null`. Preserve missing paths without filesystem lookup. Body entries, tool arguments, prose and encoded session-directory names never supply candidates. Valid header evidence is retained even for truncated or broken-graph sessions; these keep their unreadable title, zero turns and load refusal. `startDirectory` is that same header cwd, because a Pi session records the directory it opened in.
 
 - **The required serialization context supplies header cwd and session-directory placement.** Preserve its native absolute subdirectory and symlink spelling; never substitute process or factory cwd.
 

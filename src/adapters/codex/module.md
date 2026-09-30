@@ -116,6 +116,11 @@ interface SessionDescriptor {
   repoPath: string | null;
   /** Distinct absolute recorded directories, ordered by first appearance in the active conversation. */
   repoPaths: string[];
+  /**
+   * Absolute directory of the session’s earliest non-sidechain record, when the format records one.
+   * Discovery matches it as a last resort, so a session that started here is still listed here.
+   */
+  startDirectory: string | null;
   /** Absolute path of the source file. Lets the user select by path (FR-12). */
   filePath: string;
 }
@@ -410,7 +415,7 @@ None of these touch a rule, a preview, another adapter, or the host.
 
 ## Constraints and Invariants
 
-- **Directory candidates come only from the session metadata header cwd.** Emit `repoPaths` as a singleton for a valid absolute cwd, otherwise `[]`; `repoPath = repoPaths[0] ?? null`. Preserve missing paths without filesystem lookup. Body entries, tool arguments, prose and storage-directory names never supply candidates.
+- **Directory candidates come only from the session metadata header cwd.** Emit `repoPaths` as a singleton for a valid absolute cwd, otherwise `[]`; `repoPath = repoPaths[0] ?? null`. Preserve missing paths without filesystem lookup. Body entries, tool arguments, prose and storage-directory names never supply candidates. `startDirectory` is that same header cwd: a Codex thread records no earlier directory.
 
 - **The required serialization context supplies `session_meta.cwd`.** Preserve its native absolute subdirectory and symlink spelling. Rollout placement remains under the target profile’s dated sessions directory; factory deps supply IDs, never cwd.
 

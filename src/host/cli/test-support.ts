@@ -27,6 +27,7 @@ export function descriptor(overrides: Partial<SessionDescriptor> = {}): SessionD
     turnCount: 12,
     repoPath: REPO_ROOT,
     repoPaths: [REPO_ROOT],
+    startDirectory: REPO_ROOT,
     filePath: "/Users/me/.codex/sessions/sess-1.jsonl",
     ...overrides,
   };

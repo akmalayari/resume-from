@@ -71,6 +71,8 @@ export interface SessionReadResult {
   updatedAt: string | null;
   repoPath: string | null;
   repoPaths: string[];
+  /** First non-sidechain absolute `cwd` of the whole file, not only the active chain (issue #5). */
+  startDirectory: string | null;
   branch: string | null;
   changedPaths: string[];
 }
@@ -409,9 +411,24 @@ export function readSessionText(text: string): SessionReadResult {
     updatedAt: stamps[stamps.length - 1] ?? null,
     repoPath: [...repoPaths][0] ?? null,
     repoPaths: [...repoPaths],
+    startDirectory: startDirectoryOf(parsed.entries),
     branch,
     changedPaths,
   };
+}
+
+/**
+ * The directory the session started in, from the whole file rather than the active chain (issue #5).
+ * A session resumed in another directory keeps this one, and Claude's own project directory is
+ * derived from it, so the session stays listed beside the sessions that started there.
+ */
+function startDirectoryOf(entries: RawEntry[]): string | null {
+  for (const entry of entries) {
+    if (entry.isSidechain === true) continue;
+    const cwd = asString(entry.cwd);
+    if (cwd !== null && isAbsolute(cwd)) return cwd;
+  }
+  return null;
 }
 
 /** One row per session file of the home, newest first (FR-11, FR-14). */
@@ -440,6 +457,7 @@ export async function listSessions(home: HomePath): Promise<SessionDescriptor[]>
       turnCount: broken ? 0 : read.turns.length,
       repoPath: read.repoPath,
       repoPaths: read.repoPaths,
+      startDirectory: read.startDirectory,
       filePath: file,
     });
   }

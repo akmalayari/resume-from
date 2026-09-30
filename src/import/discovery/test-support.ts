@@ -24,6 +24,7 @@ export interface FixtureSession {
   updatedAt: string;
   repoPath: string | null;
   repoPaths?: string[];
+  startDirectory?: string | null;
   title?: string;
   startedAt?: string;
   turns?: CanonicalTurn[];
@@ -97,6 +98,9 @@ export function makeStubAdapter(options: StubAdapterOptions): StubAdapter {
           repoPaths:
             raw.repoPaths ??
             (raw.repoPath !== null && path.isAbsolute(raw.repoPath) ? [raw.repoPath] : []),
+          startDirectory:
+            raw.startDirectory ??
+            (raw.repoPath !== null && path.isAbsolute(raw.repoPath) ? raw.repoPath : null),
           filePath,
         });
       }

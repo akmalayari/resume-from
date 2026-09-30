@@ -522,6 +522,43 @@ describe("recorded repository directory candidates", () => {
     expect(read.repoPath).toBe(REPO);
   });
 
+  it("keeps the session's start directory out of the active candidates (issue #5)", () => {
+    const read = readSessionText(
+      [
+        { ...message("started here", CTX), uuid: "root", parentUuid: null },
+        {
+          ...message("resumed in a subdirectory", { ...CTX, cwd: `${REPO}/backend` }),
+          uuid: "resumed",
+          parentUuid: null,
+        },
+      ]
+        .map((entry) => JSON.stringify(entry))
+        .join("\n"),
+    );
+
+    expect(read.repoPaths).toEqual([`${REPO}/backend`]);
+    expect(read.repoPath).toBe(`${REPO}/backend`);
+    expect(read.startDirectory).toBe(REPO);
+  });
+
+  it("takes the start directory from the first record that is not a sidechain", () => {
+    const read = readSessionText(
+      [
+        {
+          ...message("sidechain", { ...CTX, cwd: OTHER_REPO }),
+          uuid: "side",
+          parentUuid: null,
+          isSidechain: true,
+        },
+        { ...message("root", CTX), uuid: "root", parentUuid: null },
+      ]
+        .map((entry) => JSON.stringify(entry))
+        .join("\n"),
+    );
+
+    expect(read.startDirectory).toBe(REPO);
+  });
+
   it("lists recorded candidates without inferring the encoded project directory", async () => {
     const home = await makeThrowawayHome();
     await writeSessionFile(home, OTHER_REPO, "candidates", [
@@ -532,5 +569,6 @@ describe("recorded repository directory candidates", () => {
     const [descriptor] = await createClaudeCodeAdapter().listSessions(home);
     expect(descriptor?.repoPaths).toEqual(["/removed/worktree", REPO]);
     expect(descriptor?.repoPath).toBe("/removed/worktree");
+    expect(descriptor?.startDirectory).toBe("/removed/worktree");
   });
 });

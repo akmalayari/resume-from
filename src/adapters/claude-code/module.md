@@ -93,6 +93,11 @@ interface SessionDescriptor {
   repoPath: string | null;
   /** Distinct absolute recorded directories, ordered by first appearance in the active conversation. */
   repoPaths: string[];
+  /**
+   * Absolute directory of the session’s earliest non-sidechain record, when the format records one.
+   * Discovery matches it as a last resort, so a session that started here is still listed here.
+   */
+  startDirectory: string | null;
   /** Absolute path of the source file. Lets the user select by path (FR-12). */
   filePath: string;
 }
@@ -379,6 +384,7 @@ None of these touch a rule, a preview, another adapter, or the host.
 ## Constraints and Invariants
 
 - **Directory metadata comes only from the active main ancestry.** Resolve the active parent path and exclude sidechains before extracting cwd. Emit each distinct absolute cwd in first-appearance order as `repoPaths`, with `repoPath = repoPaths[0] ?? null`. Preserve missing paths and unrelated repository candidates; ignore relative/invalid cwd, discarded ancestry, prose, tool arguments and encoded project directory names. Extraction does not decide repository membership.
+- **The start directory comes from the whole file, not the active chain.** `startDirectory` is the earliest non-sidechain absolute `cwd` in the file, which is what Claude's own project directory is derived from. It is deliberately not merged into `repoPaths`: a session resumed in a subdirectory keeps the directory it started in, and its active directories stay exactly the evidence they were (issue #5).
 
 - **The required serialization context supplies destination cwd.** Preserve that native absolute path in transcript cwd and encoded project placement, including subdirectories and symlink spelling; no process or factory cwd fallback is allowed.
 

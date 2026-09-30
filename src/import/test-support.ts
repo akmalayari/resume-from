@@ -328,6 +328,10 @@ export function createStubAdapter(options: StubAdapterOptions): AgentAdapter {
             parsed.header.repoPath !== null && path.isAbsolute(parsed.header.repoPath)
               ? [parsed.header.repoPath]
               : [],
+          startDirectory:
+            parsed.header.repoPath !== null && path.isAbsolute(parsed.header.repoPath)
+              ? parsed.header.repoPath
+              : null,
           filePath,
         });
       }
@@ -553,6 +557,7 @@ export function recordingStages(overrides: Partial<PipelineStages> = {}): StageR
     turnCount: 1,
     repoPath: "/repo",
     repoPaths: ["/repo"],
+    startDirectory: "/repo",
     filePath: "/homes/codex/sessions/session-1.jsonl",
   };
   const session: CanonicalSession = {

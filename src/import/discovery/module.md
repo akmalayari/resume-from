@@ -46,7 +46,10 @@ Low volatility is what makes the several distance-2 contract integrations of thi
   home, and that this ordering is deterministic and reproducible, because FR-10 lets the user come
   back in a second invocation and name row 3.
 - **The repository filter.** Resolve every recorded `repoPaths` candidate and the destination.
-  Membership is `(matchingGitIdentity || sameDirectory) && !conflictingGitIdentity`.
+  Membership is `(matchingGitIdentity || sameDirectory) && !conflictingGitIdentity`. When no candidate
+  matched at all, and none conflicted, the session's own `startDirectory` is checked as a last
+  resort, so a session that started in this directory stays listed here after its active conversation
+  moved into a subdirectory (issue #5).
   Git identity is the canonical common directory, not a checkout root or object store. Missing
   candidates and completed nonzero Git lookups are neutral; every cross-directory match needs
   positive common-directory evidence. An exact existing directory remains a fallback, but if the
@@ -92,6 +95,11 @@ interface SessionDescriptor {
   repoPath: string | null;
   /** Distinct absolute recorded directories, ordered by first appearance in the active conversation. */
   repoPaths: string[];
+  /**
+   * Absolute directory of the session’s earliest non-sidechain record, when the format records one.
+   * Discovery matches it as a last resort, so a session that started here is still listed here.
+   */
+  startDirectory: string | null;
   /** Absolute path of the source file. Lets the user select by path (FR-12). */
   filePath: string;
 }
@@ -417,6 +425,9 @@ Changes that require **only this module** to change:
   candidates without a positive match produce `Listing.failures`. Selection errors include these
   diagnostics when no row/ID/path can be selected. No worktree-name, prefix, remote, object-store,
   ancestor or registry heuristics establish membership.
+- **The start directory is a last resort, not a candidate.** It is checked only when no recorded
+  candidate matched and none conflicted, so it resolves missing evidence and never overrides a match
+  or a conflict. It never joins `repoPaths`, so it cannot create a conflict either.
 - **Lookups are shared only within one listing.** Promise caches keyed by canonical directory share
   repository lookups (including rejections) across sessions/homes and symlink aliases. An additional
   spelling cache shares canonicalization failures and missing paths. The next list or resolve starts
@@ -616,3 +627,11 @@ Tests use stub adapters over fixture homes and real temporary Git repositories/w
   destination failures reject. Cancellation rejects list and every selector despite matching rows.
 - Repeated paths, symlink aliases, unresolved/missing candidates and failures share lookups within
   one listing. Later listings refresh lookups and observe replaced identities or recovered paths.
+
+**T-DIS-30 — a session that started here is still found here**
+
+- Scenario: a session whose recorded candidates are a subdirectory of the destination and whose own
+  `startDirectory` is that destination, beside a session whose `startDirectory` is elsewhere.
+- Expected behavior: the first is listed and resolvable while the second stays out with its
+  diagnostic, and a conflicting candidate identity excludes a session even when its `startDirectory`
+  is this directory (issue #5).

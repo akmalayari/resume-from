@@ -38,6 +38,7 @@ function descriptor(over: Partial<SessionDescriptor> = {}): SessionDescriptor {
     turnCount: over.turnCount ?? 7,
     repoPath: over.repoPath ?? "/repo",
     repoPaths: over.repoPaths ?? [over.repoPath ?? "/repo"],
+    startDirectory: over.startDirectory ?? over.repoPath ?? "/repo",
     filePath: over.filePath ?? "/Users/me/.pi/sessions/s-1.json",
   };
 }

@@ -121,6 +121,7 @@ function describe(
       turnCount: 0,
       repoPath: repoPaths[0] ?? null,
       repoPaths,
+      startDirectory: repoPaths[0] ?? null,
       filePath,
     };
   }
@@ -135,6 +136,7 @@ function describe(
     turnCount: loaded.turns.length,
     repoPath: repoPaths[0] ?? null,
     repoPaths,
+    startDirectory: repoPaths[0] ?? null,
     filePath,
   };
 }

@@ -260,6 +260,8 @@ again with a number.
 **FR-13** — The list holds only sessions that ran in the current repository.
 
 > Test: Start the command in repository A. No session of repository B appears.
+> Test: A session that started in A stays listed in A after it was resumed in a subdirectory of A,
+> and a conflicting recorded repository identity still excludes it (issue #5).
 
 **FR-14** — The most recent session is the first row.
 

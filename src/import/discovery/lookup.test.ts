@@ -1,6 +1,7 @@
 import { realpath, rm } from "node:fs/promises";
 import path from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import type { RepoIdentity } from "../../platform/repo/contract.js";
 import { createRepoReader } from "../../platform/repo/index.js";
 import { createSessionFinder } from "./finder.js";
 import { makeDir, makeFixtureRoot, makeStubAdapter, writeSession } from "./test-support.js";
@@ -210,3 +211,61 @@ it.each([undefined, new Error("custom stop"), "stop"])(
     ).rejects.toMatchObject({ name: "AbortError", cause: controller.signal.reason });
   },
 );
+
+const scope = () => ({ repoRoot: destination, onlyAgent: null, onlyHome: null });
+
+function discoveryOf(identify: (directory: string) => Promise<RepoIdentity>) {
+  return createSessionFinder({
+    adapters: [makeStubAdapter({ agent: "pi", defaultHome: home })],
+    config: { extraHomes: [] },
+    repo: { checkCancellation() {}, identify },
+  });
+}
+
+it("lists a session whose start directory is this one when no candidate matches (T-DIS-30)", async () => {
+  const subdirectory = await makeDir(destination, "backend");
+  const elsewhere = await makeDir(root, "elsewhere");
+  await writeSession(home, {
+    id: "started-here",
+    repoPath: subdirectory,
+    repoPaths: [subdirectory],
+    startDirectory: destination,
+    updatedAt: "2026-01-02",
+  });
+  await writeSession(home, {
+    id: "started-elsewhere",
+    repoPath: subdirectory,
+    repoPaths: [subdirectory],
+    startDirectory: elsewhere,
+    updatedAt: "2026-01-01",
+  });
+
+  const listing = await discoveryOf(async () => unresolved).list(scope());
+
+  expect(listing.rows.map((row) => row.ref.id)).toEqual(["started-here"]);
+  expect(listing.failures.map((failure) => failure.message)).toEqual([
+    "session started-elsewhere has unresolved recorded directories with no matching repository evidence",
+  ]);
+});
+
+it("does not let a start directory override conflicting candidate identity (T-DIS-30)", async () => {
+  const otherRepo = await makeDir(root, "other-repo");
+  const active = await makeDir(otherRepo, "src");
+  await writeSession(home, {
+    id: "ambiguous",
+    repoPath: active,
+    repoPaths: [active],
+    startDirectory: destination,
+    updatedAt: "2026-01-01",
+  });
+
+  const listing = await discoveryOf(async (directory) => ({
+    ...unresolved,
+    commonDir: directory.startsWith(otherRepo) ? `${otherRepo}/.git` : `${destination}/.git`,
+  })).list(scope());
+
+  expect(listing.rows).toEqual([]);
+  expect(listing.failures.map((failure) => failure.message)).toEqual([
+    "session ambiguous has conflicting repository identity evidence; its recorded directories cannot unambiguously belong to this destination",
+  ]);
+});

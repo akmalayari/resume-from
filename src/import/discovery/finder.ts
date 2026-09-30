@@ -50,6 +50,14 @@ interface DirectoryEvidence {
 
 type Lookup = (directory: string) => Promise<DirectoryEvidence | null>;
 
+/** One recorded directory against this destination: the same directory, or the same repository. */
+function isMatch(evidence: DirectoryEvidence, destination: DirectoryEvidence | null): boolean {
+  return (
+    evidence.directory === destination?.directory ||
+    (evidence.commonDir !== null && evidence.commonDir === destination?.commonDir)
+  );
+}
+
 function isCancellation(reason: unknown): boolean {
   return reason instanceof Error && reason.name === "AbortError";
 }
@@ -103,8 +111,7 @@ export function createSessionFinder(deps: DiscoveryDeps): SessionFinder {
       deps.repo.checkCancellation();
       let diagnostic: string | null = null;
       try {
-        let matchingGitIdentity = false;
-        let sameDirectory = false;
+        let matched = false;
         let conflictingGitIdentity = false;
         let existing = false;
         // Do not accept early: a later candidate can disprove the membership.
@@ -112,17 +119,28 @@ export function createSessionFinder(deps: DiscoveryDeps): SessionFinder {
           const evidence = await lookup(candidate);
           if (evidence === null) continue;
           existing = true;
-          sameDirectory ||= evidence.directory === destination?.directory;
+          matched ||= isMatch(evidence, destination);
           if (evidence.commonDir !== null) {
-            matchingGitIdentity ||= evidence.commonDir === destination?.commonDir;
             conflictingGitIdentity ||= evidence.commonDir !== destination?.commonDir;
           }
         }
-        if (conflictingGitIdentity) {
+        // The primary decision (FR-13): a match includes, a conflict excludes, and a match never
+        // overrides a conflict.
+        const matchedHere = matched && !conflictingGitIdentity;
+        // The start directory is a last resort: it settles the case where no recorded candidate
+        // matched at all, and it never overrides a match or a conflict (issue #5).
+        const startDirectory = descriptor.startDirectory;
+        const startEvidence =
+          matchedHere || conflictingGitIdentity || startDirectory === null
+            ? null
+            : await lookup(startDirectory);
+        const startedHere = startEvidence !== null && isMatch(startEvidence, destination);
+
+        if (matchedHere || startedHere) {
+          rows.push(descriptor);
+        } else if (conflictingGitIdentity) {
           diagnostic =
             "has conflicting repository identity evidence; its recorded directories cannot unambiguously belong to this destination";
-        } else if (matchingGitIdentity || sameDirectory) {
-          rows.push(descriptor);
         } else if (descriptor.repoPaths.length === 0) {
           diagnostic = "records no repository, so it cannot be listed here";
         } else {

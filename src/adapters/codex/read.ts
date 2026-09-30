@@ -240,6 +240,7 @@ export async function listCodexSessions(home: string): Promise<SessionDescriptor
       turnCount: summary.turnCount,
       repoPath: repoPaths[0] ?? null,
       repoPaths,
+      startDirectory: repoPaths[0] ?? null,
       filePath,
     });
   }

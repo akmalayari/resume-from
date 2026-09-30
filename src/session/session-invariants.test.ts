@@ -344,6 +344,7 @@ describe("boundary shapes", () => {
       turnCount: REFERENCE_SESSION.turns.length,
       repoPath: null,
       repoPaths: [],
+      startDirectory: null,
       filePath: "/home/testuser/.codex/sessions/01JQ8Z3K7M4N5P6Q7R8S9T0V1W.jsonl",
     };
 

@@ -226,6 +226,7 @@ describe.each(cases)(
         turnCount: 0,
         repoPath: null,
         repoPaths: [],
+        startDirectory: null,
         filePath: whole.absolutePath,
       };
 
