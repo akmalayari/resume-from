@@ -463,6 +463,12 @@ module.
   behaviour from `src/platform/` would violate T-ROO-7 (cross-module imports must go through
   `/contract.js`, which can export only types). The byte-equality invariant is enforced by
   `src/adapters/boundary.test.ts`; a fix in one copy must be applied to all three.
+- **Redaction is linear in the text it scans, and a key name is matched up to 64 characters.** An
+  unbounded identifier run made the key pattern backtrack over the whole run at every start position:
+  50 KB of one word took 11.8 s and 100 KB never finished, which hung the listing and the import on a
+  pasted blob or a long unbroken line. With the bound, 1.2 MB redacts in 0.7 s and 32,236 real
+  recorded texts (77.9 MB) redact byte-for-byte as before. The bound hides nothing: a longer run still
+  matches through its last 64 characters, and `isSensitiveKey` decides by the name's tail as well.
 - **`capabilities()` is pure and synchronous** and returns the same value every time. The rules read
   it more than once per import.
 - **`serialize` is deterministic given the same session, target, marker and serialization context**, except for the session

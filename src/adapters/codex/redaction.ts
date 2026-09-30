@@ -48,8 +48,12 @@ const URI_USERINFO_PATTERN = /\b([a-z][a-z0-9+.-]*:\/\/)([^\s/:@]+):([^\s/@]+)@/
 // Unquoted value requires a structural delimiter or line/string end following it, OR a digit
 // somewhere in the token (C-RED-1: "token: expired" is plain English and stays, while
 // "password: hunter2 # prod" carries a credential that must not cross even mid-line).
+// The key name is bounded at 64 characters: an unbounded identifier run makes the engine backtrack
+// over the whole run at every start position, which is quadratic on a long unbroken line (C-RED-2).
+// Nothing is hidden by the bound: a longer run still matches through its last 64 characters, and
+// `isSensitiveKey` decides by the name itself, including the `endsWith` names that live at its tail.
 const JSON_LIKE_PATTERN =
-  /(["']?)([A-Za-z_][A-Za-z0-9_-]*)\1(\s*:\s*)("[^"\r\n]*"|'[^'\r\n]*'|[^\s,;}]+(?=[,;}]|[\r\n]|$)|[^\s,;}]*\d[^\s,;}]*)/g;
+  /(["']?)([A-Za-z_][A-Za-z0-9_-]{0,63})\1(\s*:\s*)("[^"\r\n]*"|'[^'\r\n]*'|[^\s,;}]+(?=[,;}]|[\r\n]|$)|[^\s,;}]*\d[^\s,;}]*)/g;
 
 function normalizedKey(key: string): string {
   return key.toLowerCase().replaceAll(/[^a-z0-9]/g, "");

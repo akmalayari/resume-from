@@ -4,7 +4,6 @@
  * ignored (FR-28, C-4).
  */
 
-import { readFile } from "node:fs/promises";
 import { isAbsolute } from "node:path";
 import type {
   CanonicalSession,
@@ -43,7 +42,6 @@ import {
   isNotFoundError,
   KNOWN_ENTRY_TYPES,
   listRolloutFiles,
-  parseRolloutText,
   payloadType,
   readSessionMeta,
   sessionsRoot,
@@ -100,11 +98,17 @@ export class CodexRolloutUnreadableError extends Error {
 
 /** Lenient: a file cut mid-entry still yields whatever parsed, with `truncated` set. */
 export async function scanRollout(filePath: string): Promise<CodexRollout> {
-  // Whole-file read: the loader builds every turn and needs the whole dialogue anyway, and a
-  // session that cannot fit a budget is not importable. Ceiling: a rollout larger than the maximum
-  // string length fails this path with a clean error. The listing does not use it (C-13).
-  const text = await readFile(filePath, "utf8");
-  const { entries, truncated } = parseRolloutText(text);
+  // The same streamed reader the listing uses, so both call a line over the cap damage (C-13): one
+  // reader, one damage rule, and no whole file in memory. Reading stops at the first damage, because
+  // `readRollout` refuses such a file anyway.
+  const state: RolloutStreamState = { truncated: false };
+  const entries: RolloutEntry[] = [];
+  for await (const entry of streamRolloutEntries(filePath, state)) {
+    // Keep consuming after the damage so the generator finishes on its own; a consumer that
+    // abandons it mid-read leaves the file's stream open until the process's next tick.
+    if (state.truncated) continue;
+    entries.push(entry);
+  }
 
   let meta: CodexSessionMeta | null = null;
   for (const entry of entries) {
@@ -125,7 +129,7 @@ export async function scanRollout(filePath: string): Promise<CodexRollout> {
     updatedAt: toIsoUtc(lastStamp?.timestamp ?? meta?.timestamp ?? null),
     title: titleOf(firstUserTurn?.text ?? ""),
     changedPaths,
-    truncated,
+    truncated: state.truncated,
   };
 }
 
@@ -158,12 +162,12 @@ export async function summarizeRollout(filePath: string): Promise<RolloutSummary
   let firstEntryStamp: string | null = null;
   let seenEntry = false;
   let lastStamp: string | null = null;
-  let legacyTurns = 0;
-  let itemTurns = 0;
+  let messages = 0;
+  let legacyToolCalls = 0;
+  let itemToolCalls = 0;
   let summaryTurns = 0;
-  let hasItemDialogue = false;
-  let legacyTitle = "";
-  let itemTitle = "";
+  let itemStream = false;
+  let title = "";
 
   for await (const entry of streamRolloutEntries(filePath, state)) {
     if (meta === null) meta = readSessionMeta(entry);
@@ -173,6 +177,7 @@ export async function summarizeRollout(filePath: string): Promise<RolloutSummary
       firstEntryStamp = stamp;
     }
     if (stamp !== null) lastStamp = stamp;
+    if (isItemCompletedTurn(entry)) itemStream = true;
 
     const turn = classifyEntry(entry);
     switch (turn.kind) {
@@ -180,18 +185,12 @@ export async function summarizeRollout(filePath: string): Promise<RolloutSummary
         summaryTurns += 1;
         break;
       case "message":
-        if (turn.schema === "item-completed") {
-          hasItemDialogue = true;
-          itemTurns += 1;
-          if (turn.role === "user" && itemTitle === "") itemTitle = turn.text;
-        } else {
-          legacyTurns += 1;
-          if (turn.role === "user" && legacyTitle === "") legacyTitle = turn.text;
-        }
+        messages += 1;
+        if (turn.role === "user" && title === "") title = turn.text;
         break;
       case "tool-call":
-        if (turn.schema === "item-completed") itemTurns += 1;
-        else legacyTurns += 1;
+        if (turn.schema === "item-completed") itemToolCalls += 1;
+        else legacyToolCalls += 1;
         break;
       default:
         // "none" and "unknown" contribute no turn.
@@ -204,10 +203,10 @@ export async function summarizeRollout(filePath: string): Promise<RolloutSummary
     filePath,
     meta,
     // The title reaches the target's metadata, so it is redacted as the turn text is (FR-28).
-    title: titleOf(redactSensitiveText(hasItemDialogue ? itemTitle : legacyTitle)),
+    title: titleOf(redactSensitiveText(title)),
     startedAt: metaStamp ?? firstEntryStamp,
     updatedAt: lastStamp ?? metaStamp,
-    turnCount: summaryTurns + (hasItemDialogue ? itemTurns : legacyTurns),
+    turnCount: summaryTurns + messages + itemToolCalls + (itemStream ? 0 : legacyToolCalls),
     truncated: state.truncated,
   };
 }
@@ -280,14 +279,18 @@ function titleOf(text: string): string {
 }
 
 /**
- * Two dialogue schemas exist, and a rollout speaks exactly one of them (C-7, C-12):
+ * Two dialogue schemas exist, and a rollout may even carry both (C-7, C-12):
  *
  * - the older one: messages from `event_msg` (`user_message`/`agent_message`) and tool calls from
- *   `response_item` (`function_call`/`custom_tool_call`). The same text appears in both shapes, so
- *   taking each from one place is what keeps every turn out of the session twice;
+ *   `response_item` (`function_call`/`custom_tool_call`);
  * - the `item_completed` one: every turn — user text, agent text and every tool-like action — is a
  *   single `event_msg` whose `payload.item.type` says which. Its `response_item` stream repeats the
- *   same actions, so it is not read as well, or every action would be counted twice.
+ *   same actions at a coarser granularity, so once a file speaks it, those repeats are not read as
+ *   turns.
+ *
+ * Messages are never gated by schema: a legacy thread that was resumed by a newer client carries
+ * the dialogue of both eras, and each stays readable. The repeat rule therefore applies to tool
+ * calls only.
  *
  * Reasoning, in either shape, produces nothing at all (C-4, FR-28, NG-8). Which entries count is
  * settled by `classifyEntry`, the same function the selection list counts with.
@@ -297,8 +300,8 @@ function toCanonicalTurns(entries: RolloutEntry[]): {
   skippedEntries: number;
   changedPaths: string[];
 } {
-  const schema = dialogueSchemaOf(entries);
-  const outputs = schema === "legacy" ? callOutputs(entries) : new Map<string, string>();
+  const itemStream = entries.some(isItemCompletedTurn);
+  const outputs = itemStream ? new Map<string, string>() : callOutputs(entries);
   const turns: CanonicalTurn[] = [];
   const changed = new Set<string>();
   let skippedEntries = 0;
@@ -322,8 +325,6 @@ function toCanonicalTurns(entries: RolloutEntry[]): {
       });
       continue;
     }
-    // A rollout speaks one schema; the other stream is its repeat, not a second set of turns.
-    if (turn.schema !== schema) continue;
     if (turn.kind === "message") {
       turns.push({
         index: turns.length,
@@ -336,6 +337,8 @@ function toCanonicalTurns(entries: RolloutEntry[]): {
       });
       continue;
     }
+    // The newer schema repeats its actions in `response_item`, so those repeats are not turns.
+    if (turn.schema === "legacy" && itemStream) continue;
     const body =
       turn.schema === "item-completed" ? itemTurn(entry) : legacyCallTurn(entry, outputs);
     if (body === null) continue;
@@ -353,7 +356,7 @@ function toCanonicalTurns(entries: RolloutEntry[]): {
   return { turns, skippedEntries, changedPaths: [...changed] };
 }
 
-/** Which dialogue schema a rollout speaks (C-7, C-12). */
+/** Which stream a tool call came from (C-7, C-12). */
 type DialogueSchema = "legacy" | "item-completed";
 
 /**
@@ -362,7 +365,7 @@ type DialogueSchema = "legacy" | "item-completed";
  * cannot be counted as one thing and built as another.
  */
 type EntryTurn =
-  | { kind: "message"; schema: DialogueSchema; role: TurnRole; text: string }
+  | { kind: "message"; role: TurnRole; text: string }
   | { kind: "summary"; text: string }
   | { kind: "tool-call"; schema: DialogueSchema }
   | { kind: "none" }
@@ -372,6 +375,7 @@ type EntryTurn =
  * Classifies one entry without building anything: no record, no redaction, and no string work beyond
  * the message text a title needs. A kind this module does not understand is reported, never guessed
  * at (C-6); reasoning, compaction and activity markers are understood and carry no turn (C-4, C-12).
+ * An empty message carries no turn in either schema, so both eras agree on what a row counts.
  */
 function classifyEntry(entry: RolloutEntry): EntryTurn {
   if (!KNOWN_ENTRY_TYPES.has(entry.type)) return { kind: "unknown" };
@@ -391,7 +395,6 @@ function classifyEntry(entry: RolloutEntry): EntryTurn {
     if (typeof message !== "string" || message.trim() === "") return { kind: "none" };
     return {
       kind: "message",
-      schema: "legacy",
       role: type === CODEX_EVENT_USER_MESSAGE ? "user" : "agent",
       text: message,
     };
@@ -412,22 +415,26 @@ function itemCompletedTurn(entry: RolloutEntry): EntryTurn {
   if (item === null) return { kind: "none" };
   const itemType = typeof item.type === "string" ? item.type : "";
   const role = ITEM_MESSAGE_ROLES.get(itemType);
-  if (role !== undefined)
-    return { kind: "message", schema: "item-completed", role, text: itemContentText(item) };
+  if (role !== undefined) {
+    const text = itemContentText(item);
+    // An item the model sent no text in — an image only, for one — carries no turn, exactly as the
+    // older schema's empty message does. The era is still recognised: `isItemCompletedMessage`
+    // answers from the item type alone.
+    if (text.trim() === "") return { kind: "none" };
+    return { kind: "message", role, text };
+  }
   if (ITEM_TOOL_TURN_BUILDERS.has(itemType)) return { kind: "tool-call", schema: "item-completed" };
   return IGNORED_ITEM_TYPES.has(itemType) ? { kind: "none" } : { kind: "unknown" };
 }
 
 /**
- * The schema a rollout speaks, from the dialogue it carries (C-12). Tool-only items do not decide
- * it: a rollout is read as the newer schema only when it actually delivers dialogue that way.
+ * True when this entry records a turn as an `item_completed` item (C-12), whatever text a message
+ * carries. A file that records turns this way repeats them coarsely in `response_item`, so those
+ * repeats are not read as turns. An empty message or a kind that carries no turn marks nothing.
  */
-function dialogueSchemaOf(entries: RolloutEntry[]): DialogueSchema {
-  const carriesItemDialogue = entries.some((entry) => {
-    const turn = classifyEntry(entry);
-    return turn.kind === "message" && turn.schema === "item-completed";
-  });
-  return carriesItemDialogue ? "item-completed" : "legacy";
+function isItemCompletedTurn(entry: RolloutEntry): boolean {
+  const turn = itemCompletedTurn(entry);
+  return turn.kind === "message" || turn.kind === "tool-call";
 }
 
 /** The recorded answers of the older schema's calls, by call id (FR-25, FR-54). */

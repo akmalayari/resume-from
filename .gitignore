@@ -10,4 +10,5 @@ coverage/
 .eslintcache
 .pi/
 .pi-subagents/
+.revmux/tasks/
 docs/posts/

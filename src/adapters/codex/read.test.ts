@@ -162,15 +162,16 @@ describe("listSessions", () => {
         turnCount: 3,
       },
       {
-        name: "tool-only item_completed items beside older dialogue",
+        name: "item_completed items beside older dialogue",
         entries: [
           metaEntry(id),
           userEvent("legacy request"),
           agentEvent("legacy answer"),
+          itemCompletedUserMessage("new request"),
           itemCompletedCommandExecution(["ls"], "tool-only\n"),
         ],
         title: "legacy request",
-        turnCount: 2,
+        turnCount: 4,
       },
     ];
 
@@ -200,6 +201,26 @@ describe("listSessions", () => {
     const row = await loadOnly(home);
     expect([row.title, row.turnCount]).toEqual(["the real request", 1]);
     expect((await summarizeRollout(row.filePath)).truncated).toBe(true);
+    // The loader calls the same line damage, so the row never opens a different session.
+    await expect(adapter.loadSession(row)).rejects.toThrow(/unreadable/i);
+  });
+
+  // A stream hands over a line in pieces; an entry bigger than one chunk must still arrive whole.
+  it("reads an entry whose line is longer than one stream chunk (C-13)", async () => {
+    const home = tempHome();
+    const id = "99999999-7777-4777-8777-777777777777";
+    const long = `first line of ${"y".repeat(1200 * 1024)}`;
+    writeRollout(home, id, [
+      metaEntry(id),
+      userEvent(long),
+      userEvent("second request", "2026-08-01T09:20:00.000Z"),
+    ]);
+
+    const row = await loadOnly(home);
+    const session = await adapter.loadSession(row);
+    expect((await summarizeRollout(row.filePath)).truncated).toBe(false);
+    expect([row.turnCount, session.turns.length]).toEqual([2, 2]);
+    expect(session.turns[0]?.text).toBe(long);
   });
 
   // One unreadable rollout must not hide the rest of its home (C-13). Root can read a 0o000 file.
@@ -668,7 +689,22 @@ describe("T-COD-21 the item_completed dialogue schema", () => {
     expect(JSON.stringify(session)).not.toContain("REPLACEMENT-HISTORY-MUST-NOT-CROSS");
   });
 
-  it("does not double-count a rollout that also carries the older schema", async () => {
+  it("carries no turn for a message the model sent no text in (C-12)", async () => {
+    const home = tempHome();
+    writeRollout(home, id, [
+      metaEntry(id),
+      itemCompletedUserMessage("   "),
+      itemCompletedAgentMessage("real answer"),
+    ]);
+
+    const row = await loadOnly(home);
+    const session = await adapter.loadSession(row);
+    // Both eras drop an empty message, so the row and the session it opens agree.
+    expect(session.turns.map((turn) => turn.text)).toEqual(["real answer"]);
+    expect([row.title, row.turnCount]).toEqual(["", 1]);
+  });
+
+  it("keeps both eras' dialogue and drops the repeated actions (C-12)", async () => {
     const home = tempHome();
     writeRollout(home, id, [
       metaEntry(id),
@@ -682,9 +718,11 @@ describe("T-COD-21 the item_completed dialogue schema", () => {
     ]);
     const session = await adapter.loadSession(await loadOnly(home));
 
-    // The new schema is the sole source of turns when it carries the dialogue: the older stream's
-    // messages and calls are not read as well, or every action would cross twice.
+    // A resumed thread carries the dialogue of both eras and each stays readable. Its actions do
+    // not: once the file records them as items, the coarser `response_item` repeats are not read.
     expect(session.turns.map((turn) => turn.toolCall?.toolName ?? turn.text)).toEqual([
+      "old-schema request",
+      "old-schema answer",
       "new-schema request",
       "exec",
       "new-schema answer",
@@ -692,7 +730,7 @@ describe("T-COD-21 the item_completed dialogue schema", () => {
     expect(JSON.stringify(session)).not.toContain("OLD-SCHEMA-OUTPUT");
   });
 
-  it("reads a rollout as the older schema when item_completed carries no dialogue (C-12)", async () => {
+  it("reads a rollout with no item_completed entry as the older schema (C-12)", async () => {
     const home = tempHome();
     writeRollout(home, id, [
       metaEntry(id),
@@ -700,10 +738,32 @@ describe("T-COD-21 the item_completed dialogue schema", () => {
       functionCall("shell", '{"command":["ls"]}', "call_1"),
       functionCallOutput("call_1", "out"),
       agentEvent("legacy answer"),
-      itemCompletedCommandExecution(["ls"], "tool-only item\n"),
     ]);
     const session = await adapter.loadSession(await loadOnly(home));
 
+    expect(session.turns.map((turn) => turn.toolCall?.toolName ?? turn.text)).toEqual([
+      "legacy request",
+      "shell",
+      "legacy answer",
+    ]);
+    expect(session.turns[1]?.toolCall?.resultRecorded).toBe(true);
+  });
+
+  it("keeps the older calls when an item carries no turn (C-12)", async () => {
+    const home = tempHome();
+    writeRollout(home, id, [
+      metaEntry(id),
+      userEvent("legacy request"),
+      functionCall("shell", '{"command":["ls"]}', "call_1"),
+      functionCallOutput("call_1", "out"),
+      agentEvent("legacy answer"),
+      itemCompletedReasoning("encrypted-reasoning"),
+      itemCompletedContextCompaction(),
+    ]);
+    const session = await adapter.loadSession(await loadOnly(home));
+
+    // Reasoning and compaction carry no turn, so they do not make the item stream the source of
+    // this file's actions.
     expect(session.turns.map((turn) => turn.toolCall?.toolName ?? turn.text)).toEqual([
       "legacy request",
       "shell",

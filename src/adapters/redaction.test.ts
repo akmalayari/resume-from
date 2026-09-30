@@ -127,4 +127,24 @@ describe.each(IMPLEMENTATIONS)("%s credential redaction", (_name, redaction) => 
     expect(redacted).toContain(redaction.REDACTED_VALUE);
     expect(redacted).not.toMatch(/hunter2|abc123/);
   });
+
+  // C-RED-2: an unbounded identifier run made the key pattern backtrack over the whole run at every
+  // start position, so a single long paste cost minutes here and never finished past ~100 KB. The
+  // default test timeout is the guard against a return to that shape.
+  it("redacts a long unbroken line without scanning it quadratically (C-RED-2)", () => {
+    const line = "y".repeat(1_200_000);
+
+    expect(redaction.redactSensitiveText(line)).toBe(line);
+  });
+
+  // The bound must not hide anything: a longer run still matches through its last 64 characters, and
+  // a sensitive name is decided by its tail as well as by its whole text (C-RED-2).
+  it("redacts a sensitive key name longer than the bound through its tail (C-RED-2)", () => {
+    const longName = `${"x".repeat(58)}password`;
+    expect(longName).toHaveLength(66);
+
+    expect(redaction.redactSensitiveText(`${longName}: hunter2`)).toBe(
+      `${longName}: ${redaction.REDACTED_VALUE}`,
+    );
+  });
 });
