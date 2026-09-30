@@ -151,7 +151,7 @@ Scope: `src/platform/repo/` and consumers of its contract.
 - [x] Explicitly delete inherited `GIT_COMMON_DIR` in `gitEnv`, alongside the existing `GIT_DIR`, `GIT_WORK_TREE`, and `GIT_INDEX_FILE` exclusions. Keep array-based execution and timeout/abort controls.
 - [x] Specify completed nonzero Git results as unresolved identities; retain thrown operational failures. Handle missing paths without walking up to existing parents. Recognize bare repositories so their linked worktrees work but the bare directory itself cannot be an import destination.
 - [x] Add real Git tests for nested, sibling, and external worktrees; source/destination subdirectories; symlinks; spaces; detached/unborn HEAD; separate Git directories; bare-hosted worktrees; nested independent repositories/submodules; same-remote and shared-object clones. Add relative-output and inherited-environment regressions.
-- [ ] Update repo contracts, stubs, and fixtures. Run `pnpm exec vitest run src/platform/repo`, then the per-task gates below.
+- [x] Update repo contracts, stubs, and fixtures. Run `pnpm exec vitest run src/platform/repo`, then the per-task gates below.
 
 ### Task 2: Use one explicit destination throughout imports
 

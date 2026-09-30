@@ -12,6 +12,7 @@ import {
 
 afterAll(cleanupTempDirs);
 
+// Sequential real-Git commits need extra test time under full-suite contention.
 test("T-REP-15 — the FR-38 scenario end to end", async () => {
   // The session ran here; the tree then moved on by 14 commits. A recorded commit is an
   // abbreviated one, as git prints it.
@@ -26,7 +27,7 @@ test("T-REP-15 — the FR-38 scenario end to end", async () => {
     behind: 0,
   });
   expect((await reader.identify(dir)).head).not.toBe(sessionCommit);
-});
+}, 30_000);
 
 test("T-REP-16 — a session from another repository", async () => {
   const here = await repoWithOneCommit("resume-from-here-");

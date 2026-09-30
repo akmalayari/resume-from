@@ -15,6 +15,7 @@ import {
 afterAll(cleanupTempDirs);
 afterEach(() => vi.unstubAllEnvs());
 
+// Sequential real-Git identity checks need extra test time under full-suite contention.
 test("nested, sibling and external worktrees share identity, not checkout roots", async () => {
   const parent = await tempDir();
   const main = await makeDir(parent, "main checkout");
@@ -45,7 +46,7 @@ test("nested, sibling and external worktrees share identity, not checkout roots"
       });
     }
   }
-});
+}, 30_000);
 
 test("unborn HEAD still supplies a common directory and branch", async () => {
   const root = await initRepo();

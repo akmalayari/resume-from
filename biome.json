@@ -4,8 +4,8 @@
     "includes": [
       "**/*.ts",
       "**/*.json",
-      "!**/.pi",
-      "!**/.pi-subagents",
+      "!.pi",
+      "!.pi-subagents",
       "!build",
       "!dist",
       "!node_modules"
