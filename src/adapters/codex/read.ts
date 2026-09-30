@@ -12,6 +12,8 @@ import type {
   SessionDescriptor,
   ToolCallRecord,
   ToolEffect,
+  TurnKind,
+  TurnRole,
 } from "./contract.js";
 import { redactSensitiveArgumentsText, redactSensitiveText } from "./redaction.js";
 import type { CodexSessionMeta, RolloutEntry } from "./rollout.js";
@@ -20,11 +22,20 @@ import {
   CODEX_ENTRY_EVENT_MSG,
   CODEX_ENTRY_RESPONSE_ITEM,
   CODEX_EVENT_AGENT_MESSAGE,
+  CODEX_EVENT_ITEM_COMPLETED,
   CODEX_EVENT_USER_MESSAGE,
   CODEX_ITEM_CUSTOM_TOOL_CALL,
   CODEX_ITEM_CUSTOM_TOOL_CALL_OUTPUT,
   CODEX_ITEM_FUNCTION_CALL,
   CODEX_ITEM_FUNCTION_CALL_OUTPUT,
+  CODEX_THREAD_ITEM_AGENT_MESSAGE,
+  CODEX_THREAD_ITEM_COMMAND_EXECUTION,
+  CODEX_THREAD_ITEM_CONTEXT_COMPACTION,
+  CODEX_THREAD_ITEM_EXTENSION,
+  CODEX_THREAD_ITEM_FILE_CHANGE,
+  CODEX_THREAD_ITEM_IMAGE_VIEW,
+  CODEX_THREAD_ITEM_REASONING,
+  CODEX_THREAD_ITEM_USER_MESSAGE,
   isNotFoundError,
   KNOWN_ENTRY_TYPES,
   listRolloutFiles,
@@ -170,8 +181,15 @@ function titleOf(text: string): string {
 }
 
 /**
- * Messages come from `event_msg` and tool calls from `response_item`: the same text appears in
- * both shapes, and taking each from one place is what keeps every turn out of the session twice.
+ * Two dialogue schemas exist, and a rollout speaks exactly one of them (C-7, C-12):
+ *
+ * - the older one: messages from `event_msg` (`user_message`/`agent_message`) and tool calls from
+ *   `response_item` (`function_call`/`custom_tool_call`). The same text appears in both shapes, so
+ *   taking each from one place is what keeps every turn out of the session twice;
+ * - the `item_completed` one: every turn — user text, agent text and every tool-like action — is a
+ *   single `event_msg` whose `payload.item.type` says which. Its `response_item` stream repeats the
+ *   same actions, so it is not read as well, or every action would be counted twice.
+ *
  * Reasoning, in either shape, produces nothing at all (C-4, FR-28, NG-8).
  */
 function toCanonicalTurns(entries: RolloutEntry[]): {
@@ -179,15 +197,19 @@ function toCanonicalTurns(entries: RolloutEntry[]): {
   skippedEntries: number;
   changedPaths: string[];
 } {
+  const itemCompleted = usesItemCompletedDialogue(entries);
+
   const outputs = new Map<string, string>();
-  for (const entry of entries) {
-    if (entry.type !== CODEX_ENTRY_RESPONSE_ITEM) continue;
-    const type = payloadType(entry);
-    if (type !== CODEX_ITEM_FUNCTION_CALL_OUTPUT && type !== CODEX_ITEM_CUSTOM_TOOL_CALL_OUTPUT)
-      continue;
-    const callId = entry.payload.call_id;
-    if (typeof callId !== "string") continue;
-    outputs.set(callId, outputTextOf(entry.payload.output));
+  if (!itemCompleted) {
+    for (const entry of entries) {
+      if (entry.type !== CODEX_ENTRY_RESPONSE_ITEM) continue;
+      const type = payloadType(entry);
+      if (type !== CODEX_ITEM_FUNCTION_CALL_OUTPUT && type !== CODEX_ITEM_CUSTOM_TOOL_CALL_OUTPUT)
+        continue;
+      const callId = entry.payload.call_id;
+      if (typeof callId !== "string") continue;
+      outputs.set(callId, outputTextOf(entry.payload.output));
+    }
   }
 
   const turns: CanonicalTurn[] = [];
@@ -217,6 +239,28 @@ function toCanonicalTurns(entries: RolloutEntry[]): {
     }
 
     if (entry.type === CODEX_ENTRY_EVENT_MSG) {
+      if (itemCompleted) {
+        if (type !== CODEX_EVENT_ITEM_COMPLETED) continue;
+        const item = itemCompletedItem(entry);
+        if (item === null) continue;
+        const body = turnFromItemCompleted(item);
+        if (body === null) {
+          // Reasoning and compaction are known names that carry no turn; anything else is a kind
+          // this module does not understand, and C-6 says to count it, never guess at it.
+          if (!IGNORED_ITEM_TYPES.has(itemCompletedItemType(entry))) skippedEntries += 1;
+          continue;
+        }
+        turns.push({
+          index: turns.length,
+          role: body.role,
+          kind: body.kind,
+          text: body.text,
+          toolCall: body.toolCall,
+          timestamp: toIsoUtc(entry.timestamp),
+        });
+        for (const path of body.changedPaths) changed.add(path);
+        continue;
+      }
       if (type !== CODEX_EVENT_USER_MESSAGE && type !== CODEX_EVENT_AGENT_MESSAGE) continue;
       const message = entry.payload.message;
       if (typeof message !== "string" || message.trim() === "") continue;
@@ -233,6 +277,8 @@ function toCanonicalTurns(entries: RolloutEntry[]): {
     }
 
     if (entry.type !== CODEX_ENTRY_RESPONSE_ITEM) continue;
+    // The `item_completed` schema repeats every action here; reading it too would double them.
+    if (itemCompleted) continue;
     if (type !== CODEX_ITEM_FUNCTION_CALL && type !== CODEX_ITEM_CUSTOM_TOOL_CALL) continue;
 
     const toolName = typeof entry.payload.name === "string" ? (entry.payload.name as string) : "";
@@ -258,6 +304,228 @@ function toCanonicalTurns(entries: RolloutEntry[]): {
   }
 
   return { turns, skippedEntries, changedPaths: [...changed] };
+}
+
+/** The inner `item` of an `item_completed` entry, when the entry is one (C-12). */
+function itemCompletedItem(entry: RolloutEntry): Record<string, unknown> | null {
+  if (entry.type !== CODEX_ENTRY_EVENT_MSG) return null;
+  if (payloadType(entry) !== CODEX_EVENT_ITEM_COMPLETED) return null;
+  const item = entry.payload.item;
+  return typeof item === "object" && item !== null ? (item as Record<string, unknown>) : null;
+}
+
+function itemCompletedItemType(entry: RolloutEntry): string {
+  const type = itemCompletedItem(entry)?.type;
+  return typeof type === "string" ? type : "";
+}
+
+/**
+ * True when this rollout delivers dialogue as `item_completed` items (C-12). Tool-only items do not
+ * count: a rollout is read as the new schema only when it actually carries dialogue that way.
+ */
+function usesItemCompletedDialogue(entries: RolloutEntry[]): boolean {
+  return entries.some((entry) => {
+    const type = itemCompletedItemType(entry);
+    return type === CODEX_THREAD_ITEM_USER_MESSAGE || type === CODEX_THREAD_ITEM_AGENT_MESSAGE;
+  });
+}
+
+/** Item kinds that are understood and deliberately carry no turn (C-4, C-12). */
+const IGNORED_ITEM_TYPES: ReadonlySet<string> = new Set([
+  CODEX_THREAD_ITEM_REASONING,
+  CODEX_THREAD_ITEM_CONTEXT_COMPACTION,
+]);
+
+/** Everything one `item_completed` item contributes to a canonical turn. */
+interface ItemTurn {
+  role: TurnRole;
+  kind: TurnKind;
+  text: string;
+  toolCall: ToolCallRecord | null;
+  changedPaths: string[];
+}
+
+/**
+ * One `item_completed` item becomes one canonical turn. The kind of the call is settled by
+ * `item.type` itself, so the effect is read from that and never guessed from a tool name (FR-26).
+ * Returns null for a kind that carries no turn.
+ */
+function turnFromItemCompleted(item: Record<string, unknown>): ItemTurn | null {
+  const itemType = typeof item.type === "string" ? item.type : "";
+
+  switch (itemType) {
+    case CODEX_THREAD_ITEM_USER_MESSAGE:
+    case CODEX_THREAD_ITEM_AGENT_MESSAGE:
+      return {
+        role: itemType === CODEX_THREAD_ITEM_USER_MESSAGE ? "user" : "agent",
+        kind: "message",
+        // FR-28, security: credentials in message text must not cross to a different vendor.
+        text: redactSensitiveText(itemContentText(item)),
+        toolCall: null,
+        changedPaths: [],
+      };
+    case CODEX_THREAD_ITEM_COMMAND_EXECUTION: {
+      const output = firstString(item.aggregated_output, item.formatted_output, item.stdout);
+      return {
+        role: "agent",
+        kind: "tool-call",
+        text: "",
+        toolCall: toolCallRecord("exec", commandText(item.command), output, output !== null),
+        changedPaths: [],
+      };
+    }
+    case CODEX_THREAD_ITEM_FILE_CHANGE: {
+      const paths = objectKeys(item.changes);
+      return {
+        role: "agent",
+        kind: "tool-call",
+        text: "",
+        toolCall: itemToolCallRecord(
+          "apply_patch",
+          fileChangeArguments(item.changes),
+          `${paths.length} file(s) changed`,
+          "mutating",
+          false,
+        ),
+        changedPaths: paths,
+      };
+    }
+    case CODEX_THREAD_ITEM_EXTENSION: {
+      const results = Array.isArray(item.results) ? item.results.length : 0;
+      return {
+        role: "agent",
+        kind: "tool-call",
+        text: "",
+        toolCall: itemToolCallRecord(
+          firstNonEmptyString(item.kind) ?? "extension",
+          extensionArguments(item),
+          `${results} result(s) dropped`,
+          "read-only",
+          true,
+        ),
+        changedPaths: [],
+      };
+    }
+    case CODEX_THREAD_ITEM_IMAGE_VIEW:
+      return {
+        role: "agent",
+        kind: "tool-call",
+        text: "",
+        toolCall: itemToolCallRecord(
+          "view_image",
+          firstNonEmptyString(item.path) ?? "",
+          "image not carried",
+          "read-only",
+          false,
+        ),
+        changedPaths: [],
+      };
+    default:
+      return null;
+  }
+}
+
+/**
+ * The text of a message item. `content[].type` is `"text"` on a user message and `"Text"` on an
+ * agent message, so the text is taken from the part's own field and never by that casing.
+ */
+function itemContentText(item: Record<string, unknown>): string {
+  const content = item.content;
+  if (!Array.isArray(content)) return "";
+  return content
+    .map((part) =>
+      typeof part === "object" && part !== null
+        ? firstNonEmptyString((part as Record<string, unknown>).text)
+        : null,
+    )
+    .filter((part): part is string => part !== null)
+    .join("\n");
+}
+
+/** A Codex command is an argv array; the shell line the model wrote is its joined form. */
+function commandText(value: unknown): string {
+  if (Array.isArray(value))
+    return value.filter((part): part is string => typeof part === "string").join(" ");
+  return typeof value === "string" ? value : "";
+}
+
+/**
+ * FR-24 protects a result body, not a tool argument, and the legacy `apply_patch` call already
+ * carries the patch text it was given. A `FileChange` item is the same kind of argument, so the
+ * patch is rebuilt from it whole — path plus content — in `apply_patch`'s own shape.
+ */
+function fileChangeArguments(changes: unknown): string {
+  if (typeof changes !== "object" || changes === null) return "";
+  const parts: string[] = [];
+  for (const [path, change] of Object.entries(changes)) {
+    const record =
+      typeof change === "object" && change !== null ? (change as Record<string, unknown>) : {};
+    const kind = firstNonEmptyString(record.type) ?? "update";
+    const verb = kind === "add" ? "Add" : kind === "delete" ? "Delete" : "Update";
+    const content = firstNonEmptyString(record.content);
+    parts.push(`*** ${verb} File: ${path}${content === null ? "" : `\n${content}`}`);
+  }
+  return parts.join("\n");
+}
+
+/** The queries an `Extension` item searched with, one per line. */
+function extensionArguments(item: Record<string, unknown>): string {
+  const action = item.action;
+  if (typeof action === "object" && action !== null) {
+    const queries = (action as Record<string, unknown>).queries;
+    if (Array.isArray(queries)) {
+      const lines = queries.filter(
+        (query): query is string => typeof query === "string" && query !== "",
+      );
+      if (lines.length > 0) return lines.join("\n");
+    }
+  }
+  return firstNonEmptyString(item.query) ?? "";
+}
+
+/** Non-empty string keys of an object, in source order — the paths a change touched. */
+function objectKeys(value: unknown): string[] {
+  if (typeof value !== "object" || value === null) return [];
+  return Object.keys(value).filter((key) => key !== "");
+}
+
+/** The first value that is a string, empty string included: an empty result was still recorded. */
+function firstString(...values: unknown[]): string | null {
+  for (const value of values) {
+    if (typeof value === "string") return value;
+  }
+  return null;
+}
+
+/** The first value that is a non-empty string, or null. `""` counts as absent here. */
+function firstNonEmptyString(...values: unknown[]): string | null {
+  for (const value of values) {
+    if (typeof value === "string" && value !== "") return value;
+  }
+  return null;
+}
+
+/**
+ * A structured item states its own outcome, so this variant names it instead of measuring a dropped
+ * body. The arguments still cross redacted, exactly like the legacy tool-call path (FR-24, FR-28).
+ */
+function itemToolCallRecord(
+  toolName: string,
+  argumentsText: string,
+  outcome: string,
+  effect: ToolEffect,
+  bodyDropped: boolean,
+): ToolCallRecord {
+  const safeArguments = redactSensitiveArgumentsText(argumentsText);
+  const head = `${toolName}(${singleLine(safeArguments, ARGUMENTS_PREVIEW_LIMIT)})`;
+  return {
+    toolName,
+    argumentsText: safeArguments,
+    outcomeLine: redactSensitiveText(`${head} → ${outcome}`),
+    effect,
+    bodyDropped,
+    resultRecorded: true,
+  };
 }
 
 /** Only the shape of the output is measured. Not one fragment of it is carried (FR-24, FR-25). */

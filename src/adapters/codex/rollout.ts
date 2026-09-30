@@ -1,10 +1,11 @@
 /**
  * What a Codex rollout file is: where it lives, how it is named, and which entries it holds.
  *
- * Every fact here was confirmed against codex-cli 0.146.0 (Constraints: "Facts about Codex are
- * verified against the installed version, never assumed"). The entry names below are the ones
- * C-7 and C-8 measured: `event_msg` drives the visible history and the picker preview,
- * `response_item` drives the model history only.
+ * Every fact here was confirmed against codex-cli 0.146.0, and the `item_completed` schema below
+ * against codex-cli 0.151.0-alpha (Constraints: "Facts about Codex are verified against the
+ * installed version, never assumed"). The entry names are the ones C-7, C-8 and C-12 measured:
+ * `event_msg` drives the visible history and the picker preview, `response_item` drives the model
+ * history only.
  */
 
 import { lstat, readdir } from "node:fs/promises";
@@ -31,6 +32,25 @@ export const CODEX_ENTRY_COMPACTED = "compacted";
 
 export const CODEX_EVENT_USER_MESSAGE = "user_message";
 export const CODEX_EVENT_AGENT_MESSAGE = "agent_message";
+
+/**
+ * The second dialogue schema (C-12): one `event_msg` per turn, whose kind is `payload.item.type`
+ * rather than `payload.type`. A rollout that speaks it has no `user_message`/`agent_message`
+ * entries at all, so reading only those two names yields zero dialogue.
+ */
+export const CODEX_EVENT_ITEM_COMPLETED = "item_completed";
+
+/** `payload.item.type` values that carry a turn this module can use (C-12). */
+export const CODEX_THREAD_ITEM_USER_MESSAGE = "UserMessage";
+export const CODEX_THREAD_ITEM_AGENT_MESSAGE = "AgentMessage";
+export const CODEX_THREAD_ITEM_COMMAND_EXECUTION = "CommandExecution";
+export const CODEX_THREAD_ITEM_FILE_CHANGE = "FileChange";
+export const CODEX_THREAD_ITEM_EXTENSION = "Extension";
+export const CODEX_THREAD_ITEM_IMAGE_VIEW = "ImageView";
+
+/** Item kinds that carry no turn: reasoning cannot move (C-4), and a compaction has no text. */
+export const CODEX_THREAD_ITEM_REASONING = "Reasoning";
+export const CODEX_THREAD_ITEM_CONTEXT_COMPACTION = "ContextCompaction";
 
 export const CODEX_ITEM_FUNCTION_CALL = "function_call";
 export const CODEX_ITEM_FUNCTION_CALL_OUTPUT = "function_call_output";

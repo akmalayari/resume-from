@@ -32,8 +32,8 @@ files. It does not inject.
 ## Subdomain Classification
 
 **Supporting, conformist to Codex.** No competitive advantage lives here, and no off-the-shelf
-solution exists. Volatility is **high** and externally driven: C-7 and C-8 were measured against
-codex-cli 0.146.0, and the rollout format is an internal detail.
+solution exists. Volatility is **high** and externally driven: C-7, C-8 and C-12 were measured
+against codex-cli 0.146.0 and 0.151.0-alpha, and the rollout format is an internal detail.
 
 C-6 raises the volatility further: Codex stores an injected item without validating it and drops an
 unknown item type in silence. A format change would therefore fail quietly. That is the reason FR-52
@@ -45,6 +45,14 @@ exists, and the reason this module's `readBack` is not optional.
   `event_msg` entries — `user_message` and `agent_message` — and a thread without them shows zero
   turns even when the model history is full (C-7). Codex has no verified durable entry that is both
   visible and excluded from resumed model context, so provenance is printed by the CLI only.
+- **That there are two dialogue schemas, and a rollout speaks one of them.** The older schema is
+  C-7's: `user_message`/`agent_message` `event_msg` entries carry the dialogue, and
+  `response_item` `function_call`/`custom_tool_call` entries carry the calls. The newer schema is
+  C-12's: every turn — user text, agent text and every tool-like action — is one `item_completed`
+  `event_msg` whose `payload.item.type` says which kind of turn it is, and no
+  `user_message`/`agent_message` entry exists at all. That client repeats the same actions in
+  `response_item`, so when its dialogue is present the `item_completed` stream is the sole source of
+  turns; reading the other as well would cross every turn twice.
 - **Which entry type the picker reads.** That `thread/list` shows a thread only when it has session
   metadata **and** a preview, and that the preview comes from an `event_msg` entry. A thread without
   one is invisible even though the file exists (C-7).
@@ -424,7 +432,17 @@ None of these touch a rule, a preview, another adapter, or the host.
 - **This module never opens a Codex source thread for writing** (NG-1, AC-4).
 - **This module never calls Codex's model, and never opens a network connection** (FR-8). Everything
   is read from and written to disk.
-- **Tool names cross unchanged** (FR-27).
+- **Tool names cross unchanged** (FR-27), and the effect of a structured item is read from the item
+  kind itself, never guessed from a tool name (FR-26). The newer schema records no tool name: a
+  `CommandExecution` is reported as `exec` and a `FileChange` as `apply_patch`, the names the same
+  client uses for those actions in the older schema.
+- **When a rollout speaks the `item_completed` schema, that schema is the sole source of turns**
+  (C-12). Its `response_item` stream repeats every action, so a reader that takes turns from both
+  crosses each of them twice. Which schema a rollout speaks is decided from the rollout itself:
+  `item_completed` dialogue selects the newer one, and its absence keeps the older pairing.
+- **A `FileChange` patch is a tool argument, not a result body.** FR-24 protects the result, and the
+  older schema's `apply_patch` call already carries the patch text it was given; the newer schema's
+  `FileChange` item is the same kind of argument, so its content crosses.
 - **No result body is carried into `CanonicalTurn`** (FR-24). C-5 measured tool calls and outputs at
   about 49% of one Codex session file and reasoning at about 41%; dropping both is what makes an
   import fit a budget at all.
@@ -433,8 +451,8 @@ None of these touch a rule, a preview, another adapter, or the host.
   could send it back to the model on resume, so this module declares `provenance: "host-output-only"`.
 - **Facts about Codex are verified against the installed version, never assumed.** The default home,
   the thread file location, and the exact entry names are confirmed by the boundary tests of this
-  module against codex-cli 0.146.0 or later. C-4 to C-8 are the only facts this design treats as
-  established.
+  module against codex-cli 0.146.0 or later. C-4 to C-8 and C-12 are the only facts this design
+  treats as established.
 
 ## Test Specification
 
@@ -519,6 +537,18 @@ says Codex fails silently, so nothing here may be inferred from the absence of a
 - Scenario: parameterized — a thread cut mid-entry; a thread with an unknown item type.
 - Expected behavior: the first is reported unreadable; the second loads the entries it understands
   and reports that entries were skipped.
+
+**T-COD-21 — the item_completed dialogue schema**
+- Scenario: a rollout recorded with the newer schema (C-12) — `item_completed` user and agent
+  messages, a `CommandExecution`, a `FileChange`, an `Extension`, an `ImageView`, a `Reasoning` and
+  a `ContextCompaction`, with no `user_message`/`agent_message` entry and a duplicated
+  `response_item` stream.
+- Expected behavior: the messages and the tool-like items become canonical turns in source order;
+  the command and extension result bodies are dropped while their arguments cross; the `FileChange`
+  patch crosses as a tool argument and its paths reach `changedPaths`; reasoning and compaction
+  produce no turn and are not counted as skipped; the duplicated `response_item` stream is not read
+  as a second set of turns; and a rollout whose `item_completed` carries no dialogue is still read as
+  the older schema.
 
 **T-COD-15 — live: the default home is what Codex uses**
 - Scenario: an installed Codex writes a thread; the declared default home is compared with where it

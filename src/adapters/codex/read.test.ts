@@ -8,6 +8,14 @@ import {
   agentEvent,
   functionCall,
   functionCallOutput,
+  itemCompletedAgentMessage,
+  itemCompletedCommandExecution,
+  itemCompletedContextCompaction,
+  itemCompletedExtension,
+  itemCompletedFileChange,
+  itemCompletedImageView,
+  itemCompletedReasoning,
+  itemCompletedUserMessage,
   makeTempHome,
   metaEntry,
   reasoningEvent,
@@ -383,6 +391,174 @@ describe("T-COD-13 encrypted reasoning is never read", () => {
     const whole = JSON.stringify(session);
     expect(whole).not.toContain(ENCRYPTED);
     expect(whole).not.toContain("Thinking about the token refresh");
+  });
+});
+
+/** T-COD-21 — the item_completed dialogue schema (C-12). */
+describe("T-COD-21 the item_completed dialogue schema", () => {
+  const id = "abababab-abab-4bab-8bab-abababababab";
+
+  function newSchemaThread(sessionId: string) {
+    return [
+      metaEntry(sessionId, { originator: "codex_vscode", cli_version: "0.151.0-alpha.7.2" }),
+      itemCompletedUserMessage("verify the contract"),
+      itemCompletedReasoning(ENCRYPTED),
+      itemCompletedAgentMessage("I'll read the context first.", "commentary"),
+      itemCompletedCommandExecution(["/bin/bash", "-lc", "pwd && ls"], "/repo/demo\nfile.md\n"),
+      itemCompletedFileChange({
+        "/repo/demo/report.md": { type: "add", content: "# Report\n\nbody text" },
+      }),
+      itemCompletedExtension(
+        "web.search",
+        ["site:example.com law"],
+        [{ type: "text_result", snippet: "SECRET-EXTENSION-RESULT" }],
+      ),
+      itemCompletedImageView("file:///repo/demo/page.jpg"),
+      itemCompletedContextCompaction(),
+      itemCompletedAgentMessage("Here is the report.", "final_answer"),
+    ];
+  }
+
+  it("extracts every turn the schema carries, in source order", async () => {
+    const home = tempHome();
+    writeRollout(home, id, newSchemaThread(id));
+    const session = await adapter.loadSession(await loadOnly(home));
+
+    expect(
+      session.turns.map((turn) => [turn.role, turn.kind, turn.toolCall?.toolName ?? turn.text]),
+    ).toEqual([
+      ["user", "message", "verify the contract"],
+      ["agent", "message", "I'll read the context first."],
+      ["agent", "tool-call", "exec"],
+      ["agent", "tool-call", "apply_patch"],
+      ["agent", "tool-call", "web.search"],
+      ["agent", "tool-call", "view_image"],
+      ["agent", "message", "Here is the report."],
+    ]);
+    // The title and the picker preview come from the first user turn, as for the older schema.
+    expect((await loadOnly(home)).title).toBe("verify the contract");
+  });
+
+  it("settles the effect from the item kind, not from a tool name (FR-26)", async () => {
+    const home = tempHome();
+    writeRollout(home, id, newSchemaThread(id));
+    const session = await adapter.loadSession(await loadOnly(home));
+    expect(
+      session.turns.filter((t) => t.kind === "tool-call").map((t) => t.toolCall?.effect),
+    ).toEqual(["unknown", "mutating", "read-only", "read-only"]);
+  });
+
+  it("drops the command and extension result bodies without carrying a fragment", async () => {
+    const home = tempHome();
+    writeRollout(home, id, newSchemaThread(id));
+    const session = await adapter.loadSession(await loadOnly(home));
+    const whole = JSON.stringify(session);
+
+    const exec = session.turns.find((turn) => turn.toolCall?.toolName === "exec")?.toolCall;
+    expect(exec?.bodyDropped).toBe(true);
+    expect(exec?.outcomeLine).toContain("body dropped");
+    expect(whole).not.toContain("file.md");
+
+    const extension = session.turns.find(
+      (turn) => turn.toolCall?.toolName === "web.search",
+    )?.toolCall;
+    expect(extension?.bodyDropped).toBe(true);
+    expect(extension?.argumentsText).toContain("site:example.com law");
+    expect(whole).not.toContain("SECRET-EXTENSION-RESULT");
+  });
+
+  it("keeps a FileChange patch as a tool argument and records its paths (FR-24, FR-36)", async () => {
+    const home = tempHome();
+    writeRollout(home, id, newSchemaThread(id));
+    const session = await adapter.loadSession(await loadOnly(home));
+    const change = session.turns.find(
+      (turn) => turn.toolCall?.toolName === "apply_patch",
+    )?.toolCall;
+
+    // FR-24 protects a result body, not a tool argument: the legacy apply_patch call keeps the
+    // patch it was given, and this is the same kind of argument in the new shape.
+    expect(change?.argumentsText).toContain("# Report");
+    expect(change?.effect).toBe("mutating");
+    expect(session.provenance.repo.changedPaths).toEqual(["/repo/demo/report.md"]);
+  });
+
+  it("reads reasoning and compaction as no turn, without counting them as skipped", async () => {
+    const home = tempHome();
+    const path = writeRollout(home, id, newSchemaThread(id));
+    const rollout = await readRollout(path);
+
+    expect(rollout.skippedEntries).toBe(0);
+    expect(JSON.stringify(rollout.turns)).not.toContain(ENCRYPTED);
+  });
+
+  it("does not turn a compaction into a second summary turn", async () => {
+    const home = tempHome();
+    writeRollout(home, id, [
+      metaEntry(id),
+      itemCompletedUserMessage("go"),
+      {
+        timestamp: "2026-08-01T09:15:00.000Z",
+        type: "compacted",
+        payload: {
+          message: "Work completed before compaction.",
+          replacement_history: [{ role: "user", content: "REPLACEMENT-HISTORY-MUST-NOT-CROSS" }],
+        },
+      },
+      itemCompletedContextCompaction(),
+      itemCompletedAgentMessage("continued"),
+    ]);
+    const session = await adapter.loadSession(await loadOnly(home));
+
+    // The empty ContextCompaction item adds nothing: the summary text is the `compacted` entry's.
+    expect(session.turns.map((turn) => [turn.kind, turn.text])).toEqual([
+      ["message", "go"],
+      ["summary", "Work completed before compaction."],
+      ["message", "continued"],
+    ]);
+    expect(JSON.stringify(session)).not.toContain("REPLACEMENT-HISTORY-MUST-NOT-CROSS");
+  });
+
+  it("does not double-count a rollout that also carries the older schema", async () => {
+    const home = tempHome();
+    writeRollout(home, id, [
+      metaEntry(id),
+      userEvent("old-schema request"),
+      agentEvent("old-schema answer"),
+      functionCall("shell", '{"command":["ls"]}', "call_old"),
+      functionCallOutput("call_old", "OLD-SCHEMA-OUTPUT"),
+      itemCompletedUserMessage("new-schema request"),
+      itemCompletedCommandExecution(["ls"], "new output\n"),
+      itemCompletedAgentMessage("new-schema answer"),
+    ]);
+    const session = await adapter.loadSession(await loadOnly(home));
+
+    // The new schema is the sole source of turns when it carries the dialogue: the older stream's
+    // messages and calls are not read as well, or every action would cross twice.
+    expect(session.turns.map((turn) => turn.toolCall?.toolName ?? turn.text)).toEqual([
+      "new-schema request",
+      "exec",
+      "new-schema answer",
+    ]);
+    expect(JSON.stringify(session)).not.toContain("OLD-SCHEMA-OUTPUT");
+  });
+
+  it("reads a rollout as the older schema when item_completed carries no dialogue (C-12)", async () => {
+    const home = tempHome();
+    writeRollout(home, id, [
+      metaEntry(id),
+      userEvent("legacy request"),
+      functionCall("shell", '{"command":["ls"]}', "call_1"),
+      functionCallOutput("call_1", "out"),
+      agentEvent("legacy answer"),
+      itemCompletedCommandExecution(["ls"], "tool-only item\n"),
+    ]);
+    const session = await adapter.loadSession(await loadOnly(home));
+
+    expect(session.turns.map((turn) => turn.toolCall?.toolName ?? turn.text)).toEqual([
+      "legacy request",
+      "shell",
+      "legacy answer",
+    ]);
   });
 });
 

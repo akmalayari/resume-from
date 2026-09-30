@@ -24,7 +24,16 @@ import {
   CODEX_ENTRY_RESPONSE_ITEM,
   CODEX_ENTRY_SESSION_META,
   CODEX_EVENT_AGENT_MESSAGE,
+  CODEX_EVENT_ITEM_COMPLETED,
   CODEX_EVENT_USER_MESSAGE,
+  CODEX_THREAD_ITEM_AGENT_MESSAGE,
+  CODEX_THREAD_ITEM_COMMAND_EXECUTION,
+  CODEX_THREAD_ITEM_CONTEXT_COMPACTION,
+  CODEX_THREAD_ITEM_EXTENSION,
+  CODEX_THREAD_ITEM_FILE_CHANGE,
+  CODEX_THREAD_ITEM_IMAGE_VIEW,
+  CODEX_THREAD_ITEM_REASONING,
+  CODEX_THREAD_ITEM_USER_MESSAGE,
   rolloutFilePath,
 } from "./rollout.js";
 
@@ -79,6 +88,114 @@ export function agentEvent(message: string, timestamp = TS): RolloutEntry {
       memory_citation: null,
     },
   };
+}
+
+/* ------------------------------------------------------------------ *
+ * The `item_completed` schema (C-12). Shapes are copied from a rollout
+ * recorded by codex-cli 0.151.0-alpha; all content here is synthetic.
+ * ------------------------------------------------------------------ */
+
+/** One `event_msg` of the new schema, wrapping an item of `type`. */
+export function itemCompleted(
+  type: string,
+  item: Record<string, unknown>,
+  timestamp = TS,
+): RolloutEntry {
+  return {
+    timestamp,
+    type: CODEX_ENTRY_EVENT_MSG,
+    payload: { type: CODEX_EVENT_ITEM_COMPLETED, item: { type, ...item } },
+  };
+}
+
+/** A user message. Note the lowercase `content[].type`, as the client records it. */
+export function itemCompletedUserMessage(text: string, timestamp = TS): RolloutEntry {
+  return itemCompleted(
+    CODEX_THREAD_ITEM_USER_MESSAGE,
+    { id: "msg-user", content: [{ type: "text", text, text_elements: [] }] },
+    timestamp,
+  );
+}
+
+/** An agent message. Note the capital `"Text"`, as the client records it. */
+export function itemCompletedAgentMessage(
+  text: string,
+  phase = "final_answer",
+  timestamp = TS,
+): RolloutEntry {
+  return itemCompleted(
+    CODEX_THREAD_ITEM_AGENT_MESSAGE,
+    { id: "msg-agent", content: [{ type: "Text", text }], phase },
+    timestamp,
+  );
+}
+
+export function itemCompletedCommandExecution(
+  command: string[],
+  output: string,
+  timestamp = TS,
+): RolloutEntry {
+  return itemCompleted(
+    CODEX_THREAD_ITEM_COMMAND_EXECUTION,
+    {
+      id: "exec-command",
+      command,
+      cwd: "file:///repo/demo",
+      status: "completed",
+      stdout: output,
+      stderr: "",
+      aggregated_output: output,
+      exit_code: 0,
+    },
+    timestamp,
+  );
+}
+
+export function itemCompletedFileChange(
+  changes: Record<string, { type: string; content?: string }>,
+  timestamp = TS,
+): RolloutEntry {
+  return itemCompleted(
+    CODEX_THREAD_ITEM_FILE_CHANGE,
+    { id: "exec-file-change", changes },
+    timestamp,
+  );
+}
+
+export function itemCompletedExtension(
+  kind: string,
+  queries: string[],
+  results: unknown[],
+  timestamp = TS,
+): RolloutEntry {
+  return itemCompleted(
+    CODEX_THREAD_ITEM_EXTENSION,
+    {
+      kind,
+      id: "exec-extension",
+      query: queries[0] ?? "",
+      action: { type: "search", query: null, queries },
+      results,
+    },
+    timestamp,
+  );
+}
+
+export function itemCompletedImageView(path: string, timestamp = TS): RolloutEntry {
+  return itemCompleted(CODEX_THREAD_ITEM_IMAGE_VIEW, { id: "exec-image", path }, timestamp);
+}
+
+/** Encrypted reasoning, exactly as the new schema records it (C-4). */
+export function itemCompletedReasoning(encrypted: string, timestamp = TS): RolloutEntry {
+  return itemCompleted(
+    CODEX_THREAD_ITEM_REASONING,
+    { id: "rs-1", encrypted_content: encrypted },
+    timestamp,
+  );
+}
+
+export function itemCompletedContextCompaction(timestamp = TS): RolloutEntry {
+  return itemCompleted(CODEX_THREAD_ITEM_CONTEXT_COMPACTION, { id: "cc-1" }, timestamp);
 }
 
 /** Encrypted reasoning, exactly as codex-cli 0.146.0 records it (C-4). */
