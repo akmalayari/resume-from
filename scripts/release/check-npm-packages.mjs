@@ -1,4 +1,4 @@
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
@@ -7,6 +7,11 @@ import { fileURLToPath } from "node:url";
 const repoRoot = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const rootManifest = JSON.parse(readFileSync(resolve(repoRoot, "package.json"), "utf8"));
 const version = rootManifest.version;
+
+const piTui = "@earendil-works/pi-tui";
+if (rootManifest.dependencies?.[piTui] !== undefined || rootManifest.peerDependencies?.[piTui] !== "*") {
+  throw new Error(`${piTui} must be a "*" peer dependency, not a runtime dependency.`);
+}
 
 const packages = [
   {
@@ -103,7 +108,7 @@ function installPackage(tarball, directory, name) {
   );
   execFileSync(
     "npm",
-    ["install", "--ignore-scripts", "--no-audit", "--no-fund", "--no-package-lock", tarball],
+    ["install", "--legacy-peer-deps", "--ignore-scripts", "--no-audit", "--no-fund", "--no-package-lock", tarball],
     { cwd: consumer, stdio: "pipe" },
   );
   return consumer;
@@ -111,6 +116,9 @@ function installPackage(tarball, directory, name) {
 
 function smokeTestRoot(tarball, directory) {
   const consumer = installPackage(tarball, directory, "root");
+  if (existsSync(resolve(consumer, "node_modules", piTui))) {
+    throw new Error("Pi-managed installs must not install a separate pi-tui runtime.");
+  }
   execFileSync(
     process.execPath,
     [
