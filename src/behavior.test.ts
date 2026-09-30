@@ -609,6 +609,7 @@ describe("T-ROO-22 — a platform service can be replaced without touching a con
           deps: {
             deps: {
               createRepo: () => ({
+                checkCancellation() {},
                 identify: () => {
                   asked += 1;
                   return Promise.resolve({

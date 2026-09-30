@@ -155,6 +155,7 @@ export function stubNetwork(): ReturnType<typeof vi.fn> {
 
 /** Non-Git identity for exact-directory/ordering unit fixtures; worktree tests use real Git. */
 export const unresolvedRepo = {
+  checkCancellation() {},
   async identify() {
     return { root: null, commonDir: null, isBare: false, head: null, branch: null };
   },

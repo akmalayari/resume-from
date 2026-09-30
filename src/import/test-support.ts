@@ -464,6 +464,7 @@ export interface StaticRepoOptions {
 
 export function createStaticRepoReader(options: StaticRepoOptions = {}): RepoReader {
   return {
+    checkCancellation() {},
     async identify(cwd: string): Promise<RepoIdentity> {
       if (options.fail) throw new Error("git is not available");
       return (
@@ -791,13 +792,13 @@ export function instrument(deps: ImportPipelineDeps): Instrumented {
   const wrapped: PipelineStages = {
     ...stages,
     finder: {
-      list: (scope) => {
+      list: (scope, destination) => {
         order.push("finder.list");
-        return stages.finder.list(scope);
+        return stages.finder.list(scope, destination);
       },
-      resolve: (scope, input) => {
+      resolve: (scope, input, destination) => {
         order.push("finder.resolve");
-        return stages.finder.resolve(scope, input);
+        return stages.finder.resolve(scope, input, destination);
       },
       load: (descriptor) => {
         order.push("finder.load");

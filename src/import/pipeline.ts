@@ -123,9 +123,12 @@ export function createPipelineFromStages(stages: PipelineStages): ImportPipeline
     }
   }
 
-  async function resolve(request: ImportRequest): Promise<SessionDescriptor> {
+  async function resolve(
+    request: ImportRequest,
+    destination: DestinationContext,
+  ): Promise<SessionDescriptor> {
     try {
-      return await stages.finder.resolve(scopeOf(request), request.selection);
+      return await stages.finder.resolve(scopeOf(request), request.selection, destination);
     } catch (cause) {
       throw new ImportFailure("discovery", `The session could not be chosen: ${reasonOf(cause)}`, {
         cause,
@@ -152,7 +155,7 @@ export function createPipelineFromStages(stages: PipelineStages): ImportPipeline
    */
   async function compute(request: ImportRequest): Promise<Computed> {
     const destination = await destinationFor(request.destinationCwd);
-    const descriptor = await resolve(request);
+    const descriptor = await resolve(request, destination);
     const session = await load(descriptor);
 
     let plan: TransferPlan;
@@ -192,8 +195,8 @@ export function createPipelineFromStages(stages: PipelineStages): ImportPipeline
   return {
     async list(request: ListRequest): Promise<Listing> {
       try {
-        await destinationFor(request.destinationCwd);
-        return await stages.finder.list(scopeOf(request));
+        const destination = await destinationFor(request.destinationCwd);
+        return await stages.finder.list(scopeOf(request), destination);
       } catch (cause) {
         throw new ImportFailure(
           "discovery",

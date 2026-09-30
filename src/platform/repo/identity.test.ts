@@ -48,6 +48,20 @@ test("nested, sibling and external worktrees share identity, not checkout roots"
   }
 }, 30_000);
 
+test("Git path output preserves trailing whitespace in checkout and metadata paths", async () => {
+  const parent = await tempDir();
+  const root = await makeDir(parent, "checkout ");
+  const metadata = join(parent, "metadata ");
+  await git(root, ["init", "-b", "main", "--separate-git-dir", metadata]);
+  expect(await createRepoReader().identify(root)).toEqual({
+    root,
+    commonDir: metadata,
+    isBare: false,
+    head: null,
+    branch: "main",
+  });
+});
+
 test("unborn HEAD still supplies a common directory and branch", async () => {
   const root = await initRepo();
   expect(await createRepoReader().identify(root)).toEqual({

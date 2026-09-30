@@ -302,6 +302,7 @@ export function testConfig(overrides: Partial<ImportConfig> = {}): ImportConfig 
 }
 
 const unusedRepo: RepoReader = {
+  checkCancellation() {},
   identify: () =>
     Promise.resolve({ root: null, commonDir: null, isBare: false, head: null, branch: null }),
   distanceFrom: () => Promise.resolve({ known: false, ahead: 0, behind: 0 }),

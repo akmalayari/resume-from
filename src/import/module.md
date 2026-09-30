@@ -439,16 +439,39 @@ interface Listing {
 }
 ```
 
-<!-- contract: SessionFinder — restated from src/import/discovery/module.md -->
+<!-- contract: RepoIdentity — restated from src/platform/repo/module.md -->
 ```ts
+/** The repository the command runs in (FR-13). */
+interface RepoIdentity {
+  /** Canonical checkout root, or null when unresolved or bare (not an import destination). */
+  root: string | null;
+  /** Canonical Git common directory shared by linked worktrees, or null when unresolved. */
+  commonDir: string | null;
+  /** True only for a resolved bare repository; its linked working trees report false. */
+  isBare: boolean;
+  /** Current HEAD commit, or null when unresolved or the repository has no commit yet. */
+  head: string | null;
+  branch: string | null;
+}
+```
+
+<!-- contract: DiscoveryDestination, SessionFinder — restated from src/import/discovery/module.md -->
+```ts
+/** Fresh destination facts resolved by the caller for this listing only. */
+interface DiscoveryDestination {
+  canonicalCwd: string;
+  identity: RepoIdentity;
+}
+
 /** Finds, filters, orders and loads source sessions. It never writes. */
 interface SessionFinder {
   /** Newest first (FR-14), only sessions of the current repository (FR-13). */
-  list(scope: SearchScope): Promise<Listing>;
+  list(scope: SearchScope, destination?: DiscoveryDestination): Promise<Listing>;
   /** Resolves a choice against the same ordering list() produced. Rejects with SelectionError. */
   resolve(
     scope: SearchScope,
     input: SelectionInput,
+    destination?: DiscoveryDestination,
   ): Promise<SessionDescriptor>;
   /** Reads one session into the neutral vocabulary, through its source adapter. */
   load(descriptor: SessionDescriptor): Promise<CanonicalSession>;

@@ -5,6 +5,7 @@ import { realpath } from "node:fs/promises";
 import { resolve } from "node:path";
 import type {
   CanonicalSession,
+  DiscoveryDestination,
   HomeFailure,
   ImportConfig,
   Listing,
@@ -32,7 +33,7 @@ export interface DiscoveryDeps {
   adapters: readonly SourceAdapter[];
   /** Only `extraHomes` is read. */
   config: Pick<ImportConfig, "extraHomes">;
-  repo: Pick<RepoReader, "identify">;
+  repo: Pick<RepoReader, "identify" | "checkCancellation">;
 }
 
 const NEXT_STEP = "Run the list again to see the sessions available in this repository.";
@@ -59,9 +60,11 @@ export function createSessionFinder(deps: DiscoveryDeps): SessionFinder {
     destination: DirectoryEvidence | null,
     lookup: Lookup,
   ): Promise<Listing> {
+    deps.repo.checkCancellation();
     // A home the user named must never fail silently: adapters swallow a missing
     // directory (an absent default home is normal), but a typo'd --home is not (FR-2).
     if (target.named === true && !(await isDirectory(target.home))) {
+      deps.repo.checkCancellation();
       return {
         rows: [],
         failures: [
@@ -75,8 +78,11 @@ export function createSessionFinder(deps: DiscoveryDeps): SessionFinder {
     }
     let found: SessionDescriptor[];
     try {
+      deps.repo.checkCancellation();
       found = await target.adapter.listSessions(target.home);
+      deps.repo.checkCancellation();
     } catch (reason) {
+      deps.repo.checkCancellation();
       if (isCancellation(reason)) throw reason;
       // One bad home never empties the listing.
       return {
@@ -94,6 +100,7 @@ export function createSessionFinder(deps: DiscoveryDeps): SessionFinder {
     const rows: SessionDescriptor[] = [];
     const failures: HomeFailure[] = [];
     for (const descriptor of found) {
+      deps.repo.checkCancellation();
       let diagnostic: string | null = null;
       try {
         let matchingGitIdentity = false;
@@ -124,6 +131,7 @@ export function createSessionFinder(deps: DiscoveryDeps): SessionFinder {
             : "has only missing recorded directories; repository membership cannot be established";
         }
       } catch (reason) {
+        deps.repo.checkCancellation();
         if (isCancellation(reason)) throw reason;
         diagnostic = `repository lookup failed: ${reasonLine(reason)}`;
       }
@@ -139,12 +147,17 @@ export function createSessionFinder(deps: DiscoveryDeps): SessionFinder {
   }
 
   /** The single listing both `list` and `resolve` use, so the two always agree (FR-10). */
-  async function buildListing(scope: SearchScope): Promise<Listing> {
+  async function buildListing(
+    scope: SearchScope,
+    supplied?: DiscoveryDestination,
+  ): Promise<Listing> {
+    deps.repo.checkCancellation();
     // Both caches live for this listing only. The spelling cache shares missing paths and
     // filesystem failures; the canonical cache also shares Git lookups through symlink aliases.
     const directories = new Map<string, Promise<DirectoryEvidence | null>>();
     const identities = new Map<string, Promise<RepoIdentity>>();
-    const lookup: Lookup = (directory) => {
+    const lookup: Lookup = async (directory) => {
+      deps.repo.checkCancellation();
       const absolute = resolve(directory);
       let pending = directories.get(absolute);
       if (!pending) {
@@ -152,6 +165,7 @@ export function createSessionFinder(deps: DiscoveryDeps): SessionFinder {
           let canonical: string;
           try {
             canonical = await realpath(absolute);
+            deps.repo.checkCancellation();
           } catch (reason) {
             if ((reason as NodeJS.ErrnoException).code === "ENOENT") {
               // The reader still observes cancellation on missing-path short circuits.
@@ -169,21 +183,41 @@ export function createSessionFinder(deps: DiscoveryDeps): SessionFinder {
         })();
         directories.set(absolute, pending);
       }
-      return pending;
+      const evidence = await pending;
+      deps.repo.checkCancellation();
+      return evidence;
     };
     let destination: DirectoryEvidence | null;
     try {
+      if (supplied !== undefined) {
+        const canonical = await realpath(scope.repoRoot);
+        deps.repo.checkCancellation();
+        if (canonical !== supplied.canonicalCwd) {
+          throw new Error("Destination evidence does not match the requested directory");
+        }
+        identities.set(canonical, Promise.resolve(supplied.identity));
+        directories.set(
+          resolve(scope.repoRoot),
+          Promise.resolve({
+            directory: canonical,
+            commonDir: supplied.identity.commonDir,
+          }),
+        );
+      }
       destination = await lookup(scope.repoRoot);
     } catch (reason) {
+      deps.repo.checkCancellation();
       if (isCancellation(reason)) throw reason;
       throw new Error(`Destination repository lookup failed: ${reasonLine(reason)}`, {
         cause: reason,
       });
     }
     const targets = await buildSearchList(deps.adapters, deps.config, scope);
+    deps.repo.checkCancellation();
     const collected = await Promise.all(
       targets.map((target) => collect(target, destination, lookup)),
     );
+    deps.repo.checkCancellation();
 
     const rows: SessionDescriptor[] = [];
     const failures: HomeFailure[] = [];
@@ -211,12 +245,16 @@ export function createSessionFinder(deps: DiscoveryDeps): SessionFinder {
   }
 
   return {
-    async list(scope: SearchScope): Promise<Listing> {
-      return await buildListing(scope);
+    async list(scope: SearchScope, destination?: DiscoveryDestination): Promise<Listing> {
+      return await buildListing(scope, destination);
     },
 
-    async resolve(scope: SearchScope, input: SelectionInput): Promise<SessionDescriptor> {
-      const { rows, failures } = await buildListing(scope);
+    async resolve(
+      scope: SearchScope,
+      input: SelectionInput,
+      destination?: DiscoveryDestination,
+    ): Promise<SessionDescriptor> {
+      const { rows, failures } = await buildListing(scope, destination);
       const diagnostics =
         failures.length === 0
           ? ""
@@ -247,8 +285,11 @@ export function createSessionFinder(deps: DiscoveryDeps): SessionFinder {
         }
         case "file-path": {
           const wanted = await canonicalPath(input.path);
+          deps.repo.checkCancellation();
           for (const row of rows) {
-            if ((await canonicalPath(row.filePath)) === wanted) return row;
+            const filePath = await canonicalPath(row.filePath);
+            deps.repo.checkCancellation();
+            if (filePath === wanted) return row;
           }
           // Selection by path is a convenience, not a way around the repository filter (NG-9).
           throw new SessionSelectionError(
@@ -260,6 +301,7 @@ export function createSessionFinder(deps: DiscoveryDeps): SessionFinder {
     },
 
     async load(descriptor: SessionDescriptor): Promise<CanonicalSession> {
+      deps.repo.checkCancellation();
       const adapter = deps.adapters.find((candidate) => {
         const capabilities = candidate.capabilities();
         return capabilities.agent === descriptor.ref.agent && capabilities.roles.includes("source");
@@ -268,7 +310,11 @@ export function createSessionFinder(deps: DiscoveryDeps): SessionFinder {
         throw new Error(`no source adapter for agent "${descriptor.ref.agent}"`);
       }
       // Returned unchanged: the rules of sections D and E belong to src/import/transfer/.
-      return await adapter.loadSession(descriptor);
+      try {
+        return await adapter.loadSession(descriptor);
+      } finally {
+        deps.repo.checkCancellation();
+      }
     },
   };
 }

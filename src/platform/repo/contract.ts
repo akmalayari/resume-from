@@ -35,6 +35,8 @@ export interface RepoReaderOptions {
 
 /** Reads git state. It never writes to the repository. */
 export interface RepoReader {
+  /** Throws AbortError with the signal reason as cause when cancelled; performs no I/O. */
+  checkCancellation(): void;
   identify(cwd: string): Promise<RepoIdentity>;
   /** Compares HEAD with a commit of a source session (FR-37). */
   distanceFrom(cwd: string, sourceCommit: string): Promise<CommitDistance>;

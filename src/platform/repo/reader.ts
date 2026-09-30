@@ -33,6 +33,7 @@ export function createRepoReader(options: RepoReaderOptions = {}): RepoReader {
   };
 
   return {
+    checkCancellation,
     identify: async (directory: string) => {
       checkCancellation();
       const identity = await identify(directory, git);
@@ -48,6 +49,11 @@ export function createRepoReader(options: RepoReaderOptions = {}): RepoReader {
   };
 }
 
+/** Git terminates path records with LF; all preceding whitespace belongs to the path. */
+function pathOutput(stdout: string): string {
+  return stdout.endsWith("\n") ? stdout.slice(0, -1) : stdout;
+}
+
 type GitRunner = (cwd: string, args: readonly string[]) => Promise<GitResult>;
 
 async function identify(directory: string, git: GitRunner): Promise<RepoIdentity> {
@@ -56,8 +62,9 @@ async function identify(directory: string, git: GitRunner): Promise<RepoIdentity
   if (dir === null) return unresolvedIdentity();
 
   const common = await git(dir, ["rev-parse", "--git-common-dir"]);
-  if (!common.ok || common.stdout.trim() === "") return unresolvedIdentity();
-  const commonDir = await resolveFully(resolve(dir, common.stdout.trim()));
+  const commonPath = pathOutput(common.stdout);
+  if (!common.ok || commonPath === "") return unresolvedIdentity();
+  const commonDir = await resolveFully(resolve(dir, commonPath));
   if (commonDir === null) return unresolvedIdentity();
 
   const bare = await git(dir, ["rev-parse", "--is-bare-repository"]);
@@ -68,8 +75,9 @@ async function identify(directory: string, git: GitRunner): Promise<RepoIdentity
   let root: string | null = null;
   if (!isBare) {
     const toplevel = await git(dir, ["rev-parse", "--show-toplevel"]);
-    if (!toplevel.ok || toplevel.stdout.trim() === "") return unresolvedIdentity();
-    root = await resolveFully(resolve(dir, toplevel.stdout.trim()));
+    const checkoutPath = pathOutput(toplevel.stdout);
+    if (!toplevel.ok || checkoutPath === "") return unresolvedIdentity();
+    root = await resolveFully(resolve(dir, checkoutPath));
     if (root === null) return unresolvedIdentity();
   }
 

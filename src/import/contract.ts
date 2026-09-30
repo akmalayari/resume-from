@@ -33,6 +33,7 @@ export type {
 };
 
 import type {
+  DiscoveryDestination,
   HomeFailure,
   Listing,
   SearchScope,
@@ -41,7 +42,15 @@ import type {
   SessionFinder,
 } from "./discovery/contract.js";
 
-export type { HomeFailure, Listing, SearchScope, SelectionError, SelectionInput, SessionFinder };
+export type {
+  DiscoveryDestination,
+  HomeFailure,
+  Listing,
+  SearchScope,
+  SelectionError,
+  SelectionInput,
+  SessionFinder,
+};
 
 import type {
   HandoverInstruction,

@@ -9,6 +9,14 @@ vi.mock("node:fs/promises", async (original) => {
   const fs = await original<typeof import("node:fs/promises")>();
   return { ...fs, realpath: vi.fn(fs.realpath) };
 });
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
 let root: string;
 let destination: string;
 let home: string;
@@ -38,7 +46,7 @@ it.each(["EACCES", "EIO"])(
     const discovery = createSessionFinder({
       adapters: [makeStubAdapter({ agent: "pi", defaultHome: home })],
       config: { extraHomes: [] },
-      repo: { identify },
+      repo: { checkCancellation() {}, identify },
     });
     const real = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
     const failure = Object.assign(new Error("cannot resolve candidate"), { code });
@@ -85,13 +93,102 @@ it("shares missing and unresolved candidates, without making missing exact paths
   const discovery = createSessionFinder({
     adapters: [makeStubAdapter({ agent: "pi", defaultHome: home })],
     config: { extraHomes: [] },
-    repo: { identify },
+    repo: { checkCancellation() {}, identify },
   });
   const scope = { repoRoot: destination, onlyAgent: null, onlyHome: null };
   expect((await discovery.list(scope)).rows).toHaveLength(2);
   expect(identify.mock.calls).toHaveLength(2);
   expect((await discovery.list({ ...scope, repoRoot: missing })).rows).toHaveLength(0);
   expect(identify.mock.calls).toHaveLength(4);
+});
+
+it.each(["list", "resolve", "empty"] as const)(
+  "rejects cancellation during adapter enumeration before returning cached evidence (%s)",
+  async (operation) => {
+    await writeSession(home, { id: "same-path", repoPath: destination, updatedAt: "2026-01-01" });
+    const controller = new AbortController();
+    const adapter = makeStubAdapter({ agent: "pi", defaultHome: home });
+    const found = await adapter.listSessions(home);
+    const entered = deferred<void>();
+    const pending = deferred<typeof found>();
+    adapter.listSessions = () => {
+      entered.resolve();
+      return pending.promise;
+    };
+    const repo = createRepoReader({ signal: controller.signal });
+    const identify = vi.spyOn(repo, "identify");
+    const discovery = createSessionFinder({
+      adapters: [adapter],
+      config: { extraHomes: [] },
+      repo,
+    });
+    const scope = { repoRoot: destination, onlyAgent: null, onlyHome: null };
+    const result =
+      operation === "resolve"
+        ? discovery.resolve(scope, { by: "row", row: 1 })
+        : discovery.list(scope);
+    await entered.promise;
+    expect(identify).toHaveBeenCalledTimes(1);
+    controller.abort("stop enumeration");
+    pending.resolve(operation === "empty" ? [] : found);
+    await expect(result).rejects.toMatchObject({ name: "AbortError", cause: "stop enumeration" });
+  },
+);
+
+it("checks cancellation before using supplied destination evidence", async () => {
+  const controller = new AbortController();
+  const repo = createRepoReader({ signal: controller.signal });
+  const identify = vi.spyOn(repo, "identify");
+  const discovery = createSessionFinder({ adapters: [], config: { extraHomes: [] }, repo });
+  controller.abort("already stopped");
+  await expect(
+    discovery.list(
+      { repoRoot: destination, onlyAgent: null, onlyHome: null },
+      { canonicalCwd: destination, identity: unresolved },
+    ),
+  ).rejects.toMatchObject({ name: "AbortError", cause: "already stopped" });
+  expect(identify).not.toHaveBeenCalled();
+});
+
+it("rejects supplied evidence for a different destination", async () => {
+  const discovery = createSessionFinder({
+    adapters: [],
+    config: { extraHomes: [] },
+    repo: createRepoReader(),
+  });
+  await expect(
+    discovery.list(
+      { repoRoot: destination, onlyAgent: null, onlyHome: null },
+      { canonicalCwd: home, identity: unresolved },
+    ),
+  ).rejects.toThrow("Destination evidence does not match the requested directory");
+});
+
+it("checks cancellation after loading a source session", async () => {
+  await writeSession(home, { id: "same-path", repoPath: destination, updatedAt: "2026-01-01" });
+  const controller = new AbortController();
+  const adapter = makeStubAdapter({ agent: "pi", defaultHome: home });
+  const discovery = createSessionFinder({
+    adapters: [adapter],
+    config: { extraHomes: [] },
+    repo: createRepoReader({ signal: controller.signal }),
+  });
+  const descriptor = await discovery.resolve(
+    { repoRoot: destination, onlyAgent: null, onlyHome: null },
+    { by: "row", row: 1 },
+  );
+  const session = await adapter.loadSession(descriptor);
+  const entered = deferred<void>();
+  const pending = deferred<typeof session>();
+  adapter.loadSession = () => {
+    entered.resolve();
+    return pending.promise;
+  };
+  const result = discovery.load(descriptor);
+  await entered.promise;
+  controller.abort("stop loading");
+  pending.resolve(session);
+  await expect(result).rejects.toMatchObject({ name: "AbortError", cause: "stop loading" });
 });
 
 it.each([undefined, new Error("custom stop"), "stop"])(

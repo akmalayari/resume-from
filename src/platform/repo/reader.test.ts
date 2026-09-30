@@ -132,6 +132,22 @@ test.each([undefined, new Error("custom cancellation"), "string cancellation"])(
   },
 );
 
+test.each([undefined, new Error("custom stop"), "stop"])(
+  "checks cancellation synchronously without filesystem or Git I/O (%s)",
+  (reason) => {
+    const controller = new AbortController();
+    const reader = createRepoReader({ signal: controller.signal });
+    vi.mocked(realpath).mockClear();
+    expect(() => reader.checkCancellation()).not.toThrow();
+    controller.abort(reason);
+    expect(() => reader.checkCancellation()).toThrow(
+      expect.objectContaining({ name: "AbortError", cause: controller.signal.reason }),
+    );
+    expect(realpath).not.toHaveBeenCalled();
+    expect(runGit).not.toHaveBeenCalled();
+  },
+);
+
 test("post-check cancellation wins over an unresolved identity or unknown distance", async () => {
   const { cwd } = await fixture();
   for (const operation of ["identify", "distance"] as const) {

@@ -36,7 +36,7 @@ afterEach(async () => {
 });
 
 function finder(
-  repo: Pick<RepoReader, "identify"> = createRepoReader(),
+  repo: Pick<RepoReader, "identify" | "checkCancellation"> = createRepoReader(),
   extraHomes: string[] = [],
 ) {
   return createSessionFinder({
@@ -236,7 +236,7 @@ it.each(["timed out", "spawn ENOENT", "EACCES I/O"])(
       if (directory === bad) throw new Error(message);
       return real.identify(directory);
     });
-    const discovery = finder({ identify }, [alternate]);
+    const discovery = finder({ ...real, identify }, [alternate]);
     const listing = await discovery.list(scope(main));
     expect(listing.rows.map((row) => row.ref.id)).toEqual(["d-good", "c-good"]);
     expect(listing.failures).toHaveLength(3);
@@ -254,7 +254,7 @@ it("shares canonical lookups within a listing across homes and aliases and refre
   await session("two", [alias, main], alternate);
   const real = createRepoReader();
   const identify = vi.fn((directory: string) => real.identify(directory));
-  const discovery = finder({ identify }, [alternate]);
+  const discovery = finder({ ...real, identify }, [alternate]);
   expect((await discovery.list(scope(main))).rows).toHaveLength(2);
   expect(identify.mock.calls.map(([directory]) => directory).sort()).toEqual([main, linked].sort());
   git(main, "worktree", "remove", linked);
@@ -274,6 +274,7 @@ it.each(["list", "row", "session-id", "file-path"])(
     abort.name = "AbortError";
     const real = createRepoReader();
     const discovery = finder({
+      ...real,
       identify: async (directory) => {
         if (directory === linked) throw abort;
         return real.identify(directory);
@@ -300,6 +301,7 @@ it.each(["timed out", "spawn failure", "I/O failure"])(
     await session("good", [main]);
     await expect(
       finder({
+        checkCancellation() {},
         identify: async () => {
           throw new Error(message);
         },

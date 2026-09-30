@@ -20,7 +20,7 @@ and pipeline results into text.
 - Parse the invocation: no argument, a row number, a session ID, a file path, an agent name, a home
   path (FR-2, FR-10, FR-12, FR-15).
 - With no selection: print the numbered list — agent, home, time, title, turn count — newest first
-  (FR-11, FR-14), and print the homes that could not be read.
+  (FR-11, FR-14), and print skipped entries (homes or sessions) with their diagnostics.
 - With a selection and no confirmation: print the preview exactly as `PreviewReport.lines` gives it
   (FR-16, FR-21), and print how to confirm.
 - With a confirmation: run the commit and print the outcome — the new session ID and the native

@@ -252,11 +252,19 @@ interface RepoIdentity {
 ```ts
 /** Reads git state. It never writes to the repository. */
 interface RepoReader {
+  /** Throws AbortError with the signal reason as cause when cancelled; performs no I/O. */
+  checkCancellation(): void;
   identify(cwd: string): Promise<RepoIdentity>;
 }
 ```
 
 The blocks below are the normative home of the types they define.
+
+A caller may supply freshly resolved destination evidence for this listing. Discovery verifies
+that its canonical cwd matches the requested directory and seeds the per-listing cache, including
+unresolved identities. No evidence is retained across requests. The repository reader's cancellation
+check runs before operations and after asynchronous boundaries, including cached/supplied evidence
+and empty adapter results; cancellation never becomes a skipped entry.
 
 ```ts
 /** How the user named the session to import (FR-12). */
@@ -305,14 +313,21 @@ interface Listing {
 ```
 
 ```ts
+/** Fresh destination facts resolved by the caller for this listing only. */
+interface DiscoveryDestination {
+  canonicalCwd: string;
+  identity: RepoIdentity;
+}
+
 /** Finds, filters, orders and loads source sessions. It never writes. */
 interface SessionFinder {
   /** Newest first (FR-14), only sessions of the current repository (FR-13). */
-  list(scope: SearchScope): Promise<Listing>;
+  list(scope: SearchScope, destination?: DiscoveryDestination): Promise<Listing>;
   /** Resolves a choice against the same ordering list() produced. Rejects with SelectionError. */
   resolve(
     scope: SearchScope,
     input: SelectionInput,
+    destination?: DiscoveryDestination,
   ): Promise<SessionDescriptor>;
   /** Reads one session into the neutral vocabulary, through its source adapter. */
   load(descriptor: SessionDescriptor): Promise<CanonicalSession>;

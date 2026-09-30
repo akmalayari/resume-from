@@ -12,10 +12,10 @@ export function renderListing(listing: Listing, destinationCwd: string): string[
       ? [`No session of ${safeText(destinationCwd)} was found.`]
       : renderRows(listing.rows);
 
-  // Homes that could not be read are printed, never hidden.
+  // Skipped homes and sessions are printed, never hidden.
   if (listing.failures.length > 0) {
     const count = listing.failures.length;
-    lines.push("", `${count} home${count === 1 ? "" : "s"} could not be read:`);
+    lines.push("", `${count} ${count === 1 ? "entry" : "entries"} skipped:`);
     for (const failure of listing.failures) {
       lines.push(
         `  ${safeText(failure.agent)}${COLUMN_GAP}${safeText(failure.home)}${COLUMN_GAP}${safeText(failure.message)}`,

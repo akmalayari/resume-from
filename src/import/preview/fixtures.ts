@@ -104,6 +104,7 @@ export function stubRepo(options: StubRepoOptions = {}): StubRepo {
   return {
     identifyCalls,
     distanceCalls,
+    checkCancellation() {},
     async identify(cwd: string): Promise<RepoIdentity> {
       identifyCalls.push(cwd);
       if (identity instanceof Error) throw identity;

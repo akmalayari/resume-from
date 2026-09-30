@@ -1,8 +1,10 @@
-import { afterEach, expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
+import { createRepoReader } from "../platform/repo/index.js";
 import { createImportPipeline } from "./index.js";
 import { createPipelineFromStages } from "./pipeline.js";
 import {
   checksumTree,
+  createStaticRepoReader,
   createWorld,
   recordingStages,
   referenceSpec,
@@ -11,8 +13,83 @@ import {
   writeSession,
 } from "./test-support.js";
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
 let world: World;
 afterEach(async () => world?.cleanup());
+
+test.each([null, "/metadata"])(
+  "destination identity %s is resolved once per request and refreshed next request",
+  async (commonDir) => {
+    world = await createWorld();
+    const spec = referenceSpec({ repoPath: world.repoRoot });
+    await writeSession(world.homeOf("codex"), spec);
+    const repo = createStaticRepoReader({
+      identity: { root: world.repoRoot, commonDir, isBare: false, head: null, branch: null },
+    });
+    const identify = vi.spyOn(repo, "identify");
+    const pipeline = createImportPipeline(worldDeps(world, { repo }));
+    const request = {
+      destinationCwd: world.repoRoot,
+      target: world.targetFor("pi"),
+      selection: { by: "session-id" as const, id: spec.id },
+      onlyAgent: null,
+      onlyHome: null,
+    };
+    await pipeline.list(request);
+    expect(identify).toHaveBeenCalledTimes(1);
+    await pipeline.list(request);
+    expect(identify).toHaveBeenCalledTimes(2);
+    const preview = await pipeline.preview(request);
+    expect(identify).toHaveBeenCalledTimes(3);
+    await pipeline.commit(request, null, preview.confirmationToken);
+    expect(identify).toHaveBeenCalledTimes(4);
+  },
+);
+
+test("aborting while commit enumerates cached destination sessions prevents loading and writing", async () => {
+  world = await createWorld();
+  const spec = referenceSpec({ repoPath: world.repoRoot });
+  await writeSession(world.homeOf("codex"), spec);
+  const controller = new AbortController();
+  const pipeline = createImportPipeline(
+    worldDeps(world, { repo: createRepoReader({ signal: controller.signal }) }),
+  );
+  const request = {
+    destinationCwd: world.repoRoot,
+    target: world.targetFor("pi"),
+    selection: { by: "session-id" as const, id: spec.id },
+    onlyAgent: "codex" as const,
+    onlyHome: null,
+  };
+  const preview = await pipeline.preview(request);
+  const adapter = world.adapterOf("codex");
+  const found = await adapter.listSessions(world.homeOf("codex"));
+  const entered = deferred<void>();
+  const pending = deferred<typeof found>();
+  adapter.listSessions = () => {
+    entered.resolve();
+    return pending.promise;
+  };
+  world.calls.length = 0;
+  const result = pipeline.commit(request, null, preview.confirmationToken);
+  await entered.promise;
+  controller.abort("stop commit");
+  pending.resolve(found);
+  await expect(result).rejects.toMatchObject({
+    stage: "discovery",
+    cause: { name: "AbortError", cause: "stop commit" },
+  });
+  expect(world.calls).not.toContain("codex.loadSession");
+  expect(world.calls).not.toContain("pi.serialize");
+  expect(await checksumTree(world.targetHomeOf("pi"))).toEqual({});
+});
 
 test("bare destinations are refused before any import is created", async () => {
   world = await createWorld();
@@ -21,6 +98,7 @@ test("bare destinations are refused before any import is created", async () => {
   const pipeline = createImportPipeline(
     worldDeps(world, {
       repo: {
+        checkCancellation() {},
         identify: async () => ({
           root: null,
           commonDir: world.repoRoot,
@@ -87,6 +165,7 @@ test("destination operational failure stops every operation before serialization
   const pipeline = createImportPipeline(
     worldDeps(world, {
       repo: {
+        checkCancellation() {},
         identify: async () => {
           throw new Error("git could not run: spawn EACCES");
         },
@@ -121,6 +200,7 @@ test.each([
   const pipeline = createImportPipeline(
     worldDeps(world, {
       repo: {
+        checkCancellation() {},
         identify: async (cwd) => ({
           root: cwd,
           commonDir: "/metadata",
