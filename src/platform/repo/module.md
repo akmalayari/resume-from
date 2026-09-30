@@ -249,3 +249,14 @@ user's repository.
 - Expected behavior: resolve output against the canonical command directory; ignore inherited
   overrides; never infer identity from a missing path's parent; leave nonzero lookups unresolved
   without classifying stderr; propagate operational errors and cancellation.
+
+
+### Cancellation error contract
+
+Both `identify` and `distanceFrom` reject cancellation with an `Error` named `AbortError`.
+Pre/post checks retain the original `AbortSignal.reason` as `cause`, including custom Error or
+non-Error values; an in-flight Git abort retains the subprocess abort error as `cause`.
+Checks run even for missing-directory and invalid-revision short circuits, so cancellation cannot
+become unresolved identity or unknown distance. Timeout, spawn and filesystem operational failures
+remain ordinary errors, not `AbortError`; completed nonzero exits remain unresolved results.
+Tests cover default/custom/string reasons, in-flight aborts and fast-return/post-check paths.

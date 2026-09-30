@@ -12,6 +12,7 @@ import {
   makeStubAdapter,
   type StubAdapter,
   stubNetwork,
+  unresolvedRepo,
   writeSession,
 } from "./test-support.js";
 
@@ -39,7 +40,7 @@ function scopeFor(repoRoot: string): SearchScope {
 }
 
 function finderOf(adapters: StubAdapter[]) {
-  return createSessionFinder({ adapters, config: { extraHomes: [] } });
+  return createSessionFinder({ adapters, repo: unresolvedRepo, config: { extraHomes: [] } });
 }
 
 it.each([
@@ -180,7 +181,11 @@ it("T-DIS-18 — an empty listing is not an error", async () => {
   ]).list(scopeFor(repoA));
 
   expect(listing.rows).toEqual([]);
-  expect(listing.failures).toEqual([]);
+  expect(listing.failures).toEqual([
+    expect.objectContaining({
+      message: expect.stringContaining("unresolved recorded directories"),
+    }),
+  ]);
 });
 
 it("T-DIS-19 — nothing is written", async () => {

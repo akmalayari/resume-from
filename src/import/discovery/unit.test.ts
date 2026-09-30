@@ -11,6 +11,7 @@ import {
   makeStubAdapter,
   type StubAdapter,
   stubNetwork,
+  unresolvedRepo,
   writeSession,
 } from "./test-support.js";
 
@@ -40,7 +41,7 @@ function scopeFor(repoRoot: string, over: Partial<SearchScope> = {}): SearchScop
 }
 
 function finderOf(adapters: StubAdapter[], extraHomes: HomeEntry[] = []) {
-  return createSessionFinder({ adapters, config: { extraHomes } });
+  return createSessionFinder({ adapters, repo: unresolvedRepo, config: { extraHomes } });
 }
 
 it("T-DIS-1 — the search list is the defaults plus the extras", async () => {
@@ -242,7 +243,11 @@ it("T-DIS-6 — only sessions of this repository are listed", async () => {
   const listing = await finderOf([adapter]).list(scopeFor(repoA));
 
   expect(listing.rows.map((r) => r.ref.id)).toEqual(["in-a"]);
-  expect(listing.failures).toEqual([]);
+  expect(listing.failures).toEqual([
+    expect.objectContaining({
+      message: expect.stringContaining("unresolved recorded directories"),
+    }),
+  ]);
 });
 
 it("T-DIS-7 — a session with no repository is out of scope", async () => {

@@ -10,6 +10,7 @@ import {
   makeStubAdapter,
   type StubAdapter,
   stubNetwork,
+  unresolvedRepo,
   writeSession,
 } from "./test-support.js";
 
@@ -38,7 +39,7 @@ function scopeFor(repoRoot: string): SearchScope {
 }
 
 function finderOf(adapters: StubAdapter[], extraHomes: HomeEntry[] = []) {
-  return createSessionFinder({ adapters, config: { extraHomes } });
+  return createSessionFinder({ adapters, repo: unresolvedRepo, config: { extraHomes } });
 }
 
 it("T-DIS-21 — the listing works with the source agent stopped", async () => {

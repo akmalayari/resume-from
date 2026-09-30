@@ -38,7 +38,7 @@ export interface ImportPipelineDeps {
 /** The four stages, wired. Internal: a host builds a pipeline, never a stage. */
 export function buildStages(deps: ImportPipelineDeps): PipelineStages {
   return {
-    finder: createSessionFinder({ adapters: deps.adapters, config: deps.config }),
+    finder: createSessionFinder({ adapters: deps.adapters, config: deps.config, repo: deps.repo }),
     rules: createTransferRules(),
     // Per request: the preview reads the repository the request names (FR-13, FR-37).
     async destinationFor(cwd) {

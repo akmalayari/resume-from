@@ -24,14 +24,27 @@ export function createRepoReader(options: RepoReaderOptions = {}): RepoReader {
   const git = (directory: string, args: readonly string[]) =>
     runGit(directory, args, processOptions);
 
+  const checkCancellation = () => {
+    if (processOptions.signal?.aborted) {
+      const error = new Error("Repository read aborted", { cause: processOptions.signal.reason });
+      error.name = "AbortError";
+      throw error;
+    }
+  };
+
   return {
     identify: async (directory: string) => {
-      processOptions.signal?.throwIfAborted();
+      checkCancellation();
       const identity = await identify(directory, git);
-      processOptions.signal?.throwIfAborted();
+      checkCancellation();
       return identity;
     },
-    distanceFrom: (cwd: string, sourceCommit: string) => distanceFrom(cwd, sourceCommit, git),
+    distanceFrom: async (cwd: string, sourceCommit: string) => {
+      checkCancellation();
+      const distance = await distanceFrom(cwd, sourceCommit, git);
+      checkCancellation();
+      return distance;
+    },
   };
 }
 

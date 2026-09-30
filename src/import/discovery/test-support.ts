@@ -23,6 +23,7 @@ export interface FixtureSession {
   id: string;
   updatedAt: string;
   repoPath: string | null;
+  repoPaths?: string[];
   title?: string;
   startedAt?: string;
   turns?: CanonicalTurn[];
@@ -93,7 +94,9 @@ export function makeStubAdapter(options: StubAdapterOptions): StubAdapter {
           updatedAt: raw.updatedAt,
           turnCount: raw.turns?.length ?? 0,
           repoPath: raw.repoPath !== null && path.isAbsolute(raw.repoPath) ? raw.repoPath : null,
-          repoPaths: raw.repoPath !== null && path.isAbsolute(raw.repoPath) ? [raw.repoPath] : [],
+          repoPaths:
+            raw.repoPaths ??
+            (raw.repoPath !== null && path.isAbsolute(raw.repoPath) ? [raw.repoPath] : []),
           filePath,
         });
       }
@@ -149,3 +152,10 @@ export function stubNetwork(): ReturnType<typeof vi.fn> {
   vi.stubGlobal("fetch", blocked);
   return blocked;
 }
+
+/** Non-Git identity for exact-directory/ordering unit fixtures; worktree tests use real Git. */
+export const unresolvedRepo = {
+  async identify() {
+    return { root: null, commonDir: null, isBare: false, head: null, branch: null };
+  },
+};

@@ -84,11 +84,11 @@ export interface SelectionError {
   message: string;
 }
 
-/** One home that could not be searched. The listing continues without it. */
+/** One home or session that could not be included. The listing continues without it. */
 export interface HomeFailure {
   home: HomePath;
   agent: AgentId;
-  /** Why the home was skipped, in one line. */
+  /** Why the home or session was skipped, in one line. */
   message: string;
 }
 
@@ -96,7 +96,7 @@ export interface HomeFailure {
 export interface Listing {
   /** Newest first, across every agent and home (FR-14, FR-15). */
   rows: SessionDescriptor[];
-  /** Homes that were skipped. Reported to the user, never silent. */
+  /** Homes or sessions that were skipped. Reported to the user, never silent. */
   failures: HomeFailure[];
 }
 

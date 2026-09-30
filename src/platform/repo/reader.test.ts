@@ -109,3 +109,40 @@ test("cancellation wins even when the input path is missing", async () => {
   ).rejects.toThrow("aborted");
   expect(runGit).not.toHaveBeenCalled();
 });
+
+test.each([undefined, new Error("custom cancellation"), "string cancellation"])(
+  "normalizes pre-aborted reasons (%s) for identity and distance including short circuits",
+  async (reason) => {
+    const { root, cwd } = await fixture();
+    const controller = new AbortController();
+    controller.abort(reason);
+    const reader = createRepoReader({ signal: controller.signal });
+    for (const operation of [
+      () => reader.identify(cwd),
+      () => reader.identify(join(root, "missing")),
+      () => reader.distanceFrom(cwd, "HEAD"),
+      () => reader.distanceFrom(cwd, ""),
+    ]) {
+      await expect(operation()).rejects.toMatchObject({
+        name: "AbortError",
+        cause: controller.signal.reason,
+      });
+    }
+    expect(runGit).not.toHaveBeenCalled();
+  },
+);
+
+test("post-check cancellation wins over an unresolved identity or unknown distance", async () => {
+  const { cwd } = await fixture();
+  for (const operation of ["identify", "distance"] as const) {
+    const controller = new AbortController();
+    vi.mocked(runGit).mockImplementation(async () => {
+      controller.abort("during read");
+      return { ok: false, stdout: "", stderr: "unresolved" };
+    });
+    const reader = createRepoReader({ signal: controller.signal });
+    await expect(
+      operation === "identify" ? reader.identify(cwd) : reader.distanceFrom(cwd, "HEAD"),
+    ).rejects.toMatchObject({ name: "AbortError", cause: "during read" });
+  }
+});

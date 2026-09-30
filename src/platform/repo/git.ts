@@ -73,7 +73,9 @@ export function normalizeGitOptions(options: RepoReaderOptions): NormalizedOptio
 
 function processError(cwd: string, options: NormalizedOptions, cause: ExecFileException): Error {
   if (options.signal?.aborted === true || cause.name === "AbortError") {
-    return new Error(`git command aborted while reading ${cwd}`, { cause });
+    const error = new Error(`git command aborted while reading ${cwd}`, { cause });
+    error.name = "AbortError";
+    return error;
   }
   if (cause.killed === true && cause.signal !== undefined) {
     return new Error(`git command timed out after ${options.timeoutMs} ms while reading ${cwd}`, {

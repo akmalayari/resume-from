@@ -189,11 +189,11 @@ Depends on Task 2. Scope: `src/session/contract.ts`, `src/session/module.md`,
 Depends on Tasks 1–3. Scope: `src/import/discovery/`, import wiring, and selection
 error presentation where needed.
 
-- [ ] Inject repository lookup and implement the exact matching/conflict rule above in the shared listing path used by list, row, ID, and file-path selection. Require positive common-directory evidence for every new cross-directory match.
-- [ ] Cache lookups with a per-listing `Map<directory, Promise>` and retain existing processing concurrency. Catch candidate timeout/spawn/I/O errors at the session boundary and report them through existing diagnostics; preserve other sessions/homes. Propagate cancellation; fail the request on destination operational failure.
-- [ ] Explain skipped missing-only or ambiguous sessions. Preserve exact-directory fallback, ordering, source-home filtering, and duplicate-ID handling. Do not use worktree-name, path-prefix, remote, object-store, ancestor, or registry heuristics.
-- [ ] Add real-worktree discovery tests for each placement and direction, all selectors, alternate homes, missing-first/surviving-later candidates, neutral unresolved candidates, conflicting identities after a matching candidate, exact fallback with conflicting evidence, all-missing paths, and per-session failure isolation. Assert repeated lookups are shared and a later listing refreshes them.
-- [ ] Update discovery contracts. Run `pnpm exec vitest run src/import/discovery`, then the per-task gates below.
+- [x] Inject repository lookup and implement the exact matching/conflict rule above in the shared listing path used by list, row, ID, and file-path selection. Require positive common-directory evidence for every new cross-directory match.
+- [x] Cache lookups with a per-listing `Map<directory, Promise>` and retain existing processing concurrency. Catch candidate timeout/spawn/I/O errors at the session boundary and report them through existing diagnostics; preserve other sessions/homes. Propagate cancellation; fail the request on destination operational failure.
+- [x] Explain skipped missing-only or ambiguous sessions. Preserve exact-directory fallback, ordering, source-home filtering, and duplicate-ID handling. Do not use worktree-name, path-prefix, remote, object-store, ancestor, or registry heuristics.
+- [x] Add real-worktree discovery tests for each placement and direction, all selectors, alternate homes, missing-first/surviving-later candidates, neutral unresolved candidates, conflicting identities after a matching candidate, exact fallback with conflicting evidence, all-missing paths, and per-session failure isolation. Assert repeated lookups are shared and a later listing refreshes them.
+- [x] Update discovery contracts. Run `pnpm exec vitest run src/import/discovery`, then the per-task gates below.
 
 ### Task 5: Verify complete host and native-session flows
 

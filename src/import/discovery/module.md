@@ -45,8 +45,12 @@ Low volatility is what makes the several distance-2 contract integrations of thi
 - **The ordering rule.** That the listing is ordered by `updatedAt` descending across every agent and
   home, and that this ordering is deterministic and reproducible, because FR-10 lets the user come
   back in a second invocation and name row 3.
-- **The repository filter.** That a session is in scope when its resolved `repoPath` equals the
-  resolved repository root, and that a session with an unknown `repoPath` is out of scope.
+- **The repository filter.** Resolve every recorded `repoPaths` candidate and the destination.
+  Membership is `(matchingGitIdentity || sameDirectory) && !conflictingGitIdentity`.
+  Git identity is the canonical common directory, not a checkout root or object store. Missing
+  candidates and completed nonzero Git lookups are neutral; every cross-directory match needs
+  positive common-directory evidence. An exact existing directory remains a fallback, but if the
+  destination has no Git identity, no candidate may have a resolved Git identity.
 - **Failure tolerance.** That one unreadable home or one corrupt session file removes that item from
   the listing and nothing else.
 
@@ -283,11 +287,11 @@ interface SelectionError {
   message: string;
 }
 
-/** One home that could not be searched. The listing continues without it. */
+/** One home or session that could not be included. The listing continues without it. */
 interface HomeFailure {
   home: HomePath;
   agent: AgentId;
-  /** Why the home was skipped, in one line. */
+  /** Why the home or session was skipped, in one line. */
   message: string;
 }
 
@@ -295,7 +299,7 @@ interface HomeFailure {
 interface Listing {
   /** Newest first, across every agent and home (FR-14, FR-15). */
   rows: SessionDescriptor[];
-  /** Homes that were skipped. Reported to the user, never silent. */
+  /** Homes or sessions that were skipped. Reported to the user, never silent. */
   failures: HomeFailure[];
 }
 ```
@@ -367,14 +371,14 @@ interface SessionFinder {
 Changes that require **only this module** to change:
 
 - The ordering rule changes — for example sessions are grouped by agent before being ordered by time.
-- The repository filter becomes looser, for example matching a parent repository or a worktree.
+- The repository evidence or ambiguity rule changes.
 - A fourth way to name a session is added, for example a title prefix.
 - Deduplication of homes changes, for example to treat two symlinked homes as one.
 - A skipped home is reported differently.
 
 ## Constraints and Invariants
 
-- **The pipeline derives `SearchScope.repoRoot` from request `destinationCwd`.** It is an internal search scope, not a second caller-supplied import destination. Exact canonical-directory filtering remains in effect; Git identity-based cross-directory discovery is not yet enabled.
+- **The pipeline derives `SearchScope.repoRoot` from request `destinationCwd`.** It is an internal search scope, not a second caller-supplied import destination. Repository membership uses canonical Git common-directory identity with exact-directory fallback; it never changes the destination checkout.
 
 - **This module never writes anything**, to any home or any repository (NG-1, AC-4).
 - **This module never calls a model** (FR-8). A listing works when the source agent is stopped or out
@@ -390,8 +394,22 @@ Changes that require **only this module** to change:
 - **A session from another repository is never listed and never resolvable** (FR-13, NG-9), including
   when the user names it by session ID or by file path. Selection by path is a convenience, not a way
   around the filter.
-- **A session with a null `repoPath` is out of scope**, because the tool cannot show that it belongs
-  here. It is counted in the failures of the `Listing`, not silently ignored.
+- **All recorded candidates are checked before acceptance.** A matching early candidate cannot
+  override a later conflicting identity. Conflicts exclude the session from every selector and
+  produce a diagnostic. A missing primary `repoPath` is recoverable only through a surviving
+  `repoPaths` candidate, never by walking to a parent or consulting a worktree registry.
+- **No usable evidence is explained.** Empty candidate arrays, missing-only paths and unresolved
+  candidates without a positive match produce `Listing.failures`. Selection errors include these
+  diagnostics when no row/ID/path can be selected. No worktree-name, prefix, remote, object-store,
+  ancestor or registry heuristics establish membership.
+- **Lookups are shared only within one listing.** Promise caches keyed by canonical directory share
+  repository lookups (including rejections) across sessions/homes and symlink aliases. An additional
+  spelling cache shares canonicalization failures and missing paths. The next list or resolve starts
+  fresh. Descriptors remain sequential within each home; homes are processed concurrently.
+- **Operational errors are not neutral evidence.** Source timeout/spawn/non-ENOENT filesystem errors
+  skip only that session with a diagnostic, preserving other sessions and homes. Destination errors
+  reject the request with a diagnostic. `AbortError` always propagates, including from source/home
+  lookups; cancellation is never classified by message or Git stderr.
 - **One bad home never empties the listing.** An unreadable directory, a missing home, or a corrupt
   session file becomes a `HomeFailure` and the rest of the search continues.
 - **Only adapters with the `source` role are searched** (FR-59).
@@ -404,7 +422,7 @@ Changes that require **only this module** to change:
 
 ## Test Specification
 
-Every test uses stub adapters over fixture homes. No agent needs to be installed.
+Tests use stub adapters over fixture homes and real temporary Git repositories/worktrees for membership. No agent needs to be installed.
 
 ### Unit Tests
 
@@ -529,7 +547,8 @@ Every test uses stub adapters over fixture homes. No agent needs to be installed
 **T-DIS-18 — an empty listing is not an error**
 
 - Scenario: readable homes with no sessions for this repository.
-- Expected behavior: `rows` empty, `failures` empty.
+- Expected behavior: `rows` empty; no request error. Unresolved or missing evidence is explained in
+  `failures`; a home with no descriptors needs no diagnostic.
 
 **T-DIS-19 — nothing is written**
 
@@ -559,3 +578,26 @@ Every test uses stub adapters over fixture homes. No agent needs to be installed
 
 - Scenario: `~/.claude` and `~/.claude-team` both hold sessions for this repository.
 - Expected behavior: both appear, each row naming its home (FR-5, FR-11).
+
+
+**T-DIS-27 — worktree membership is independent of placement and selector**
+
+- Real nested, sibling and arbitrary external worktrees match in both directions; sibling worktrees,
+  checkout subdirectories and symlink aliases match through canonical common-directory evidence.
+- List, row, ID and file path agree across default, configured extra and explicitly named homes.
+  Source-home filtering, ordering and duplicate-ID disambiguation remain unchanged.
+
+**T-DIS-28 — active candidate evidence and ambiguity**
+
+- Missing-first/surviving-later paths and neutral unresolved candidates work in either order.
+- Later conflicting identities reject even after a Git or exact-directory match; unresolved
+  destinations permit exact fallback only without any resolved candidate identity.
+- Missing-only paths (including removed nested worktrees), independent nested repositories and
+  independent shared-object clones never match by inference. Skipped evidence is explained.
+
+**T-DIS-29 — isolated failures and listing-local caches**
+
+- Candidate timeout, spawn and filesystem errors skip that session, not other sessions/homes;
+  destination failures reject. Cancellation rejects list and every selector despite matching rows.
+- Repeated paths, symlink aliases, unresolved/missing candidates and failures share lookups within
+  one listing. Later listings refresh lookups and observe replaced identities or recovered paths.

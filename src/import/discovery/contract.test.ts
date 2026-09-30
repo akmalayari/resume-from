@@ -10,6 +10,7 @@ import {
   makeStubAdapter,
   type StubAdapter,
   stubNetwork,
+  unresolvedRepo,
   writeSession,
 } from "./test-support.js";
 
@@ -62,7 +63,7 @@ function build(extraHomes: HomeEntry[] = []): {
     makeStubAdapter({ agent: "codex", defaultHome: codexHome }),
   ];
   return {
-    finder: createSessionFinder({ adapters, config: { extraHomes } }),
+    finder: createSessionFinder({ adapters, repo: unresolvedRepo, config: { extraHomes } }),
     adapters,
   };
 }
@@ -151,7 +152,11 @@ it("T-DIS-13 — load returns exactly what the adapter produced", async () => {
     makeStubAdapter({ agent: "pi", defaultHome: piHome, loadResult: canned }),
     makeStubAdapter({ agent: "codex", defaultHome: codexHome }),
   ];
-  const finder = createSessionFinder({ adapters, config: { extraHomes: [] } });
+  const finder = createSessionFinder({
+    adapters,
+    repo: unresolvedRepo,
+    config: { extraHomes: [] },
+  });
   const descriptor = await finder.resolve(scope(), {
     by: "session-id",
     id: "pi-2",

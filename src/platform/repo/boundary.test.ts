@@ -146,3 +146,15 @@ function importSpecifiersOf(source: string): string[] {
   }
   return [...found];
 }
+
+test("in-flight git cancellation has an AbortError name and preserves its cause", async () => {
+  const dir = await tempDir("resume-from-git-inflight-abort-");
+  const controller = new AbortController();
+  const pending = runGit(dir, ["hash-object", "--stdin"], { signal: controller.signal });
+  const assertion = expect(pending).rejects.toMatchObject({
+    name: "AbortError",
+    cause: expect.objectContaining({ name: "AbortError" }),
+  });
+  controller.abort("stop in flight");
+  await assertion;
+});
