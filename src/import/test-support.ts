@@ -456,7 +456,9 @@ export function createStaticRepoReader(options: StaticRepoOptions = {}): RepoRea
   return {
     async identify(cwd: string): Promise<RepoIdentity> {
       if (options.fail) throw new Error("git is not available");
-      return options.identity ?? { root: cwd, head: null, branch: null };
+      return (
+        options.identity ?? { root: cwd, commonDir: null, isBare: false, head: null, branch: null }
+      );
     },
     async distanceFrom(_sourceCommit: string): Promise<CommitDistance> {
       if (options.fail) throw new Error("git is not available");

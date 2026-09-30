@@ -92,6 +92,8 @@ export interface StubRepo extends RepoReader {
 export function stubRepo(options: StubRepoOptions = {}): StubRepo {
   const identity = options.identity ?? {
     root: "/repo",
+    commonDir: "/repo/.git",
+    isBare: false,
     head: HEAD_COMMIT,
     branch: "main",
   };

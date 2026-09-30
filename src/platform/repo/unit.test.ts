@@ -21,7 +21,13 @@ describe("identify", () => {
 
     const identity = await createRepoReader(dir).identify(dir);
 
-    expect(identity).toEqual({ root: dir, head, branch: "main" });
+    expect(identity).toEqual({
+      root: dir,
+      commonDir: `${dir}/.git`,
+      isBare: false,
+      head,
+      branch: "main",
+    });
   });
 
   test("T-REP-2 — identification works from a subdirectory", async () => {
@@ -38,7 +44,13 @@ describe("identify", () => {
 
     const identity = await createRepoReader(dir).identify(dir);
 
-    expect(identity).toEqual({ root: null, head: null, branch: null });
+    expect(identity).toEqual({
+      root: null,
+      commonDir: null,
+      isBare: false,
+      head: null,
+      branch: null,
+    });
   });
 
   test("T-REP-4 — a repository with no commits", async () => {

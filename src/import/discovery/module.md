@@ -230,9 +230,13 @@ interface ImportConfig {
 ```ts
 /** The repository the command runs in (FR-13). */
 interface RepoIdentity {
-  /** Absolute path of the repository root, or null when the directory is not in a repository. */
+  /** Canonical checkout root, or null when unresolved or bare (not an import destination). */
   root: string | null;
-  /** Current HEAD commit, or null when the repository has no commit yet. */
+  /** Canonical Git common directory shared by linked worktrees, or null when unresolved. */
+  commonDir: string | null;
+  /** True only for a resolved bare repository; its linked working trees report false. */
+  isBare: boolean;
+  /** Current HEAD commit, or null when unresolved or the repository has no commit yet. */
   head: string | null;
   branch: string | null;
 }

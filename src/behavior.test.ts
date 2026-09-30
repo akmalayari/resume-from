@@ -613,6 +613,8 @@ describe("T-ROO-22 — a platform service can be replaced without touching a con
                   asked += 1;
                   return Promise.resolve({
                     root: null,
+                    commonDir: null,
+                    isBare: false,
                     head: null,
                     branch: null,
                   });

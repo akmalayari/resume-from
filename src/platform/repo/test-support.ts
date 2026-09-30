@@ -35,6 +35,12 @@ const GIT_ENV: NodeJS.ProcessEnv = {
   GIT_COMMITTER_DATE: "2024-01-01T00:00:00+00:00",
 };
 
+// Fixture creation, like the reader, must inspect the requested directory even inside a Git hook.
+delete GIT_ENV.GIT_DIR;
+delete GIT_ENV.GIT_COMMON_DIR;
+delete GIT_ENV.GIT_WORK_TREE;
+delete GIT_ENV.GIT_INDEX_FILE;
+
 const createdDirs: string[] = [];
 
 /** A fresh temporary directory, fully resolved so path comparisons are not symlink comparisons. */

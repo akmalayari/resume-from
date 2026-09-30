@@ -50,7 +50,13 @@ describe("unit", () => {
   it("T-PRE-3: the repository warning has the required form", async () => {
     const plan = makePlan({ sourceCommit: SOURCE_COMMIT });
     const repo = stubRepo({
-      identity: { root: "/repo", head: HEAD_COMMIT, branch: "main" },
+      identity: {
+        root: "/repo",
+        commonDir: "/repo/.git",
+        isBare: false,
+        head: HEAD_COMMIT,
+        branch: "main",
+      },
       distance: { known: true, ahead: 14, behind: 0 },
     });
     const report = await createPreviewBuilder(repo, CWD).build(plan);
@@ -129,7 +135,9 @@ describe("unit", () => {
     ];
 
     for (const [sourceCommit, head] of cases) {
-      const repo = stubRepo({ identity: { root: "/repo", head, branch: "main" } });
+      const repo = stubRepo({
+        identity: { root: "/repo", commonDir: "/repo/.git", isBare: false, head, branch: "main" },
+      });
       const report = await createPreviewBuilder(repo, CWD).build(makePlan({ sourceCommit }));
 
       expect(kindsOf(report.warnings)).not.toContain("repo-state");

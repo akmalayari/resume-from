@@ -8,8 +8,8 @@ function unknownDistance(): CommitDistance {
   return { known: false, ahead: 0, behind: 0 };
 }
 
-function noRepository(): RepoIdentity {
-  return { root: null, head: null, branch: null };
+function unresolvedIdentity(): RepoIdentity {
+  return { root: null, commonDir: null, isBare: false, head: null, branch: null };
 }
 
 /**
@@ -33,7 +33,12 @@ export function createRepoReader(
     runGit(directory, args, processOptions);
 
   return {
-    identify: (directory: string) => identify(directory, git),
+    identify: async (directory: string) => {
+      processOptions.signal?.throwIfAborted();
+      const identity = await identify(directory, git);
+      processOptions.signal?.throwIfAborted();
+      return identity;
+    },
     distanceFrom: (sourceCommit: string) => distanceFrom(cwd, sourceCommit, git),
   };
 }
@@ -41,15 +46,32 @@ export function createRepoReader(
 type GitRunner = (cwd: string, args: readonly string[]) => Promise<GitResult>;
 
 async function identify(directory: string, git: GitRunner): Promise<RepoIdentity> {
-  const dir = resolve(directory);
-  const toplevel = await git(dir, ["rev-parse", "--show-toplevel"]);
-  if (!toplevel.ok) return noRepository();
+  // Resolve the input itself: a missing worktree must never inherit its parent's identity.
+  const dir = await resolveFully(resolve(directory));
+  if (dir === null) return unresolvedIdentity();
 
-  const root = await resolveFully(toplevel.stdout.trim());
-  if (root === null) return noRepository();
+  const common = await git(dir, ["rev-parse", "--git-common-dir"]);
+  if (!common.ok || common.stdout.trim() === "") return unresolvedIdentity();
+  const commonDir = await resolveFully(resolve(dir, common.stdout.trim()));
+  if (commonDir === null) return unresolvedIdentity();
+
+  const bare = await git(dir, ["rev-parse", "--is-bare-repository"]);
+  if (!bare.ok) return unresolvedIdentity();
+  const isBare = bare.stdout.trim() === "true";
+
+  // Bare repositories have a shared identity but no checkout usable as an import destination.
+  let root: string | null = null;
+  if (!isBare) {
+    const toplevel = await git(dir, ["rev-parse", "--show-toplevel"]);
+    if (!toplevel.ok || toplevel.stdout.trim() === "") return unresolvedIdentity();
+    root = await resolveFully(resolve(dir, toplevel.stdout.trim()));
+    if (root === null) return unresolvedIdentity();
+  }
 
   return {
     root,
+    commonDir,
+    isBare,
     head: await commitOf(dir, "HEAD", git),
     branch: await branch(dir, git),
   };
@@ -140,7 +162,8 @@ function hasControlCharacter(value: string): boolean {
 async function resolveFully(directory: string): Promise<string | null> {
   try {
     return await realpath(directory);
-  } catch {
-    return null;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw error;
   }
 }

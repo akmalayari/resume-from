@@ -7,15 +7,17 @@
 ## Purpose
 
 This module reads the state of the git repository the command is running in: where its root is, what
-HEAD points at, and how far HEAD has moved from the commit a source session ran at.
+HEAD points at, which canonical Git common directory identifies it across linked worktrees, and how
+far HEAD has moved from the commit a source session ran at.
 
 Two requirements depend on it. FR-13 keeps the listing to sessions of the current repository, which
-needs the repository root. FR-37 and FR-38 warn the user that the tree has moved since the source
+needs repository identity separately from the checkout root. FR-37 and FR-38 warn the user that the tree has moved since the source
 session, which needs the commit distance.
 
 ## Functional Responsibilities
 
-- Identify the repository containing a directory: root path, HEAD commit, current branch (FR-13).
+- Identify the repository containing a directory: checkout root, canonical common directory, bare
+  status, HEAD commit, current branch (FR-13).
 - Report how far HEAD is from a given commit, in commits ahead and behind (FR-37, FR-38).
 - Report "not known" rather than guessing when the working directory is not a repository, when the
   repository has no commits, or when the source commit is absent from this repository.
@@ -31,9 +33,9 @@ either way.
 
 - **How git is reached.** Whether the `git` binary is spawned or a library is linked, which
   subcommands are used, and how their output is parsed.
-- **Failure translation.** That "not a git repository", "no commits yet", and "unknown revision" are
-  three different git failures and all three become a null or a `known: false`, never an exception
-  the caller must interpret.
+- **Failure translation.** Completed nonzero Git results leave the requested facts unresolved, not
+  necessarily outside Git. Localized stderr is not classified. Missing filesystem paths (ENOENT)
+  are absent evidence; other filesystem failures and Git operational failures reject.
 - **Worktree and submodule details.** Which directory counts as the root when the command runs inside
   a worktree or a submodule.
 
@@ -45,9 +47,13 @@ facts; `src/import/preview/` decides what to say about them.
 ```ts
 /** The repository the command runs in (FR-13). */
 interface RepoIdentity {
-  /** Absolute path of the repository root, or null when the directory is not in a repository. */
+  /** Canonical checkout root, or null when unresolved or bare (not an import destination). */
   root: string | null;
-  /** Current HEAD commit, or null when the repository has no commit yet. */
+  /** Canonical Git common directory shared by linked worktrees, or null when unresolved. */
+  commonDir: string | null;
+  /** True only for a resolved bare repository; its linked working trees report false. */
+  isBare: boolean;
+  /** Current HEAD commit, or null when unresolved or the repository has no commit yet. */
   head: string | null;
   branch: string | null;
 }
@@ -103,10 +109,24 @@ Changes that require **only this module** to change:
 - **This module never writes to the repository.** No commit, no checkout, no stash, no index change,
   no configuration write. It is read-only against the user's work (AC-4 in spirit: the tool touches
   nothing the user owns).
-- **No method throws for an expected absence.** Not a repository, no commits, unknown revision: all
-  three are reported in the return value. Only a genuine failure to run git rejects.
-- **`RepoIdentity.root` is absolute and fully resolved**, including symlinks, so that FR-13's filter
-  compares paths and not spellings.
+- **Expected absences are return values.** Missing paths and completed nonzero identity queries
+  return an unresolved identity (`root`, `commonDir`, `head`, `branch` null; `isBare` false).
+  HEAD/branch queries may independently be unresolved without losing repository identity. Git
+  spawn, timeout, cancellation, and non-ENOENT filesystem failures reject rather than becoming
+  absence. Cancellation also rejects when the requested path is missing.
+- **`RepoIdentity.root` and `commonDir` are absolute and fully resolved**, including symlinks.
+  Canonicalize the existing input directory first, query `rev-parse --git-common-dir`, resolve any
+  relative output against that exact command directory, then apply filesystem realpath. Resolve
+  `--show-toplevel` separately: `root` always remains the checkout, never a metadata directory.
+  No parent search from missing paths, path-prefix rules, remote comparison, or shared-object
+  heuristics are used. Identity works without a commit or branch, and Git selects the nearest
+  repository, keeping nested repositories, submodules and independent clones distinct.
+- **Bare repositories have identity but no checkout.** `isBare` is true and `root` null for a bare
+  repository; callers must not use it as an import destination. Its linked working trees report
+  their own checkout roots and `isBare: false`, while sharing its `commonDir`.
+- **Inherited Git location overrides are excluded.** `GIT_DIR`, `GIT_COMMON_DIR`, `GIT_WORK_TREE`
+  and `GIT_INDEX_FILE` are removed from the subprocess environment. Execution uses argument arrays,
+  not shell strings; common-directory lookup does not require `--path-format` support.
 - **`distanceFrom` is safe with any string.** A malformed or attacker-supplied revision returns
   `known: false`; it is never interpolated into a shell.
 - **Results are read at the moment of the call.** No caching across calls, because the preview and
@@ -132,7 +152,7 @@ user's repository.
 
 **T-REP-3 — a directory outside a repository**
 - Scenario: `identify` on a plain temporary directory.
-- Expected behavior: `root`, `head` and `branch` are all null. It does not throw.
+- Expected behavior: `root`, `commonDir`, `head` and `branch` are null, `isBare` is false. It does not throw.
 
 **T-REP-4 — a repository with no commits**
 - Scenario: `git init` and nothing else.
@@ -209,3 +229,21 @@ user's repository.
 **T-REP-18 — git execution is cancellable**
 - Scenario: a reader created with an aborted `AbortSignal` attempts to identify a repository.
 - Expected behavior: it rejects with an abort message before returning repository facts.
+
+**T-REP-19 — common-directory identity across checkout layouts** (`identity.test.ts`)
+- Scenario: real nested, sibling and external linked worktrees; source/destination subdirectories;
+  spaces and symlink aliases; detached and unborn HEAD; separate Git directories and bare-hosted
+  worktrees.
+- Expected behavior: each checkout retains its own root, HEAD and branch while related worktrees
+  share one canonical `commonDir`. Bare repositories alone have no checkout root and are marked bare.
+
+**T-REP-20 — independent repositories stay distinct** (`identity.test.ts`)
+- Scenario: nested independent repositories, submodules, same-remote clones and shared-object clones.
+- Expected behavior: their common-directory identities differ even when commits or objects match.
+
+**T-REP-21 — identity lookup boundaries** (`reader.test.ts`, `identity.test.ts`)
+- Scenario: relative Git output; inherited Git directory/index overrides; missing input/metadata;
+  completed nonzero Git queries; filesystem permission/I/O errors; Git operational errors and abort.
+- Expected behavior: resolve output against the canonical command directory; ignore inherited
+  overrides; never infer identity from a missing path's parent; leave nonzero lookups unresolved
+  without classifying stderr; propagate operational errors and cancellation.

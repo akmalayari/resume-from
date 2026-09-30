@@ -6,7 +6,7 @@ import { execFile } from "node:child_process";
 import type { RepoReaderOptions } from "./contract.js";
 
 export interface GitResult {
-  /** True when git exited 0. A non-zero exit is an answer ("no such revision"), not a failure. */
+  /** True when git exited 0. A completed nonzero exit leaves the requested fact unresolved. */
   ok: boolean;
   stdout: string;
   stderr: string;
@@ -21,9 +21,9 @@ const DEFAULT_GIT_TIMEOUT_MS = 10_000;
 /**
  * Runs a read-only git command in `cwd`.
  *
- * Rejects only when git could not be run at all — a missing binary, a signal. An exit code is
- * reported in `ok`, because the callers of this module treat "not a repository", "no commits yet"
- * and "unknown revision" as facts to report rather than errors to raise.
+ * Rejects operational failures, including spawn failures, timeout and cancellation. A completed
+ * nonzero exit is reported in `ok`: callers leave the requested fact unresolved without trying
+ * to classify localized stderr (which need not mean the directory is outside Git).
  */
 export function runGit(
   cwd: string,
@@ -93,6 +93,7 @@ function gitEnv(): NodeJS.ProcessEnv {
   // These would override `-C` and point git at a repository other than the one being asked about,
   // for example when the tool runs inside a git hook.
   delete env.GIT_DIR;
+  delete env.GIT_COMMON_DIR;
   delete env.GIT_WORK_TREE;
   delete env.GIT_INDEX_FILE;
   return env;
