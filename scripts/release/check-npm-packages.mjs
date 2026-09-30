@@ -42,9 +42,11 @@ const packages = [
       "THIRD-PARTY-NOTICES.md",
     ],
     // Ships a self-contained esbuild bundle because Claude Code unpacks the tarball without
-    // installing dependencies, so the budget carries the whole gpt-tokenizer encoding table.
-    // Raise only for that table; a jump beyond it means something else was bundled in.
-    maxUnpackedBytes: 3_500_000,
+    // installing dependencies, so the budget carries the whole gpt-tokenizer encoding table:
+    // 2,431,335 bytes for esm/bpeRanks/o200k_base.js in 4.0.0, 2,223,080 in 3.4.0, plus about
+    // 300 KB of own source and notices. Raise only for that table; a jump beyond it means
+    // something else was bundled in.
+    maxUnpackedBytes: 3_800_000,
     forbidden: (path) => path.endsWith(".d.ts") || path.endsWith(".map"),
   },
   {
