@@ -8,6 +8,7 @@
  * preview, `response_item` drives the model history only.
  */
 
+import { createReadStream } from "node:fs";
 import { lstat, readdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
@@ -197,6 +198,62 @@ export function parseRolloutText(text: string): {
 
 export function stringifyRollout(entries: RolloutEntry[]): string {
   return entries.map((entry) => `${JSON.stringify(entry)}\n`).join("");
+}
+
+/**
+ * A Codex entry is kilobytes; a longer line is damage, not a turn. Such a line is dropped whole and
+ * the file counts as truncated, so no rollout can exhaust memory or the maximum string length (C-13).
+ */
+const MAX_ENTRY_LINE_CHARS = 16 * 1024 * 1024;
+
+/** Set by `streamRolloutEntries` when a line could not be read (C-13). */
+export interface RolloutStreamState {
+  truncated: boolean;
+}
+
+/**
+ * Yields the entries of a rollout without ever holding the file (C-13). A line that is not one whole
+ * JSON object marks the file truncated, exactly as `parseRolloutText` does; a line longer than any
+ * Codex entry is dropped whole instead of being materialized as one string.
+ */
+export async function* streamRolloutEntries(
+  filePath: string,
+  state: RolloutStreamState,
+): AsyncGenerator<RolloutEntry> {
+  const stream = createReadStream(filePath, { encoding: "utf8", highWaterMark: 1 << 20 });
+  let pending = "";
+  let droppingLine = false;
+  try {
+    for await (const chunk of stream) {
+      pending += chunk;
+      for (;;) {
+        const end = pending.indexOf("\n");
+        if (end === -1) break;
+        const line = pending.slice(0, end);
+        pending = pending.slice(end + 1);
+        if (droppingLine) {
+          // The tail of an over-long line: its newline is the last of it.
+          droppingLine = false;
+          continue;
+        }
+        const entry = line.trim() === "" ? null : parseEntry(line);
+        if (entry !== null) yield entry;
+        else if (line.trim() !== "") state.truncated = true;
+      }
+      if (pending.length > MAX_ENTRY_LINE_CHARS) {
+        pending = "";
+        droppingLine = true;
+        state.truncated = true;
+      }
+    }
+    if (!droppingLine && pending.trim() !== "") {
+      const entry = parseEntry(pending);
+      if (entry !== null) yield entry;
+      else state.truncated = true;
+    }
+  } finally {
+    stream.destroy();
+  }
 }
 
 export function payloadType(entry: RolloutEntry): string {

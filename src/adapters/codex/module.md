@@ -71,6 +71,12 @@ exists, and the reason this module's `readBack` is not optional.
   (C-4). This module does not attempt to carry them, and does not treat their absence as a defect.
 - **Codex's default home**, its thread file location and naming, and how a non-default home is
   recognised (FR-2, FR-3).
+- **That a rollout can be larger than one string, and a home can hold thousands of them.**
+  C-13: one 635 MB rollout made the whole home unreadable with `RangeError: Invalid string length`
+  while listing read every file whole, and a 2023-file home cost about 41 s. This module lists a home
+  by streaming each file and building nothing but a row (C-13), and it caps a single line at 16 MB.
+  Listing and loading classify entries with one function, so a row cannot disagree with the session
+  it opens; the import path still reads a whole file, because it builds every turn from it.
 
 ## Public Contract
 
@@ -419,6 +425,16 @@ None of these touch a rule, a preview, another adapter, or the host.
 - **`response_item` entries are not written unless a read-back check proves they are needed.** C-8
   showed `event_msg` entries alone give a listed, resumable thread with the imported text in the
   answer. Anything beyond that is unverified and stays out.
+- **A listing never holds a rollout whole, and never builds a turn.** `listCodexSessions` streams
+  each file through `classifyEntry` — the same function `toCanonicalTurns` uses — and keeps only
+  counts, the title of the first user message and the timestamps. A line longer than any Codex entry
+  is damage: it is dropped, the file counts as truncated and reading continues. This is what keeps
+  one huge rollout from failing a whole home (C-13).
+- **One unreadable rollout is skipped; a home with nothing readable reports a failure.** A rollout
+  that cannot be read (permissions, a broken mount) must not hide the sessions beside it, and a home
+  that yielded nothing while failing must not look empty (C-13). A partial skip is silent today
+  because the adapter port has no per-session failure channel; if it gains one, partial skips must be
+  reported through it.
 - **`readBack` is mandatory, not an optimisation.** Codex drops an unknown item type in silence
   (C-6), so the only evidence of what was stored is what can be read back (FR-52).
 - **`readBack` reports `openable: false` rather than throwing** when the thread is absent from the
@@ -560,6 +576,13 @@ says Codex fails silently, so nothing here may be inferred from the absence of a
   `response_item` stream is not read as a second set of turns; an extension kind that is not a
   measured read keeps effect `unknown`; and a rollout whose `item_completed` carries no dialogue is
   still read as the older schema.
+
+**T-COD-22 — the selection list reads a rollout without holding it (C-13)**
+- Scenario: a rollout whose message line exceeds the entry cap, and a home holding one readable
+  rollout beside one that cannot be read (a `0o000` file, skipped under root).
+- Expected behavior: the listing keeps the readable session, reports a home with nothing readable as
+  a failure rather than an empty listing, drops the capped line while still reading the entries after
+  it, and gives every row the same title and turn count as the session that row opens.
 
 **T-COD-15 — live: the default home is what Codex uses**
 - Scenario: an installed Codex writes a thread; the declared default home is compared with where it

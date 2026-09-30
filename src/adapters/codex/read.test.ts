@@ -1,9 +1,10 @@
 import { rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmod } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { SessionDescriptor } from "./contract.js";
 import { codexAdapterFactory } from "./index.js";
-import { readRollout } from "./read.js";
+import { readRollout, summarizeRollout } from "./read.js";
 import {
   agentEvent,
   functionCall,
@@ -31,6 +32,7 @@ import {
 
 const adapter = codexAdapterFactory.create();
 const homes: string[] = [];
+const rootUser = typeof process.getuid === "function" && process.getuid() === 0;
 
 function tempHome(): string {
   const home = makeTempHome();
@@ -135,6 +137,103 @@ describe("listSessions", () => {
     const titles = (await adapter.listSessions(home)).map((descriptor) => descriptor.title);
     expect(titles).toEqual(["newer", "older"]);
   });
+
+  // C-13's split between counting and loading: a row that disagrees with the session it opens is
+  // the defect a summary that re-derived turns for itself would introduce.
+  it("counts and titles each row exactly as the session it opens (C-13)", async () => {
+    const id = "11111111-1111-4111-8111-111111111111";
+    const cases = [
+      {
+        name: "the older schema",
+        entries: fullThread(id),
+        title: "make the auth token refresh work",
+        turnCount: 5,
+      },
+      {
+        name: "the item_completed schema",
+        entries: [
+          metaEntry(id),
+          itemCompletedUserMessage("verify the contract"),
+          itemCompletedAgentMessage("Here is the report."),
+          itemCompletedCommandExecution(["/bin/bash", "-lc", "pwd"], "/repo/demo\n"),
+          itemCompletedContextCompaction(),
+        ],
+        title: "verify the contract",
+        turnCount: 3,
+      },
+      {
+        name: "tool-only item_completed items beside older dialogue",
+        entries: [
+          metaEntry(id),
+          userEvent("legacy request"),
+          agentEvent("legacy answer"),
+          itemCompletedCommandExecution(["ls"], "tool-only\n"),
+        ],
+        title: "legacy request",
+        turnCount: 2,
+      },
+    ];
+
+    for (const fixture of cases) {
+      const home = tempHome();
+      writeRollout(home, id, fixture.entries);
+      const row = await loadOnly(home);
+      const session = await adapter.loadSession(row);
+      expect([fixture.name, row.title, row.turnCount]).toEqual([
+        fixture.name,
+        fixture.title,
+        fixture.turnCount,
+      ]);
+      expect(session.turns.length).toBe(row.turnCount);
+    }
+  });
+
+  it("treats an over-long line as damage and keeps reading the file (C-13)", async () => {
+    const home = tempHome();
+    const id = "cccccccc-3333-4333-8333-333333333333";
+    writeRollout(home, id, [
+      metaEntry(id),
+      userEvent("x".repeat(17 * 1024 * 1024)),
+      userEvent("the real request", "2026-08-01T09:20:00.000Z"),
+    ]);
+
+    const row = await loadOnly(home);
+    expect([row.title, row.turnCount]).toEqual(["the real request", 1]);
+    expect((await summarizeRollout(row.filePath)).truncated).toBe(true);
+  });
+
+  // One unreadable rollout must not hide the rest of its home (C-13). Root can read a 0o000 file.
+  it.skipIf(rootUser)("lists the rest of a home beside an unreadable rollout (C-13)", async () => {
+    const home = tempHome();
+    const good = writeRollout(
+      home,
+      "dddddddd-4444-4444-8444-444444444444",
+      fullThread("dddddddd-4444-4444-8444-444444444444"),
+    );
+    const unreadable = writeRollout(
+      home,
+      "eeeeeeee-5555-4555-8555-555555555555",
+      fullThread("eeeeeeee-5555-4555-8555-555555555555"),
+    );
+    await chmod(unreadable, 0o000);
+
+    expect((await adapter.listSessions(home)).map((row) => row.filePath)).toEqual([good]);
+  });
+
+  it.skipIf(rootUser)(
+    "reports a home it cannot read at all, rather than an empty one (C-13)",
+    async () => {
+      const home = tempHome();
+      const unreadable = writeRollout(
+        home,
+        "ffffffff-6666-4666-8666-666666666666",
+        fullThread("ffffffff-6666-4666-8666-666666666666"),
+      );
+      await chmod(unreadable, 0o000);
+
+      await expect(adapter.listSessions(home)).rejects.toThrow();
+    },
+  );
 });
 
 /** T-COD-2 — a rollout file becomes canonical turns. */

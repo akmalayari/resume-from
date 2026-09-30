@@ -16,7 +16,7 @@ import type {
   TurnRole,
 } from "./contract.js";
 import { redactSensitiveArgumentsText, redactSensitiveText } from "./redaction.js";
-import type { CodexSessionMeta, RolloutEntry } from "./rollout.js";
+import type { CodexSessionMeta, RolloutEntry, RolloutStreamState } from "./rollout.js";
 import {
   CODEX_ENTRY_COMPACTED,
   CODEX_ENTRY_EVENT_MSG,
@@ -47,6 +47,7 @@ import {
   payloadType,
   readSessionMeta,
   sessionsRoot,
+  streamRolloutEntries,
   toIsoUtc,
 } from "./rollout.js";
 
@@ -99,9 +100,9 @@ export class CodexRolloutUnreadableError extends Error {
 
 /** Lenient: a file cut mid-entry still yields whatever parsed, with `truncated` set. */
 export async function scanRollout(filePath: string): Promise<CodexRollout> {
-  // Whole-file read: listing a home reads every rollout, and C-5 measured those files
-  // in megabytes. Ceiling accepted because title and turn count both need the whole file;
-  // revisit if a home with thousands of threads makes the listing feel slow.
+  // Whole-file read: the loader builds every turn and needs the whole dialogue anyway, and a
+  // session that cannot fit a budget is not importable. Ceiling: a rollout larger than the maximum
+  // string length fails this path with a clean error. The listing does not use it (C-13).
   const text = await readFile(filePath, "utf8");
   const { entries, truncated } = parseRolloutText(text);
 
@@ -135,29 +136,116 @@ export async function readRollout(filePath: string): Promise<CodexRollout> {
   return rollout;
 }
 
+/** What the selection list needs from one rollout file (FR-11, FR-14). */
+export interface RolloutSummary {
+  filePath: string;
+  meta: CodexSessionMeta | null;
+  title: string;
+  startedAt: string | null;
+  updatedAt: string | null;
+  turnCount: number;
+  truncated: boolean;
+}
+
+/**
+ * Sums up one rollout for the selection list in a single streamed pass (C-13): no turn is built,
+ * no argument is redacted, and neither the file nor its entries are held whole. Every field comes
+ * from the same classifier the loader uses, so a row cannot disagree with the session it opens.
+ */
+export async function summarizeRollout(filePath: string): Promise<RolloutSummary> {
+  const state: RolloutStreamState = { truncated: false };
+  let meta: CodexSessionMeta | null = null;
+  let firstEntryStamp: string | null = null;
+  let seenEntry = false;
+  let lastStamp: string | null = null;
+  let legacyTurns = 0;
+  let itemTurns = 0;
+  let summaryTurns = 0;
+  let hasItemDialogue = false;
+  let legacyTitle = "";
+  let itemTitle = "";
+
+  for await (const entry of streamRolloutEntries(filePath, state)) {
+    if (meta === null) meta = readSessionMeta(entry);
+    const stamp = toIsoUtc(entry.timestamp);
+    if (!seenEntry) {
+      seenEntry = true;
+      firstEntryStamp = stamp;
+    }
+    if (stamp !== null) lastStamp = stamp;
+
+    const turn = classifyEntry(entry);
+    switch (turn.kind) {
+      case "summary":
+        summaryTurns += 1;
+        break;
+      case "message":
+        if (turn.schema === "item-completed") {
+          hasItemDialogue = true;
+          itemTurns += 1;
+          if (turn.role === "user" && itemTitle === "") itemTitle = turn.text;
+        } else {
+          legacyTurns += 1;
+          if (turn.role === "user" && legacyTitle === "") legacyTitle = turn.text;
+        }
+        break;
+      case "tool-call":
+        if (turn.schema === "item-completed") itemTurns += 1;
+        else legacyTurns += 1;
+        break;
+      default:
+        // "none" and "unknown" contribute no turn.
+        break;
+    }
+  }
+
+  const metaStamp = toIsoUtc(meta?.timestamp ?? null);
+  return {
+    filePath,
+    meta,
+    // The title reaches the target's metadata, so it is redacted as the turn text is (FR-28).
+    title: titleOf(redactSensitiveText(hasItemDialogue ? itemTitle : legacyTitle)),
+    startedAt: metaStamp ?? firstEntryStamp,
+    updatedAt: lastStamp ?? metaStamp,
+    turnCount: summaryTurns + (hasItemDialogue ? itemTurns : legacyTurns),
+    truncated: state.truncated,
+  };
+}
+
 export async function listCodexSessions(home: string): Promise<SessionDescriptor[]> {
   const descriptors: SessionDescriptor[] = [];
+  let failed = 0;
+  let firstFailure: unknown = null;
+
   for (const filePath of await listRolloutFiles(sessionsRoot(home))) {
-    let rollout: CodexRollout;
+    let summary: RolloutSummary;
     try {
-      rollout = await scanRollout(filePath);
+      summary = await summarizeRollout(filePath);
     } catch (error) {
       if (isNotFoundError(error)) continue; // A rollout may disappear during a concurrent cleanup.
-      throw error;
+      // One unreadable rollout must not hide the rest of the home (C-13). The home still reports a
+      // failure when nothing at all could be read, so a broken mount is never silent.
+      failed += 1;
+      firstFailure ??= error;
+      continue;
     }
-    if (rollout.meta === null) continue;
-    const repoPaths =
-      rollout.meta.cwd !== null && isAbsolute(rollout.meta.cwd) ? [rollout.meta.cwd] : [];
+    const meta = summary.meta;
+    if (meta === null) continue;
+    const repoPaths = meta.cwd !== null && isAbsolute(meta.cwd) ? [meta.cwd] : [];
     descriptors.push({
-      ref: { agent: "codex", home, id: rollout.meta.id },
-      title: rollout.title,
-      startedAt: rollout.startedAt ?? "",
-      updatedAt: rollout.updatedAt ?? rollout.startedAt ?? "",
-      turnCount: rollout.turns.length,
+      ref: { agent: "codex", home, id: meta.id },
+      title: summary.title,
+      startedAt: summary.startedAt ?? "",
+      updatedAt: summary.updatedAt ?? summary.startedAt ?? "",
+      turnCount: summary.turnCount,
       repoPath: repoPaths[0] ?? null,
       repoPaths,
       filePath,
     });
+  }
+
+  if (descriptors.length === 0 && failed > 0) {
+    throw firstFailure instanceof Error ? firstFailure : new Error(String(firstFailure));
   }
   descriptors.sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
   return descriptors;
@@ -200,120 +288,184 @@ function titleOf(text: string): string {
  *   single `event_msg` whose `payload.item.type` says which. Its `response_item` stream repeats the
  *   same actions, so it is not read as well, or every action would be counted twice.
  *
- * Reasoning, in either shape, produces nothing at all (C-4, FR-28, NG-8).
+ * Reasoning, in either shape, produces nothing at all (C-4, FR-28, NG-8). Which entries count is
+ * settled by `classifyEntry`, the same function the selection list counts with.
  */
 function toCanonicalTurns(entries: RolloutEntry[]): {
   turns: CanonicalTurn[];
   skippedEntries: number;
   changedPaths: string[];
 } {
-  const itemCompleted = usesItemCompletedDialogue(entries);
-
-  const outputs = new Map<string, string>();
-  if (!itemCompleted) {
-    for (const entry of entries) {
-      if (entry.type !== CODEX_ENTRY_RESPONSE_ITEM) continue;
-      const type = payloadType(entry);
-      if (type !== CODEX_ITEM_FUNCTION_CALL_OUTPUT && type !== CODEX_ITEM_CUSTOM_TOOL_CALL_OUTPUT)
-        continue;
-      const callId = entry.payload.call_id;
-      if (typeof callId !== "string") continue;
-      outputs.set(callId, outputTextOf(entry.payload.output));
-    }
-  }
-
+  const schema = dialogueSchemaOf(entries);
+  const outputs = schema === "legacy" ? callOutputs(entries) : new Map<string, string>();
   const turns: CanonicalTurn[] = [];
   const changed = new Set<string>();
   let skippedEntries = 0;
 
   for (const entry of entries) {
-    if (!KNOWN_ENTRY_TYPES.has(entry.type)) {
+    const turn = classifyEntry(entry);
+    if (turn.kind === "unknown") {
       skippedEntries += 1;
       continue;
     }
-    const type = payloadType(entry);
-
-    if (entry.type === CODEX_ENTRY_COMPACTED) {
-      const message = entry.payload.message;
-      if (typeof message !== "string" || message.trim() === "") continue;
+    if (turn.kind === "none") continue;
+    if (turn.kind === "summary") {
       turns.push({
         index: turns.length,
         role: "agent",
         kind: "summary",
         // FR-28, security: credentials in message text must not cross to a different vendor.
-        text: redactSensitiveText(message),
+        text: redactSensitiveText(turn.text),
         toolCall: null,
         timestamp: toIsoUtc(entry.timestamp),
       });
       continue;
     }
-
-    if (entry.type === CODEX_ENTRY_EVENT_MSG) {
-      if (itemCompleted) {
-        if (type !== CODEX_EVENT_ITEM_COMPLETED) continue;
-        const item = itemCompletedItem(entry);
-        if (item === null) continue;
-        const body = turnFromItemCompleted(item);
-        if (body === null) {
-          // Reasoning and compaction are known names that carry no turn; anything else is a kind
-          // this module does not understand, and C-6 says to count it, never guess at it.
-          if (!IGNORED_ITEM_TYPES.has(itemCompletedItemType(entry))) skippedEntries += 1;
-          continue;
-        }
-        turns.push({
-          index: turns.length,
-          role: body.role,
-          kind: body.kind,
-          text: body.text,
-          toolCall: body.toolCall,
-          timestamp: toIsoUtc(entry.timestamp),
-        });
-        for (const path of body.changedPaths) changed.add(path);
-        continue;
-      }
-      if (type !== CODEX_EVENT_USER_MESSAGE && type !== CODEX_EVENT_AGENT_MESSAGE) continue;
-      const message = entry.payload.message;
-      if (typeof message !== "string" || message.trim() === "") continue;
+    // A rollout speaks one schema; the other stream is its repeat, not a second set of turns.
+    if (turn.schema !== schema) continue;
+    if (turn.kind === "message") {
       turns.push({
         index: turns.length,
-        role: type === CODEX_EVENT_USER_MESSAGE ? "user" : "agent",
+        role: turn.role,
         kind: "message",
         // FR-28, security: credentials in message text must not cross to a different vendor.
-        text: redactSensitiveText(message),
+        text: redactSensitiveText(turn.text),
         toolCall: null,
         timestamp: toIsoUtc(entry.timestamp),
       });
       continue;
     }
-
-    if (entry.type !== CODEX_ENTRY_RESPONSE_ITEM) continue;
-    // The `item_completed` schema repeats every action here; reading it too would double them.
-    if (itemCompleted) continue;
-    if (type !== CODEX_ITEM_FUNCTION_CALL && type !== CODEX_ITEM_CUSTOM_TOOL_CALL) continue;
-
-    const toolName = typeof entry.payload.name === "string" ? (entry.payload.name as string) : "";
-    if (toolName === "") continue;
-    const rawArguments =
-      type === CODEX_ITEM_FUNCTION_CALL ? entry.payload.arguments : entry.payload.input;
-    const argumentsText = typeof rawArguments === "string" ? rawArguments : "";
-    const callId = entry.payload.call_id;
-    // FR-54: use has() not get() — outputs.get() can return "" for an empty result.
-    const resultRecorded = typeof callId === "string" && outputs.has(callId);
-    const output = typeof callId === "string" ? (outputs.get(callId) ?? null) : null;
-    const toolCall = toolCallRecord(toolName, argumentsText, output, resultRecorded);
-    if (toolCall.effect === "mutating")
-      for (const path of pathsOf(argumentsText)) changed.add(path);
+    const body =
+      turn.schema === "item-completed" ? itemTurn(entry) : legacyCallTurn(entry, outputs);
+    if (body === null) continue;
     turns.push({
       index: turns.length,
-      role: "agent",
-      kind: "tool-call",
-      text: "",
-      toolCall,
+      role: body.role,
+      kind: body.kind,
+      text: body.text,
+      toolCall: body.toolCall,
       timestamp: toIsoUtc(entry.timestamp),
     });
+    for (const path of body.changedPaths) changed.add(path);
   }
 
   return { turns, skippedEntries, changedPaths: [...changed] };
+}
+
+/** Which dialogue schema a rollout speaks (C-7, C-12). */
+type DialogueSchema = "legacy" | "item-completed";
+
+/**
+ * What one entry contributes to a session, decided from that entry alone (C-7, C-12). The listing
+ * counts these classes and the loader builds turns from them, so the two cannot disagree: a turn
+ * cannot be counted as one thing and built as another.
+ */
+type EntryTurn =
+  | { kind: "message"; schema: DialogueSchema; role: TurnRole; text: string }
+  | { kind: "summary"; text: string }
+  | { kind: "tool-call"; schema: DialogueSchema }
+  | { kind: "none" }
+  | { kind: "unknown" };
+
+/**
+ * Classifies one entry without building anything: no record, no redaction, and no string work beyond
+ * the message text a title needs. A kind this module does not understand is reported, never guessed
+ * at (C-6); reasoning, compaction and activity markers are understood and carry no turn (C-4, C-12).
+ */
+function classifyEntry(entry: RolloutEntry): EntryTurn {
+  if (!KNOWN_ENTRY_TYPES.has(entry.type)) return { kind: "unknown" };
+
+  if (entry.type === CODEX_ENTRY_COMPACTED) {
+    const message = entry.payload.message;
+    if (typeof message !== "string" || message.trim() === "") return { kind: "none" };
+    return { kind: "summary", text: message };
+  }
+
+  if (entry.type === CODEX_ENTRY_EVENT_MSG) {
+    const type = payloadType(entry);
+    if (type === CODEX_EVENT_ITEM_COMPLETED) return itemCompletedTurn(entry);
+    if (type !== CODEX_EVENT_USER_MESSAGE && type !== CODEX_EVENT_AGENT_MESSAGE)
+      return { kind: "none" };
+    const message = entry.payload.message;
+    if (typeof message !== "string" || message.trim() === "") return { kind: "none" };
+    return {
+      kind: "message",
+      schema: "legacy",
+      role: type === CODEX_EVENT_USER_MESSAGE ? "user" : "agent",
+      text: message,
+    };
+  }
+
+  if (entry.type !== CODEX_ENTRY_RESPONSE_ITEM) return { kind: "none" };
+  const type = payloadType(entry);
+  if (type !== CODEX_ITEM_FUNCTION_CALL && type !== CODEX_ITEM_CUSTOM_TOOL_CALL)
+    return { kind: "none" };
+  const toolName = entry.payload.name;
+  if (typeof toolName !== "string" || toolName === "") return { kind: "none" };
+  return { kind: "tool-call", schema: "legacy" };
+}
+
+/** The class of one `item_completed` entry, from the same tables its builder reads (C-12). */
+function itemCompletedTurn(entry: RolloutEntry): EntryTurn {
+  const item = itemCompletedItem(entry);
+  if (item === null) return { kind: "none" };
+  const itemType = typeof item.type === "string" ? item.type : "";
+  const role = ITEM_MESSAGE_ROLES.get(itemType);
+  if (role !== undefined)
+    return { kind: "message", schema: "item-completed", role, text: itemContentText(item) };
+  if (ITEM_TOOL_TURN_BUILDERS.has(itemType)) return { kind: "tool-call", schema: "item-completed" };
+  return IGNORED_ITEM_TYPES.has(itemType) ? { kind: "none" } : { kind: "unknown" };
+}
+
+/**
+ * The schema a rollout speaks, from the dialogue it carries (C-12). Tool-only items do not decide
+ * it: a rollout is read as the newer schema only when it actually delivers dialogue that way.
+ */
+function dialogueSchemaOf(entries: RolloutEntry[]): DialogueSchema {
+  const carriesItemDialogue = entries.some((entry) => {
+    const turn = classifyEntry(entry);
+    return turn.kind === "message" && turn.schema === "item-completed";
+  });
+  return carriesItemDialogue ? "item-completed" : "legacy";
+}
+
+/** The recorded answers of the older schema's calls, by call id (FR-25, FR-54). */
+function callOutputs(entries: RolloutEntry[]): Map<string, string> {
+  const outputs = new Map<string, string>();
+  for (const entry of entries) {
+    if (entry.type !== CODEX_ENTRY_RESPONSE_ITEM) continue;
+    const type = payloadType(entry);
+    if (type !== CODEX_ITEM_FUNCTION_CALL_OUTPUT && type !== CODEX_ITEM_CUSTOM_TOOL_CALL_OUTPUT)
+      continue;
+    const callId = entry.payload.call_id;
+    if (typeof callId !== "string") continue;
+    outputs.set(callId, outputTextOf(entry.payload.output));
+  }
+  return outputs;
+}
+
+/** One older-schema `response_item` call becomes one tool-call turn (C-7). */
+function legacyCallTurn(
+  entry: RolloutEntry,
+  outputs: ReadonlyMap<string, string>,
+): ItemTurn | null {
+  const toolName = entry.payload.name;
+  if (typeof toolName !== "string" || toolName === "") return null;
+  const rawArguments =
+    payloadType(entry) === CODEX_ITEM_FUNCTION_CALL ? entry.payload.arguments : entry.payload.input;
+  const argumentsText = typeof rawArguments === "string" ? rawArguments : "";
+  const callId = entry.payload.call_id;
+  // FR-54: use has() not get() — outputs.get() can return "" for an empty result.
+  const resultRecorded = typeof callId === "string" && outputs.has(callId);
+  const output = typeof callId === "string" ? (outputs.get(callId) ?? null) : null;
+  const toolCall = toolCallRecord(toolName, argumentsText, output, resultRecorded);
+  return toolTurn(toolCall, toolCall.effect === "mutating" ? pathsOf(argumentsText) : []);
+}
+
+/** One `item_completed` entry becomes one tool-call turn, through the table that built it (C-12). */
+function itemTurn(entry: RolloutEntry): ItemTurn | null {
+  const item = itemCompletedItem(entry);
+  return item === null ? null : turnFromItemCompleted(item);
 }
 
 /** The inner `item` of an `item_completed` entry, when the entry is one (C-12). */
@@ -322,22 +474,6 @@ function itemCompletedItem(entry: RolloutEntry): Record<string, unknown> | null 
   if (payloadType(entry) !== CODEX_EVENT_ITEM_COMPLETED) return null;
   const item = entry.payload.item;
   return typeof item === "object" && item !== null ? (item as Record<string, unknown>) : null;
-}
-
-function itemCompletedItemType(entry: RolloutEntry): string {
-  const type = itemCompletedItem(entry)?.type;
-  return typeof type === "string" ? type : "";
-}
-
-/**
- * True when this rollout delivers dialogue as `item_completed` items (C-12). Tool-only items do not
- * count: a rollout is read as the new schema only when it actually carries dialogue that way.
- */
-function usesItemCompletedDialogue(entries: RolloutEntry[]): boolean {
-  return entries.some((entry) => {
-    const type = itemCompletedItemType(entry);
-    return type === CODEX_THREAD_ITEM_USER_MESSAGE || type === CODEX_THREAD_ITEM_AGENT_MESSAGE;
-  });
 }
 
 /** Item kinds that are understood and deliberately carry no turn (C-4, C-12). */
@@ -356,6 +492,29 @@ interface ItemTurn {
   changedPaths: string[];
 }
 
+/** How one `item_completed` kind becomes a turn. The classifier reads the same tables (C-12). */
+type ItemTurnBuilder = (item: Record<string, unknown>) => ItemTurn;
+
+/** The role of a message item, by kind. A kind outside this table is not a message (C-12). */
+const ITEM_MESSAGE_ROLES: ReadonlyMap<string, TurnRole> = new Map([
+  [CODEX_THREAD_ITEM_USER_MESSAGE, "user"],
+  [CODEX_THREAD_ITEM_AGENT_MESSAGE, "agent"],
+]);
+
+/**
+ * Every `item_completed` kind that carries a tool call, and how its record is built (C-12). The
+ * classifier and the builder read this one table, so no kind can be counted as a turn and then
+ * built as none, or the reverse.
+ */
+const ITEM_TOOL_TURN_BUILDERS: ReadonlyMap<string, ItemTurnBuilder> = new Map([
+  [CODEX_THREAD_ITEM_COMMAND_EXECUTION, commandExecutionTurn],
+  [CODEX_THREAD_ITEM_FILE_CHANGE, fileChangeTurn],
+  [CODEX_THREAD_ITEM_EXTENSION, extensionTurn],
+  [CODEX_THREAD_ITEM_MCP_TOOL_CALL, mcpToolCallTurn],
+  [CODEX_THREAD_ITEM_COLLAB_AGENT_TOOL_CALL, collabAgentToolCallTurn],
+  [CODEX_THREAD_ITEM_IMAGE_VIEW, imageViewTurn],
+]);
+
 /**
  * One `item_completed` item becomes one canonical turn. The kind of the call is settled by
  * `item.type` itself, so the effect is read from that and never guessed from a tool name (FR-26).
@@ -363,111 +522,101 @@ interface ItemTurn {
  */
 function turnFromItemCompleted(item: Record<string, unknown>): ItemTurn | null {
   const itemType = typeof item.type === "string" ? item.type : "";
-
-  switch (itemType) {
-    case CODEX_THREAD_ITEM_USER_MESSAGE:
-    case CODEX_THREAD_ITEM_AGENT_MESSAGE:
-      return {
-        role: itemType === CODEX_THREAD_ITEM_USER_MESSAGE ? "user" : "agent",
-        kind: "message",
-        // FR-28, security: credentials in message text must not cross to a different vendor.
-        text: redactSensitiveText(itemContentText(item)),
-        toolCall: null,
-        changedPaths: [],
-      };
-    case CODEX_THREAD_ITEM_COMMAND_EXECUTION: {
-      const output = firstString(item.aggregated_output, item.formatted_output, item.stdout);
-      return {
-        role: "agent",
-        kind: "tool-call",
-        text: "",
-        toolCall: toolCallRecord("exec", commandText(item.command), output, output !== null),
-        changedPaths: [],
-      };
-    }
-    case CODEX_THREAD_ITEM_FILE_CHANGE: {
-      const paths = objectKeys(item.changes);
-      return {
-        role: "agent",
-        kind: "tool-call",
-        text: "",
-        toolCall: itemToolCallRecord(
-          "apply_patch",
-          fileChangeArguments(item.changes),
-          `${paths.length} file(s) changed`,
-          "mutating",
-          false,
-        ),
-        changedPaths: paths,
-      };
-    }
-    case CODEX_THREAD_ITEM_EXTENSION: {
-      const kind = firstNonEmptyString(item.kind) ?? "extension";
-      const results = Array.isArray(item.results) ? item.results.length : 0;
-      return {
-        role: "agent",
-        kind: "tool-call",
-        text: "",
-        toolCall: itemToolCallRecord(
-          kind,
-          extensionArguments(item),
-          `${results} result(s) dropped`,
-          READ_ONLY_EXTENSION_KINDS.has(kind) ? "read-only" : "unknown",
-          true,
-        ),
-        changedPaths: [],
-      };
-    }
-    case CODEX_THREAD_ITEM_MCP_TOOL_CALL: {
-      const call = mcpToolCall(item);
-      return {
-        role: "agent",
-        kind: "tool-call",
-        text: "",
-        toolCall: itemToolCallRecord(
-          call.toolName,
-          call.argumentsText,
-          mcpOutcome(item),
-          // A server's own `readOnlyHint` is a claim by another party, not the item kind (FR-26).
-          "unknown",
-          item.result !== undefined && item.result !== null,
-        ),
-        changedPaths: [],
-      };
-    }
-    case CODEX_THREAD_ITEM_COLLAB_AGENT_TOOL_CALL: {
-      const call = collabAgentToolCall(item);
-      return {
-        role: "agent",
-        kind: "tool-call",
-        text: "",
-        toolCall: itemToolCallRecord(
-          call.toolName,
-          call.argumentsText,
-          call.outcome,
-          "unknown",
-          objectKeys(item.agents_states).length > 0,
-        ),
-        changedPaths: [],
-      };
-    }
-    case CODEX_THREAD_ITEM_IMAGE_VIEW:
-      return {
-        role: "agent",
-        kind: "tool-call",
-        text: "",
-        toolCall: itemToolCallRecord(
-          "view_image",
-          firstNonEmptyString(item.path) ?? "",
-          "image not carried",
-          "read-only",
-          false,
-        ),
-        changedPaths: [],
-      };
-    default:
-      return null;
+  const role = ITEM_MESSAGE_ROLES.get(itemType);
+  if (role !== undefined) {
+    return {
+      role,
+      kind: "message",
+      // FR-28, security: credentials in message text must not cross to a different vendor.
+      text: redactSensitiveText(itemContentText(item)),
+      toolCall: null,
+      changedPaths: [],
+    };
   }
+  return ITEM_TOOL_TURN_BUILDERS.get(itemType)?.(item) ?? null;
+}
+
+/** The common shape of a turn a tool-like item produces. */
+function toolTurn(toolCall: ToolCallRecord, changedPaths: string[] = []): ItemTurn {
+  return { role: "agent", kind: "tool-call", text: "", toolCall, changedPaths };
+}
+
+/** `CommandExecution`: the shell line the model wrote, and the shape of its output (FR-23..FR-25). */
+function commandExecutionTurn(item: Record<string, unknown>): ItemTurn {
+  const output = firstString(item.aggregated_output, item.formatted_output, item.stdout);
+  return toolTurn(toolCallRecord("exec", commandText(item.command), output, output !== null));
+}
+
+/** `FileChange`: the patch is the argument, and its paths are the files the call touched (FR-24, FR-36). */
+function fileChangeTurn(item: Record<string, unknown>): ItemTurn {
+  const paths = objectKeys(item.changes);
+  return toolTurn(
+    itemToolCallRecord(
+      "apply_patch",
+      fileChangeArguments(item.changes),
+      `${paths.length} file(s) changed`,
+      "mutating",
+      false,
+    ),
+    paths,
+  );
+}
+
+/** `Extension`: a tool action such as a web search, with its queries kept and its results dropped. */
+function extensionTurn(item: Record<string, unknown>): ItemTurn {
+  const kind = firstNonEmptyString(item.kind) ?? "extension";
+  const results = Array.isArray(item.results) ? item.results.length : 0;
+  return toolTurn(
+    itemToolCallRecord(
+      kind,
+      extensionArguments(item),
+      `${results} result(s) dropped`,
+      READ_ONLY_EXTENSION_KINDS.has(kind) ? "read-only" : "unknown",
+      true,
+    ),
+  );
+}
+
+/** `McpToolCall`: a server tool call, named by server and tool (FR-27). */
+function mcpToolCallTurn(item: Record<string, unknown>): ItemTurn {
+  const call = mcpToolCall(item);
+  return toolTurn(
+    itemToolCallRecord(
+      call.toolName,
+      call.argumentsText,
+      mcpOutcome(item),
+      // A server's own `readOnlyHint` is a claim by another party, not the item kind (FR-26).
+      "unknown",
+      item.result !== undefined && item.result !== null,
+    ),
+  );
+}
+
+/** `CollabAgentToolCall`: an action on another agent of the same client. */
+function collabAgentToolCallTurn(item: Record<string, unknown>): ItemTurn {
+  const call = collabAgentToolCall(item);
+  return toolTurn(
+    itemToolCallRecord(
+      call.toolName,
+      call.argumentsText,
+      call.outcome,
+      "unknown",
+      objectKeys(item.agents_states).length > 0,
+    ),
+  );
+}
+
+/** `ImageView`: the path the model asked for; the image itself never crosses (FR-24). */
+function imageViewTurn(item: Record<string, unknown>): ItemTurn {
+  return toolTurn(
+    itemToolCallRecord(
+      "view_image",
+      firstNonEmptyString(item.path) ?? "",
+      "image not carried",
+      "read-only",
+      false,
+    ),
+  );
 }
 
 /**

@@ -191,6 +191,23 @@ C-7 to C-11 were tested on 2026-08-03. C-12 was measured on 2026-09-03 and again
 
 ---
 
+- **C-13** — A Codex rollout can be larger than one JavaScript string, and a home can hold thousands
+  of them. Measured on 2026-09-30 in a developer home holding 2023 rollout files (2.37 GB, largest
+  33 MB): listing every thread cost about 41 s while every file was read whole, and one rollout of
+  635 MB made the **whole home** unreadable with `RangeError: Invalid string length`, because the
+  text of that one file exceeds the maximum string length. A reader that streams a file line by line
+  never holds it: the same 635 MB rollout lists in 0.7 s (254 MB peak memory against 621 MB), and
+  the 2023-file home lists in about 9 s — the remaining cost is parsing 2.37 GB of JSON, which no
+  reader can avoid. A line longer than any Codex entry (the cap is 16 MB) is treated as damage: it is
+  dropped, the file counts as truncated, and reading continues at the next line. One rollout that
+  cannot be read at all no longer hides the rest of its home, and a home where nothing at all could
+  be read still reports a failure rather than an empty listing.
+
+  The listing and the loader compute their fields from one classifier, so a row always agrees with
+  the session it opens: over those 2023 files the two agreed on every field of all 2007 rows.
+
+---
+
 ## A. Agents and homes
 
 **FR-1** — A session is identified by three values: the agent, the home, and the session ID.
