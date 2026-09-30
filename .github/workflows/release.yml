@@ -45,13 +45,14 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: npm run packages:check
-      - name: Verify release tag
+      - name: Verify release tag and notes
         run: |
           version=$(node -p 'require("./package.json").version')
           test "$RELEASE_TAG" = "v$version" || {
             printf 'Tag %s does not match package version v%s\n' "$RELEASE_TAG" "$version" >&2
             exit 1
           }
+          test -s "docs/releases/$RELEASE_TAG.md"
 
   publish:
     needs: validate
@@ -103,7 +104,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release edit "$RELEASE_TAG" --title "$RELEASE_TAG" --generate-notes
+            gh release edit "$RELEASE_TAG" --title "$RELEASE_TAG" --notes-file "docs/releases/$RELEASE_TAG.md"
           else
-            gh release create "$RELEASE_TAG" --title "$RELEASE_TAG" --generate-notes
+            gh release create "$RELEASE_TAG" --verify-tag --title "$RELEASE_TAG" --notes-file "docs/releases/$RELEASE_TAG.md"
           fi
