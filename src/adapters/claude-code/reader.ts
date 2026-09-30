@@ -7,6 +7,7 @@
  */
 
 import { readFile, stat } from "node:fs/promises";
+import { isAbsolute } from "node:path";
 import type {
   CanonicalSession,
   CanonicalTurn,
@@ -69,6 +70,7 @@ export interface SessionReadResult {
   startedAt: string | null;
   updatedAt: string | null;
   repoPath: string | null;
+  repoPaths: string[];
   branch: string | null;
   changedPaths: string[];
 }
@@ -247,7 +249,7 @@ export function readSessionText(text: string): SessionReadResult {
   const turns: CanonicalTurn[] = [];
   const changedPaths: string[] = [];
   let skipped = parsed.entries.length - active.entries.length;
-  let repoPath: string | null = null;
+  const repoPaths = new Set<string>();
   let branch: string | null = null;
 
   const push = (turn: Omit<CanonicalTurn, "index">): void => {
@@ -258,14 +260,14 @@ export function readSessionText(text: string): SessionReadResult {
   };
 
   for (const entry of active.entries) {
-    if (repoPath === null) repoPath = asString(entry.cwd);
-    if (branch === null) branch = asString(entry.gitBranch);
-
     // A sidechain is a separate sub-conversation, not a turn of this session.
     if (entry.isSidechain === true) {
       skipped++;
       continue;
     }
+    const cwd = asString(entry.cwd);
+    if (cwd !== null && isAbsolute(cwd)) repoPaths.add(cwd);
+    if (branch === null) branch = asString(entry.gitBranch);
     const timestamp = toIsoUtc(entry.timestamp);
 
     if (entry.type === ENTRY_TYPE_USER && entry.isCompactSummary === true) {
@@ -405,7 +407,8 @@ export function readSessionText(text: string): SessionReadResult {
     title: firstUser === undefined ? "" : firstLine(firstUser.text, MAX_TITLE_CHARS),
     startedAt: stamps[0] ?? null,
     updatedAt: stamps[stamps.length - 1] ?? null,
-    repoPath,
+    repoPath: [...repoPaths][0] ?? null,
+    repoPaths: [...repoPaths],
     branch,
     changedPaths,
   };
@@ -436,6 +439,7 @@ export async function listSessions(home: HomePath): Promise<SessionDescriptor[]>
       updatedAt: broken ? modified : (read.updatedAt ?? modified),
       turnCount: broken ? 0 : read.turns.length,
       repoPath: read.repoPath,
+      repoPaths: read.repoPaths,
       filePath: file,
     });
   }

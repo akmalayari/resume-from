@@ -43,6 +43,7 @@ const CONTRACT_KEYS = {
     "updatedAt",
     "turnCount",
     "repoPath",
+    "repoPaths",
     "filePath",
   ],
   ToolCallRecord: [

@@ -89,8 +89,10 @@ interface SessionDescriptor {
   updatedAt: string;
   /** Turns the source holds, before any rule of section D or E runs. */
   turnCount: number;
-  /** Absolute path of the repository the session ran in, or null when unknown (FR-13). */
+  /** First recorded candidate: repoPaths[0] ?? null, even when that path no longer exists (FR-13). */
   repoPath: string | null;
+  /** Distinct absolute recorded directories, ordered by first appearance in the active conversation. */
+  repoPaths: string[];
   /** Absolute path of the source file. Lets the user select by path (FR-12). */
   filePath: string;
 }
@@ -242,9 +244,14 @@ The changes this boundary is designed to absorb:
   These two fields are mutually exclusive. A turn that violates this is invalid input to every rule.
 - **Timestamps are ISO-8601 UTC strings, never local time and never epoch numbers.** Sessions from
   different agents are ordered against each other (FR-14), so one representation is required.
-- **`SessionDescriptor.repoPath` is absolute and resolved**, so that the repository filter of FR-13
-  compares paths and not spellings. It is null only when the source format records no working
-  directory, and a null makes the session invisible to the listing.
+- **`SessionDescriptor.repoPaths` preserves recorded evidence, not filesystem identity.** It is a
+  required array of distinct absolute recorded directories in first-appearance order. Keep native
+  spelling and missing paths; do not resolve, canonicalize, or infer paths during extraction.
+  `repoPath` is always `repoPaths[0] ?? null`, even when the first candidate no longer exists.
+  Claude uses only the active main ancestry, excluding sidechains before extracting metadata.
+  Codex and Pi use a singleton header cwd, or an empty array without valid absolute metadata.
+  Prose, tool arguments and encoded project directory names never supply candidates. Repository
+  acceptance and filesystem identity resolution belong to discovery, not the session vocabulary.
 - **`AgentId` values are lowercase kebab-case** and match the folder name under `src/adapters/`. That
   is the whole of the naming convention FR-57 relies on.
 - **Nothing in this module performs input or output.** No file access, no network, no clock. A
@@ -326,7 +333,7 @@ module owns the _invariants_ the fixtures must satisfy, and asserts them.
 - Expected behavior: valid. This is the documented FR-36 gap and it must not be an error.
 
 **T-SES-13 — a descriptor with no repository is representable**
-- Scenario: a `SessionDescriptor` with null `repoPath`.
+- Scenario: a `SessionDescriptor` with null `repoPath` and empty `repoPaths`.
 - Expected behavior: valid, and documented as out of scope for the listing (FR-13).
 
 **T-SES-14 — the provenance marker has every fact FR-47 requires**

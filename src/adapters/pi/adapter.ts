@@ -9,7 +9,7 @@
 
 import { randomUUID } from "node:crypto";
 import { readdir, readFile, stat } from "node:fs/promises";
-import { basename, join } from "node:path";
+import { basename, isAbsolute, join } from "node:path";
 import type {
   AgentAdapter,
   AgentCapabilities,
@@ -109,6 +109,8 @@ function describe(
   const ref = { agent: "pi" as const, home, id };
   const startedAt = toIsoUtc(parsed.header?.timestamp) ?? fileTime;
   const resolved = resolveActiveEntries(parsed.entries);
+  const repoPaths =
+    parsed.header !== null && isAbsolute(parsed.header.cwd) ? [parsed.header.cwd] : [];
 
   if (!parsed.header || parsed.truncated || resolved.unreadable !== null) {
     return {
@@ -117,7 +119,8 @@ function describe(
       startedAt,
       updatedAt: lastTimestamp(resolved.activePath) ?? fileTime,
       turnCount: 0,
-      repoPath: null,
+      repoPath: repoPaths[0] ?? null,
+      repoPaths,
       filePath,
     };
   }
@@ -130,7 +133,8 @@ function describe(
     startedAt,
     updatedAt: lastTimestamp(resolved.activePath) ?? startedAt,
     turnCount: loaded.turns.length,
-    repoPath: parsed.header.cwd.length > 0 ? parsed.header.cwd : null,
+    repoPath: repoPaths[0] ?? null,
+    repoPaths,
     filePath,
   };
 }

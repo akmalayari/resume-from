@@ -92,7 +92,8 @@ export function makeStubAdapter(options: StubAdapterOptions): StubAdapter {
           startedAt: raw.startedAt ?? raw.updatedAt,
           updatedAt: raw.updatedAt,
           turnCount: raw.turns?.length ?? 0,
-          repoPath: raw.repoPath,
+          repoPath: raw.repoPath !== null && path.isAbsolute(raw.repoPath) ? raw.repoPath : null,
+          repoPaths: raw.repoPath !== null && path.isAbsolute(raw.repoPath) ? [raw.repoPath] : [],
           filePath,
         });
       }

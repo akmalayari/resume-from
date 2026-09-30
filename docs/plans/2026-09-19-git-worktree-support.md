@@ -179,10 +179,10 @@ Contract sources to check for changed declarations and embedded copies:
 Depends on Task 2. Scope: `src/session/contract.ts`, `src/session/module.md`,
 `src/session/contract-shape.test.ts`, and all source adapters.
 
-- [ ] Add the required `repoPaths` array with the ordering and absolute-path rules above; preserve the primary `repoPath`. Update every adapter and fixture adapter to emit the field.
-- [ ] Collect Claude cwd values only after active-ancestry selection and sidechain exclusion. Use Codex/Pi header cwd as singleton candidates; do not mine tool arguments, text, or encoded project directory names.
-- [ ] Test root-to-worktree and worktree-to-root sequences, duplicate paths, missing/relative metadata, sidechain-first metadata, discarded ancestry, and sessions recording unrelated repositories. These are extraction tests; repository acceptance belongs to Task 4.
-- [ ] Update `src/session/contract.ts` and `src/session/module.md` together, add `repoPaths` to the exact `SessionDescriptor` key assertion in `src/session/contract-shape.test.ts`, and update adapter contracts and dependent fixtures. Run focused source-adapter and contract tests, then the per-task gates below.
+- [x] Add the required `repoPaths` array with the ordering and absolute-path rules above; preserve the primary `repoPath`. Update every adapter and fixture adapter to emit the field.
+- [x] Collect Claude cwd values only after active-ancestry selection and sidechain exclusion. Use Codex/Pi header cwd as singleton candidates; do not mine tool arguments, text, or encoded project directory names.
+- [x] Test root-to-worktree and worktree-to-root sequences, duplicate paths, missing/relative metadata, sidechain-first metadata, discarded ancestry, and sessions recording unrelated repositories. These are extraction tests; repository acceptance belongs to Task 4.
+- [x] Update `src/session/contract.ts` and `src/session/module.md` together, add `repoPaths` to the exact `SessionDescriptor` key assertion in `src/session/contract-shape.test.ts`, and update adapter contracts and dependent fixtures. Run focused source-adapter and contract tests, then the per-task gates below.
 
 ### Task 4: Match repository membership consistently in discovery
 

@@ -90,8 +90,10 @@ interface SessionDescriptor {
   updatedAt: string;
   /** Turns the source holds, before any rule of section D or E runs. */
   turnCount: number;
-  /** Absolute path of the repository the session ran in, or null when unknown (FR-13). */
+  /** First recorded candidate: repoPaths[0] ?? null, even when that path no longer exists (FR-13). */
   repoPath: string | null;
+  /** Distinct absolute recorded directories, ordered by first appearance in the active conversation. */
+  repoPaths: string[];
   /** Absolute path of the source file. Lets the user select by path (FR-12). */
   filePath: string;
 }
@@ -428,6 +430,8 @@ Adding an agent does **not** change this module. Changing one agent's format doe
 module.
 
 ## Constraints and Invariants
+
+- **Source descriptors preserve recorded directory candidates.** `repoPaths` contains distinct absolute metadata paths in first-appearance order; `repoPath` equals `repoPaths[0] ?? null`. Missing paths remain recorded evidence. Never derive candidates from prose, tool arguments or encoded directory names; filesystem identity and repository acceptance belong to discovery.
 
 - **Import serialization requires `SerializationContext`.** Its absolute `cwd` is the destination agent’s native working directory, including subdirectory and symlink spelling. Writers must not fall back to process cwd, factory cwd, a checkout root, or source provenance.
 

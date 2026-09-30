@@ -447,3 +447,27 @@ describe("T-COD-14 truncated or unknown-typed threads", () => {
     expect((await readRollout(path)).skippedEntries).toBe(0);
   });
 });
+
+describe("recorded repository directory candidates", () => {
+  it.each(["/removed/worktree", "/repo/demo", "relative/worktree", "", null, undefined, 42])(
+    "uses only absolute header cwd %s, never body or tool directories",
+    async (cwd) => {
+      const home = tempHome();
+      const id = "46464646-4646-4646-8646-464646464646";
+      writeRollout(home, id, [
+        metaEntry(id, { cwd }),
+        userEvent("continue in /other/repository"),
+        {
+          timestamp: "2026-08-01T09:14:02.000Z",
+          type: "turn_context",
+          payload: { cwd: "/body/repository" },
+        },
+        functionCall("shell", '{"cwd":"/tool/repository","command":"pwd"}', "call-cwd"),
+      ]);
+      const descriptor = await loadOnly(home);
+      const expected = typeof cwd === "string" && cwd.startsWith("/") ? [cwd] : [];
+      expect(descriptor.repoPaths).toEqual(expected);
+      expect(descriptor.repoPath).toBe(expected[0] ?? null);
+    },
+  );
+});

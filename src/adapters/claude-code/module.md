@@ -89,8 +89,10 @@ interface SessionDescriptor {
   updatedAt: string;
   /** Turns the source holds, before any rule of section D or E runs. */
   turnCount: number;
-  /** Absolute path of the repository the session ran in, or null when unknown (FR-13). */
+  /** First recorded candidate: repoPaths[0] ?? null, even when that path no longer exists (FR-13). */
   repoPath: string | null;
+  /** Distinct absolute recorded directories, ordered by first appearance in the active conversation. */
+  repoPaths: string[];
   /** Absolute path of the source file. Lets the user select by path (FR-12). */
   filePath: string;
 }
@@ -375,6 +377,8 @@ Changes that require **only this module** to change:
 None of these touch a rule, a preview, another adapter, or the host.
 
 ## Constraints and Invariants
+
+- **Directory metadata comes only from the active main ancestry.** Resolve the active parent path and exclude sidechains before extracting cwd. Emit each distinct absolute cwd in first-appearance order as `repoPaths`, with `repoPath = repoPaths[0] ?? null`. Preserve missing paths and unrelated repository candidates; ignore relative/invalid cwd, discarded ancestry, prose, tool arguments and encoded project directory names. Extraction does not decide repository membership.
 
 - **The required serialization context supplies destination cwd.** Preserve that native absolute path in transcript cwd and encoded project placement, including subdirectories and symlink spelling; no process or factory cwd fallback is allowed.
 

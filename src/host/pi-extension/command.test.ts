@@ -37,6 +37,7 @@ function descriptor(over: Partial<SessionDescriptor> = {}): SessionDescriptor {
     updatedAt: over.updatedAt ?? "2026-08-01T10:00:00Z",
     turnCount: over.turnCount ?? 7,
     repoPath: over.repoPath ?? "/repo",
+    repoPaths: over.repoPaths ?? [over.repoPath ?? "/repo"],
     filePath: over.filePath ?? "/Users/me/.pi/sessions/s-1.json",
   };
 }

@@ -320,7 +320,14 @@ export function createStubAdapter(options: StubAdapterOptions): AgentAdapter {
           // The later of the two: a file touched after its last recorded turn has moved.
           updatedAt: Date.parse(fileTime) > Date.parse(recorded) ? fileTime : recorded,
           turnCount: parsed.turns.length,
-          repoPath: parsed.header.repoPath,
+          repoPath:
+            parsed.header.repoPath !== null && path.isAbsolute(parsed.header.repoPath)
+              ? parsed.header.repoPath
+              : null,
+          repoPaths:
+            parsed.header.repoPath !== null && path.isAbsolute(parsed.header.repoPath)
+              ? [parsed.header.repoPath]
+              : [],
           filePath,
         });
       }
@@ -544,6 +551,7 @@ export function recordingStages(overrides: Partial<PipelineStages> = {}): StageR
     updatedAt: "2026-08-01T09:30:00.000Z",
     turnCount: 1,
     repoPath: "/repo",
+    repoPaths: ["/repo"],
     filePath: "/homes/codex/sessions/session-1.jsonl",
   };
   const session: CanonicalSession = {

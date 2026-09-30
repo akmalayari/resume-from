@@ -313,6 +313,8 @@ describe("T-PI-13 — a truncated session file", () => {
     if (!descriptor) throw new Error("no descriptor listed");
     expect(descriptor.title.startsWith(UNREADABLE_TITLE_PREFIX)).toBe(true);
     expect(descriptor.turnCount).toBe(0);
+    expect(descriptor.repoPaths).toEqual([CWD]);
+    expect(descriptor.repoPath).toBe(CWD);
 
     await expect(adapter.loadSession(descriptor)).rejects.toThrow(written.filePath);
   });
@@ -345,8 +347,31 @@ describe("T-PI-13 — a truncated session file", () => {
     if (!descriptor) throw new Error("no descriptor listed");
     expect(descriptor.title.startsWith(UNREADABLE_TITLE_PREFIX)).toBe(true);
     expect(descriptor.turnCount).toBe(0);
+    expect(descriptor.repoPaths).toEqual([CWD]);
+    expect(descriptor.repoPath).toBe(CWD);
     await expect(adapter.loadSession(descriptor)).rejects.toThrow(/cannot be read/);
   });
+  it.each(["missing", "invalid", "relative"])(
+    "does not infer directories for an unreadable session with %s header metadata",
+    async (variant) => {
+      const adapter = createPiAdapter();
+      const home = throwawayHome();
+      const written = writeFixtureSession(home, CWD, REFERENCE_DRAFTS);
+      const [headerLine, ...body] = written.text.trimEnd().split("\n");
+      const header = JSON.parse(headerLine ?? "{}");
+      if (variant === "invalid") header.id = null;
+      if (variant === "relative") header.cwd = "relative/worktree";
+      const lines = variant === "missing" ? body : [JSON.stringify(header), ...body];
+      writeFileSync(written.filePath, `${lines.join("\n")}\n{"truncated":`);
+      const [descriptor] = await adapter.listSessions(home);
+      if (!descriptor) throw new Error("no descriptor listed");
+      expect(descriptor.title.startsWith(UNREADABLE_TITLE_PREFIX)).toBe(true);
+      expect(descriptor.turnCount).toBe(0);
+      expect(descriptor.repoPaths).toEqual([]);
+      expect(descriptor.repoPath).toBeNull();
+      await expect(adapter.loadSession(descriptor)).rejects.toThrow(/cannot be read/);
+    },
+  );
 });
 
 describe("T-PI-14 — an unknown entry type is skipped, and the skip is visible", () => {
@@ -379,4 +404,25 @@ describe("T-PI-14 — an unknown entry type is skipped, and the skip is visible"
     expect(extension.turns).toHaveLength(1);
     expect(extension.skippedEntryTypes).toEqual(["custom_message"]);
   });
+});
+
+describe("recorded repository directory candidates", () => {
+  it.each(["/removed/worktree", CWD, "relative/worktree", "", null, undefined, 42])(
+    "uses only absolute header cwd %s, never body, tool, or encoded directories",
+    async (cwd) => {
+      const home = throwawayHome();
+      const written = writeFixtureSession(home, CWD, [
+        piUserDraft("continue in /other/repository"),
+        piToolCallDraft("call-cwd", "bash", { cwd: "/tool/repository", command: "pwd" }),
+      ]);
+      const [headerLine, ...body] = written.text.trimEnd().split("\n");
+      const header = JSON.parse(headerLine ?? "{}");
+      header.cwd = cwd;
+      writeFileSync(written.filePath, `${[JSON.stringify(header), ...body].join("\n")}\n`);
+      const [descriptor] = await createPiAdapter().listSessions(home);
+      const expected = typeof cwd === "string" && cwd.startsWith("/") ? [cwd] : [];
+      expect(descriptor?.repoPaths).toEqual(expected);
+      expect(descriptor?.repoPath).toBe(expected[0] ?? null);
+    },
+  );
 });

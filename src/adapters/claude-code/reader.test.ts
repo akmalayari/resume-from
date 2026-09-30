@@ -454,3 +454,83 @@ describe("reading never opens a source file for writing (NG-1, AC-4)", () => {
     expect(read.turns[0]?.toolCall?.effect).toBe("unknown");
   });
 });
+
+describe("recorded repository directory candidates", () => {
+  let nextId = 0;
+  const message = (text: string, ctx: EntryContext) =>
+    userEntry(ctx, `candidate-${nextId++}`, "2026-08-01T09:14:02.000Z", text);
+  it.each([
+    [REPO, `${REPO}/.worktrees/topic`, REPO],
+    [`${REPO}/.worktrees/topic`, REPO, `${REPO}/.worktrees/topic`],
+    ["/removed/worktree", REPO, OTHER_REPO],
+  ])("preserves distinct active cwd values in first-appearance order: %s", (...paths) => {
+    const read = readSessionText(textOf(paths.map((cwd) => message("continue", { ...CTX, cwd }))));
+    expect(read.repoPaths).toEqual([...new Set(paths)]);
+    expect(read.repoPath).toBe(paths[0]);
+  });
+
+  it.each([undefined, null, "", "relative/worktree", 42])(
+    "ignores invalid cwd metadata %s",
+    (cwd) => {
+      const read = readSessionText(
+        textOf([
+          { ...message(`visit ${OTHER_REPO}`, CTX), cwd },
+          {
+            ...assistantToolUseEntry(
+              CTX,
+              "tool-entry",
+              "2026-08-01T09:14:02.000Z",
+              "tool-1",
+              "Bash",
+              { cwd: OTHER_REPO, command: `cd ${OTHER_REPO}` },
+            ),
+            cwd,
+          },
+        ]),
+      );
+      expect(read.repoPaths).toEqual([]);
+      expect(read.repoPath).toBeNull();
+    },
+  );
+
+  it("ignores sidechain-first and discarded-ancestry metadata", () => {
+    const read = readSessionText(
+      JSON.stringify({
+        ...message("sidechain", { ...CTX, cwd: OTHER_REPO }),
+        uuid: "side",
+        parentUuid: null,
+        isSidechain: true,
+      }) +
+        "\n" +
+        [
+          { ...message("root", CTX), uuid: "root", parentUuid: null },
+          {
+            ...message("discarded", { ...CTX, cwd: OTHER_REPO }),
+            uuid: "discarded",
+            parentUuid: "root",
+          },
+          {
+            ...message("active", { ...CTX, cwd: "/active/worktree" }),
+            uuid: "active",
+            parentUuid: "root",
+          },
+        ]
+          .map((entry) => JSON.stringify(entry))
+          .join("\n"),
+    );
+    expect(read.repoPaths).toEqual([REPO, "/active/worktree"]);
+    expect(read.repoPath).toBe(REPO);
+  });
+
+  it("lists recorded candidates without inferring the encoded project directory", async () => {
+    const home = await makeThrowawayHome();
+    await writeSessionFile(home, OTHER_REPO, "candidates", [
+      { ...message("missing cwd", CTX), cwd: undefined },
+      message("removed first", { ...CTX, cwd: "/removed/worktree" }),
+      message("surviving later", CTX),
+    ]);
+    const [descriptor] = await createClaudeCodeAdapter().listSessions(home);
+    expect(descriptor?.repoPaths).toEqual(["/removed/worktree", REPO]);
+    expect(descriptor?.repoPath).toBe("/removed/worktree");
+  });
+});

@@ -125,13 +125,16 @@ export async function listCodexSessions(home: string): Promise<SessionDescriptor
       throw error;
     }
     if (rollout.meta === null) continue;
+    const repoPaths =
+      rollout.meta.cwd !== null && isAbsolute(rollout.meta.cwd) ? [rollout.meta.cwd] : [];
     descriptors.push({
       ref: { agent: "codex", home, id: rollout.meta.id },
       title: rollout.title,
       startedAt: rollout.startedAt ?? "",
       updatedAt: rollout.updatedAt ?? rollout.startedAt ?? "",
       turnCount: rollout.turns.length,
-      repoPath: rollout.meta.cwd !== null && isAbsolute(rollout.meta.cwd) ? rollout.meta.cwd : null,
+      repoPath: repoPaths[0] ?? null,
+      repoPaths,
       filePath,
     });
   }

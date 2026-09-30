@@ -89,8 +89,10 @@ interface SessionDescriptor {
   updatedAt: string;
   /** Turns the source holds, before any rule of section D or E runs. */
   turnCount: number;
-  /** Absolute path of the repository the session ran in, or null when unknown (FR-13). */
+  /** First recorded candidate: repoPaths[0] ?? null, even when that path no longer exists (FR-13). */
   repoPath: string | null;
+  /** Distinct absolute recorded directories, ordered by first appearance in the active conversation. */
+  repoPaths: string[];
   /** Absolute path of the source file. Lets the user select by path (FR-12). */
   filePath: string;
 }
@@ -409,6 +411,8 @@ Changes that require **only this module** to change:
 None of these touch a rule, a preview, another adapter, or the host.
 
 ## Constraints and Invariants
+
+- **Directory candidates come only from the session header cwd.** Emit `repoPaths` as a singleton for a valid absolute cwd, otherwise `[]`; `repoPath = repoPaths[0] ?? null`. Preserve missing paths without filesystem lookup. Body entries, tool arguments, prose and encoded session-directory names never supply candidates. Valid header evidence is retained even for truncated or broken-graph sessions; these keep their unreadable title, zero turns and load refusal.
 
 - **The required serialization context supplies header cwd and session-directory placement.** Preserve its native absolute subdirectory and symlink spelling; never substitute process or factory cwd.
 

@@ -91,6 +91,7 @@ describe.each(cases)("T-ADA-7 — %s: a source adapter lists and loads", (_id, e
       expect(descriptor.startedAt).toMatch(ISO);
       expect(descriptor.updatedAt).toMatch(ISO);
       expect(descriptor.turnCount).toBeGreaterThan(0);
+      expect(descriptor.repoPaths).toEqual([descriptor.repoPath]);
       expect(descriptor.repoPath).not.toBeNull();
       expect(path.isAbsolute(descriptor.repoPath ?? "")).toBe(true);
       expect(path.isAbsolute(descriptor.filePath)).toBe(true);

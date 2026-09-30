@@ -82,8 +82,10 @@ interface SessionDescriptor {
   updatedAt: string;
   /** Turns the source holds, before any rule of section D or E runs. */
   turnCount: number;
-  /** Absolute path of the repository the session ran in, or null when unknown (FR-13). */
+  /** First recorded candidate: repoPaths[0] ?? null, even when that path no longer exists (FR-13). */
   repoPath: string | null;
+  /** Distinct absolute recorded directories, ordered by first appearance in the active conversation. */
+  repoPaths: string[];
   /** Absolute path of the source file. Lets the user select by path (FR-12). */
   filePath: string;
 }

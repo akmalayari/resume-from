@@ -343,10 +343,12 @@ describe("boundary shapes", () => {
       updatedAt: REFERENCE_SESSION.provenance.updatedAt,
       turnCount: REFERENCE_SESSION.turns.length,
       repoPath: null,
+      repoPaths: [],
       filePath: "/home/testuser/.codex/sessions/01JQ8Z3K7M4N5P6Q7R8S9T0V1W.jsonl",
     };
 
     expect(descriptor.repoPath).toBeNull();
+    expect(descriptor.repoPaths).toEqual([]);
     expect(isIsoUtc(descriptor.updatedAt)).toBe(true);
     expect(descriptor.filePath.startsWith("/")).toBe(true);
   });
