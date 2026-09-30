@@ -284,6 +284,15 @@ interface SwitchOutcome {
 }
 ```
 
+
+<!-- contract: SerializationContext — restated from src/adapters/module.md -->
+```ts
+/** The host-supplied absolute destination, preserving native subdirectory and symlink spelling. */
+interface SerializationContext {
+  cwd: string;
+}
+```
+
 <!-- contract: AgentAdapter — restated from src/adapters/module.md -->
 ```ts
 /** What every agent adapter provides. One folder per agent implements it (FR-57). */
@@ -300,6 +309,7 @@ interface AgentAdapter {
     session: CanonicalSession,
     target: TargetProfile,
     marker: ProvenanceMarker,
+    context: SerializationContext,
   ): SerializedSession;
   /** Target role. Checks the structure before placement. Empty means valid (FR-50). */
   validate(serialized: SerializedSession): ValidationDefect[];
@@ -399,6 +409,8 @@ Changes that require **only this module** to change:
 None of these touch a rule, a preview, another adapter, or the host.
 
 ## Constraints and Invariants
+
+- **The required serialization context supplies header cwd and session-directory placement.** Preserve its native absolute subdirectory and symlink spelling; never substitute process or factory cwd.
 
 - **`validate` must reject an assistant message without a `usage` object** (C-11, FR-50). Pi stops
   with `TypeError: Cannot read properties of undefined (reading 'input')` when the field is absent,

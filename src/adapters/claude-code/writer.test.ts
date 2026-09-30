@@ -36,8 +36,8 @@ const FORBIDDEN_ENTRY_TYPES = [
 ];
 
 function serializeReference(repo = REPO): SerializedSession {
-  const adapter = createClaudeCodeAdapter({ cwd: repo });
-  return adapter.serialize(REFERENCE_SESSION, TARGET, MARKER);
+  const adapter = createClaudeCodeAdapter();
+  return adapter.serialize(REFERENCE_SESSION, TARGET, MARKER, { cwd: repo });
 }
 
 function entriesOf(serialized: SerializedSession): Record<string, unknown>[] {
@@ -173,7 +173,7 @@ describe("T-CC-9 — validation catches a damaged entry", () => {
   }
 
   it("passes a clean session (FR-50)", () => {
-    expect(createClaudeCodeAdapter({ cwd: REPO }).validate(serializeReference())).toEqual([]);
+    expect(createClaudeCodeAdapter().validate(serializeReference())).toEqual([]);
   });
 
   const cases: [string, (entry: Record<string, unknown>, index: number) => void, RegExp][] = [
@@ -201,7 +201,7 @@ describe("T-CC-9 — validation catches a damaged entry", () => {
   ];
 
   it.each(cases)("reports %s", (_name, mutate, pathPattern) => {
-    const adapter = createClaudeCodeAdapter({ cwd: REPO });
+    const adapter = createClaudeCodeAdapter();
     const defects = adapter.validate(damaged(mutate));
     expect(defects.length).toBeGreaterThan(0);
     expect(defects.some((defect) => pathPattern.test(defect.path))).toBe(true);
@@ -212,7 +212,7 @@ describe("T-CC-9 — validation catches a damaged entry", () => {
   });
 
   it("reports every defect, not the first (FR-50)", () => {
-    const adapter = createClaudeCodeAdapter({ cwd: REPO });
+    const adapter = createClaudeCodeAdapter();
     const defects = adapter.validate(
       damaged((entry, index) => {
         if (index === 1) entry.timestamp = "yesterday";
@@ -228,7 +228,7 @@ describe("T-CC-9 — validation catches a damaged entry", () => {
     const file = serialized.files[0];
     if (file === undefined) throw new Error("serialize produced no file");
     const broken = `${file.bytes.toString("utf8")}{"type":"user"`;
-    const defects = createClaudeCodeAdapter({ cwd: REPO }).validate({
+    const defects = createClaudeCodeAdapter().validate({
       ...serialized,
       files: [{ absolutePath: file.absolutePath, bytes: Buffer.from(broken, "utf8") }],
     });
@@ -237,7 +237,7 @@ describe("T-CC-9 — validation catches a damaged entry", () => {
 
   it("catches an item count that does not match the file (FR-52)", () => {
     const serialized = serializeReference();
-    const defects = createClaudeCodeAdapter({ cwd: REPO }).validate({
+    const defects = createClaudeCodeAdapter().validate({
       ...serialized,
       itemCount: 99,
     });

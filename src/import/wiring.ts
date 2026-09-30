@@ -2,6 +2,8 @@
 // them. Everything the stages need arrives from src/host/ — this module constructs no adapter,
 // no committer, no estimator and no configuration.
 
+import { realpath } from "node:fs/promises";
+import { isAbsolute } from "node:path";
 import type { RepoReader } from "../platform/repo/contract.js";
 import type {
   AgentAdapter,
@@ -39,7 +41,14 @@ export function buildStages(deps: ImportPipelineDeps): PipelineStages {
     finder: createSessionFinder({ adapters: deps.adapters, config: deps.config }),
     rules: createTransferRules(),
     // Per request: the preview reads the repository the request names (FR-13, FR-37).
-    previewFor: (repoRoot: string) => createPreviewBuilder(deps.repo, repoRoot),
+    async destinationFor(cwd) {
+      if (!isAbsolute(cwd)) throw new Error("The destination cwd must be absolute.");
+      const canonicalCwd = await realpath(cwd);
+      const identity = await deps.repo.identify(canonicalCwd);
+      return { cwd, canonicalCwd, identity };
+    },
+    previewFor: ({ cwd, canonicalCwd, identity }) =>
+      createPreviewBuilder(deps.repo, cwd, canonicalCwd, identity),
     lander: createSessionLander(
       deps.handoverCommand === undefined ? {} : { handoverCommand: deps.handoverCommand },
     ),

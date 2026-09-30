@@ -423,13 +423,14 @@ export async function seedSession(
   adapter: AgentAdapter,
   home: HomePath,
   session: CanonicalSession,
+  context: { cwd: string },
 ): Promise<SessionId> {
   const target: TargetProfile = {
     agent: adapter.capabilities().agent,
     home,
     windowTokens: adapter.capabilities().defaultWindowTokens,
   };
-  const serialized = adapter.serialize(session, target, markerFor(session));
+  const serialized = adapter.serialize(session, target, markerFor(session), context);
   await createFileCommitter().commit(home, serialized.files);
   return serialized.sessionId;
 }

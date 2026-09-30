@@ -8,6 +8,7 @@ import type {
   HomePath,
   LandingResult,
   LandingStage,
+  SerializationContext,
   SerializedSession,
   SessionLander,
   SessionRef,
@@ -78,6 +79,7 @@ async function runLanding(
   committer: FileCommitter,
   runtime: AgentRuntime,
   importedAt: string,
+  context: SerializationContext,
   buildCommand: HandoverCommandBuilder,
 ): Promise<LandingResult> {
   const home = plan.target.home;
@@ -101,7 +103,7 @@ async function runLanding(
 
   let serialized: SerializedSession;
   try {
-    serialized = adapter.serialize(session, plan.target, marker);
+    serialized = adapter.serialize(session, plan.target, marker, context);
   } catch (cause) {
     throw new LandingFailure(
       "serialize",
@@ -220,7 +222,7 @@ export interface SessionLanderOptions {
 export function createSessionLander(options: SessionLanderOptions = {}): SessionLander {
   const buildCommand = options.handoverCommand ?? describeSession;
   return {
-    land: (plan, adapter, committer, runtime, importedAt) =>
-      runLanding(plan, adapter, committer, runtime, importedAt, buildCommand),
+    land: (plan, adapter, committer, runtime, importedAt, context) =>
+      runLanding(plan, adapter, committer, runtime, importedAt, context, buildCommand),
   };
 }

@@ -18,16 +18,8 @@ function unresolvedIdentity(): RepoIdentity {
  */
 const MAX_REVISION_LENGTH = 256;
 
-/**
- * A reader bound to one working directory.
- *
- * `identify` takes the directory to look at; `distanceFrom` compares against the HEAD of `cwd`,
- * which is the repository the command is running in.
- */
-export function createRepoReader(
-  cwd: string = process.cwd(),
-  options: RepoReaderOptions = {},
-): RepoReader {
+/** A reader with process controls only; every lookup names its directory explicitly. */
+export function createRepoReader(options: RepoReaderOptions = {}): RepoReader {
   const processOptions = normalizeGitOptions(options);
   const git = (directory: string, args: readonly string[]) =>
     runGit(directory, args, processOptions);
@@ -39,7 +31,7 @@ export function createRepoReader(
       processOptions.signal?.throwIfAborted();
       return identity;
     },
-    distanceFrom: (sourceCommit: string) => distanceFrom(cwd, sourceCommit, git),
+    distanceFrom: (cwd: string, sourceCommit: string) => distanceFrom(cwd, sourceCommit, git),
   };
 }
 

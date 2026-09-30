@@ -105,7 +105,7 @@ test("cancellation wins even when the input path is missing", async () => {
   const controller = new AbortController();
   controller.abort();
   await expect(
-    createRepoReader(root, { signal: controller.signal }).identify(join(root, "missing")),
+    createRepoReader({ signal: controller.signal }).identify(join(root, "missing")),
   ).rejects.toThrow("aborted");
   expect(runGit).not.toHaveBeenCalled();
 });

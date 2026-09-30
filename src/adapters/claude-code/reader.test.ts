@@ -368,7 +368,7 @@ describe("T-CC-15 — a truncated or unknown-typed session", () => {
     await writeSessionFile(home, REPO, "cut-1", referenceEntries(CTX, "short body"), {
       truncate: true,
     });
-    const adapter = createClaudeCodeAdapter({ cwd: REPO });
+    const adapter = createClaudeCodeAdapter();
 
     const listed = await adapter.listSessions(home);
     expect(listed).toHaveLength(1);
@@ -406,7 +406,7 @@ describe("listing a home (FR-2, FR-4, FR-11, FR-13, FR-14)", () => {
       userEntry({ ...CTX, cwd: OTHER_REPO }, uuidFor(3), "2026-07-15T10:00:00.000Z", "other repo"),
     ]);
 
-    const adapter = createClaudeCodeAdapter({ cwd: REPO });
+    const adapter = createClaudeCodeAdapter();
     const listed = await adapter.listSessions(home);
 
     expect(listed.map((d) => d.ref.id)).toEqual(["s-new", "s-other", "s-old"]);
@@ -423,7 +423,7 @@ describe("listing a home (FR-2, FR-4, FR-11, FR-13, FR-14)", () => {
   it("loads a listed session into the neutral vocabulary", async () => {
     const home = await makeThrowawayHome();
     await writeSessionFile(home, REPO, "s-1", referenceEntries(CTX, bodyOfLines(400, "BODY")));
-    const adapter = createClaudeCodeAdapter({ cwd: REPO });
+    const adapter = createClaudeCodeAdapter();
     const [descriptor] = await adapter.listSessions(home);
     const session = await adapter.loadSession(descriptor as never);
 
@@ -435,7 +435,7 @@ describe("listing a home (FR-2, FR-4, FR-11, FR-13, FR-14)", () => {
 
   it("returns nothing for a home with no projects directory", async () => {
     const home = await makeThrowawayHome("empty-home");
-    const adapter = createClaudeCodeAdapter({ cwd: REPO });
+    const adapter = createClaudeCodeAdapter();
     expect(await adapter.listSessions(home)).toEqual([]);
   });
 });

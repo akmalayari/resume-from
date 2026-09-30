@@ -74,6 +74,7 @@ describe("T-COD-18 Codex to Codex across homes", () => {
       session,
       { agent: "codex", home: targetHome, windowTokens: 258_400 },
       MARKER,
+      { cwd: "/repo/demo" },
     );
     expect(adapter.validate(serialized)).toEqual([]);
     commit(serialized);
@@ -108,6 +109,7 @@ describe("T-COD-18 Codex to Codex across homes", () => {
       session,
       { agent: "codex", home: targetHome, windowTokens: 258_400 },
       MARKER,
+      { cwd: "/repo/demo" },
     );
     expect(serialized.sessionId).not.toBe(id);
   });
@@ -145,6 +147,7 @@ describe("T-COD-19 a large session still fits", () => {
       session,
       { agent: "codex", home: tempHome(), windowTokens },
       MARKER,
+      { cwd: "/repo/demo" },
     );
     const file = serialized.files[0];
     if (file === undefined) throw new Error("no pending file");

@@ -267,7 +267,7 @@ describe.skipIf(!live)("T-ROO-13 — live: the acceptance test", () => {
     piTarget = bySelection("interactive-picker") ?? chosen;
 
     codexHome = source.capabilities().defaultHome;
-    sourceId = await seedSession(source, codexHome, workedSession());
+    sourceId = await seedSession(source, codexHome, workedSession(), { cwd: REPO_ROOT });
   }, 120_000);
 
   afterAll(async () => {
@@ -324,7 +324,7 @@ describe.skipIf(!live)("T-ROO-13 — live: the acceptance test", () => {
       .build(agent, join(scene.root, "pi-landing"), scene.host.config());
     const pipeline = await scene.host.pipelineFor(profile);
     const request = {
-      repoRoot: REPO_ROOT,
+      destinationCwd: REPO_ROOT,
       target: profile,
       selection: { by: "session-id" as const, id: sourceId },
       onlyAgent: agentOf(source),

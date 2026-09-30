@@ -4,7 +4,7 @@ import { createClaudeCodeAdapter } from "./adapter.js";
 import { claudeCodeAdapter } from "./index.js";
 
 describe("T-CC-1 — capabilities are as designed", () => {
-  const adapter = createClaudeCodeAdapter({ env: {}, homeDir: "/home/testuser", cwd: "/repo" });
+  const adapter = createClaudeCodeAdapter({ env: {}, homeDir: "/home/testuser" });
   const caps = adapter.capabilities();
 
   it("declares the agent, both roles, and the two levels C-1 and C-2 fixed", () => {
@@ -31,7 +31,6 @@ describe("T-CC-1 — capabilities are as designed", () => {
     const team = createClaudeCodeAdapter({
       env: { CLAUDE_CONFIG_DIR: "/home/testuser/.claude-team" },
       homeDir: "/home/testuser",
-      cwd: "/repo",
     });
     expect(team.capabilities().defaultHome).toBe("/home/testuser/.claude-team");
   });

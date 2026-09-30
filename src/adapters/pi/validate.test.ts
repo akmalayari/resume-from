@@ -14,7 +14,6 @@ const TARGET: TargetProfile = {
 function adapter() {
   let entry = 0;
   return createPiAdapter({
-    cwd: () => CWD,
     now: () => new Date("2026-08-02T10:00:00.000Z"),
     newSessionId: () => "01998877-6655-4433-2211-000000000001",
     newEntryId: () => {
@@ -25,7 +24,7 @@ function adapter() {
 }
 
 function serializeReference(): SerializedSession {
-  return adapter().serialize(REFERENCE_SESSION, TARGET, markerFixture());
+  return adapter().serialize(REFERENCE_SESSION, TARGET, markerFixture(), { cwd: CWD });
 }
 
 /** Rewrite the nth assistant message of a serialized session. */

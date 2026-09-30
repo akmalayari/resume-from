@@ -109,7 +109,7 @@ describe("T-ROO-1 — createHost returns a usable host", () => {
       // A listing over empty homes is the cheapest proof that the wiring runs: it reaches every
       // source adapter, every configured home and the repository reader, and writes nothing.
       const listing = await pipeline.list({
-        repoRoot: process.cwd(),
+        destinationCwd: process.cwd(),
         target: profile,
         onlyAgent: null,
         onlyHome: null,

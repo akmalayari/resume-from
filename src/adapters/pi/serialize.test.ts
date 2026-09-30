@@ -34,7 +34,6 @@ const CWD = "/Users/testuser/Workspace/demo";
 function fixedAdapter() {
   let entry = 0;
   return createPiAdapter({
-    cwd: () => CWD,
     now: () => new Date("2026-08-02T10:00:00.000Z"),
     newSessionId: () => "01998877-6655-4433-2211-000000000001",
     newEntryId: () => {
@@ -50,7 +49,9 @@ function target(home: string): TargetProfile {
 
 describe("T-PI-4 — serialization produces a header and one entry per turn", () => {
   const home = "/tmp/does-not-need-to-exist";
-  const serialized = fixedAdapter().serialize(REFERENCE_SESSION, target(home), markerFixture());
+  const serialized = fixedAdapter().serialize(REFERENCE_SESSION, target(home), markerFixture(), {
+    cwd: CWD,
+  });
   const file = serialized.files[0];
   const entries = entriesOf(file?.bytes.toString("utf8") ?? "");
 
@@ -132,6 +133,7 @@ describe("T-PI-5 — every assistant message carries a usage object", () => {
     REFERENCE_SESSION,
     target("/tmp/does-not-need-to-exist"),
     markerFixture(),
+    { cwd: CWD },
   );
   const entries = entriesOf(serialized.files[0]?.bytes.toString("utf8") ?? "");
   const assistants = entries.filter(
@@ -173,7 +175,9 @@ describe("T-PI-11 — the module never writes", () => {
     const before = checksumTree(home);
     expect(before.size).toBeGreaterThan(0);
 
-    const serialized = adapter.serialize(REFERENCE_SESSION, target(home), markerFixture());
+    const serialized = adapter.serialize(REFERENCE_SESSION, target(home), markerFixture(), {
+      cwd: CWD,
+    });
     adapter.validate(serialized);
 
     expect([...checksumTree(home).entries()]).toEqual([...before.entries()]);

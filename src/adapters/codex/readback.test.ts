@@ -49,7 +49,9 @@ function commit(serialized: SerializedSession, mutate: (text: string) => string 
 describe("T-COD-7 read-back is the only evidence", () => {
   it("reports the expected itemCount and openable true after a clean commit", async () => {
     const home = tempHome();
-    const serialized = adapter.serialize(REFERENCE_SESSION, target(home), marker());
+    const serialized = adapter.serialize(REFERENCE_SESSION, target(home), marker(), {
+      cwd: "/repo/demo",
+    });
     commit(serialized);
 
     const facts = await adapter.readBack(home, serialized.sessionId);
@@ -60,7 +62,9 @@ describe("T-COD-7 read-back is the only evidence", () => {
 
   it("reports a lower itemCount when Codex would drop an unknown item type (C-6)", async () => {
     const home = tempHome();
-    const serialized = adapter.serialize(REFERENCE_SESSION, target(home), marker());
+    const serialized = adapter.serialize(REFERENCE_SESSION, target(home), marker(), {
+      cwd: "/repo/demo",
+    });
 
     // The write itself succeeds in both cases. Codex validates nothing and says nothing.
     commit(serialized, (text) => {
@@ -104,7 +108,9 @@ describe("T-COD-8 a missing thread reports rather than throws", () => {
 
   it("returns openable false for a thread cut mid-entry", async () => {
     const home = tempHome();
-    const serialized = adapter.serialize(REFERENCE_SESSION, target(home), marker());
+    const serialized = adapter.serialize(REFERENCE_SESSION, target(home), marker(), {
+      cwd: "/repo/demo",
+    });
     commit(serialized, (text) => text.slice(0, text.length - 30));
     const facts = await adapter.readBack(home, serialized.sessionId);
     expect(facts.openable).toBe(false);
@@ -112,7 +118,9 @@ describe("T-COD-8 a missing thread reports rather than throws", () => {
 
   it("matches the exact filename session id rather than a substring", async () => {
     const home = tempHome();
-    const serialized = adapter.serialize(REFERENCE_SESSION, target(home), marker());
+    const serialized = adapter.serialize(REFERENCE_SESSION, target(home), marker(), {
+      cwd: "/repo/demo",
+    });
     commit(serialized);
 
     const partialId = serialized.sessionId.slice(0, 12);
@@ -125,7 +133,9 @@ describe("T-COD-8 a missing thread reports rather than throws", () => {
 
   it("rejects stored metadata whose identity differs from the filename", async () => {
     const home = tempHome();
-    const serialized = adapter.serialize(REFERENCE_SESSION, target(home), marker());
+    const serialized = adapter.serialize(REFERENCE_SESSION, target(home), marker(), {
+      cwd: "/repo/demo",
+    });
     commit(serialized, (text) =>
       text.replaceAll(serialized.sessionId, "00000000-0000-4000-8000-000000000000"),
     );
@@ -136,7 +146,9 @@ describe("T-COD-8 a missing thread reports rather than throws", () => {
 
   it("rejects a stored rollout with an empty user preview", async () => {
     const home = tempHome();
-    const serialized = adapter.serialize(REFERENCE_SESSION, target(home), marker());
+    const serialized = adapter.serialize(REFERENCE_SESSION, target(home), marker(), {
+      cwd: "/repo/demo",
+    });
     commit(serialized, (text) => {
       const lines = text.split("\n");
       return lines
@@ -156,7 +168,9 @@ describe("T-COD-8 a missing thread reports rather than throws", () => {
   it("does not follow a symlinked sessions subtree", async () => {
     const home = tempHome();
     const outside = tempHome();
-    const serialized = adapter.serialize(REFERENCE_SESSION, target(outside), marker());
+    const serialized = adapter.serialize(REFERENCE_SESSION, target(outside), marker(), {
+      cwd: "/repo/demo",
+    });
     commit(serialized);
     symlinkSync(join(outside, "sessions"), join(home, "sessions", "linked"));
 

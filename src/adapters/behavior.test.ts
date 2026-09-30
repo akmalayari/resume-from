@@ -84,6 +84,7 @@ describe("T-ADA-21 — a capability decides behaviour, an agent name never does"
       REFERENCE_SESSION,
       targetProfile(adapter, home),
       markerFor(REFERENCE_SESSION),
+      { cwd: "/repo" },
     );
     const file = serialized.files[0];
     if (file === undefined) throw new Error("the fixture agent serialized nothing");
@@ -101,6 +102,7 @@ describe("T-ADA-21 — a capability decides behaviour, an agent name never does"
         REFERENCE_SESSION,
         targetProfile(realAdapter, realHome),
         markerFor(REFERENCE_SESSION),
+        { cwd: "/repo" },
       ).files[0];
       if (realFile === undefined) throw new Error(`${real.id} serialized nothing`);
       expect(realFile.absolutePath.endsWith(FIXTURE_FILE_SUFFIX)).toBe(false);
@@ -154,6 +156,7 @@ describe("T-ADA-22 — an adapter with one role only", () => {
         REFERENCE_SESSION,
         targetProfile(sourceOnly, home),
         markerFor(REFERENCE_SESSION),
+        { cwd: "/repo" },
       ),
     ).toThrow(/target/);
     expect(() => sourceOnly.validate({ sessionId: "x", files: [], itemCount: 0 })).toThrow(
@@ -186,6 +189,7 @@ describe("T-ADA-22 — an adapter with one role only", () => {
       REFERENCE_SESSION,
       targetProfile(targetOnly, home),
       markerFor(REFERENCE_SESSION),
+      { cwd: "/repo" },
     );
     expect(targetOnly.validate(serialized)).toEqual([]);
   });

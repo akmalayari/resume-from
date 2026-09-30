@@ -81,6 +81,11 @@ export interface ValidationDefect {
   message: string;
 }
 
+/** The host-supplied absolute destination, preserving native subdirectory and symlink spelling. */
+export interface SerializationContext {
+  cwd: string;
+}
+
 /** What serializing a canonical session into the target format produced. */
 export interface SerializedSession {
   sessionId: SessionId;
@@ -120,6 +125,7 @@ export interface AgentAdapter {
     session: CanonicalSession,
     target: TargetProfile,
     marker: ProvenanceMarker,
+    context: SerializationContext,
   ): SerializedSession;
   /** Target role. Checks the structure before placement. Empty means valid (FR-50). */
   validate(serialized: SerializedSession): ValidationDefect[];

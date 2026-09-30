@@ -284,6 +284,15 @@ interface SwitchOutcome {
 }
 ```
 
+
+<!-- contract: SerializationContext — restated from src/adapters/module.md -->
+```ts
+/** The host-supplied absolute destination, preserving native subdirectory and symlink spelling. */
+interface SerializationContext {
+  cwd: string;
+}
+```
+
 <!-- contract: AgentAdapter — restated from src/adapters/module.md -->
 ```ts
 /** What every agent adapter provides. One folder per agent implements it (FR-57). */
@@ -300,6 +309,7 @@ interface AgentAdapter {
     session: CanonicalSession,
     target: TargetProfile,
     marker: ProvenanceMarker,
+    context: SerializationContext,
   ): SerializedSession;
   /** Target role. Checks the structure before placement. Empty means valid (FR-50). */
   validate(serialized: SerializedSession): ValidationDefect[];
@@ -365,6 +375,8 @@ Changes that require **only this module** to change:
 None of these touch a rule, a preview, another adapter, or the host.
 
 ## Constraints and Invariants
+
+- **The required serialization context supplies destination cwd.** Preserve that native absolute path in transcript cwd and encoded project placement, including subdirectories and symlink spelling; no process or factory cwd fallback is allowed.
 
 - **Only new paths are ever produced.** C-3 is the reason: the store is an internal application
   database and a bad write can damage the real sessions of the user. `serialize` mints a session ID

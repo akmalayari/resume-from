@@ -265,6 +265,15 @@ interface SwitchOutcome {
 }
 ```
 
+
+<!-- contract: SerializationContext — restated from src/adapters/module.md -->
+```ts
+/** The host-supplied absolute destination, preserving native subdirectory and symlink spelling. */
+interface SerializationContext {
+  cwd: string;
+}
+```
+
 <!-- contract: AgentAdapter — restated from src/adapters/module.md -->
 ```ts
 /** What every agent adapter provides. One folder per agent implements it (FR-57). */
@@ -281,6 +290,7 @@ interface AgentAdapter {
     session: CanonicalSession,
     target: TargetProfile,
     marker: ProvenanceMarker,
+    context: SerializationContext,
   ): SerializedSession;
   /** Target role. Checks the structure before placement. Empty means valid (FR-50). */
   validate(serialized: SerializedSession): ValidationDefect[];
@@ -445,7 +455,7 @@ interface CommitDistance {
 interface RepoReader {
   identify(cwd: string): Promise<RepoIdentity>;
   /** Compares HEAD with a commit of a source session (FR-37). */
-  distanceFrom(sourceCommit: string): Promise<CommitDistance>;
+  distanceFrom(cwd: string, sourceCommit: string): Promise<CommitDistance>;
 }
 ```
 
@@ -546,7 +556,8 @@ interface LandingResult {
 ```ts
 /** What to list (FR-10, FR-15). */
 interface ListRequest {
-  repoRoot: string;
+  /** Host-supplied absolute working directory; preserve native subdirectory and symlink spelling. */
+  destinationCwd: string;
   target: TargetProfile;
   onlyAgent: AgentId | null;
   onlyHome: HomePath | null;
@@ -554,7 +565,8 @@ interface ListRequest {
 
 /** What to preview, and later what to commit (FR-16, FR-20). */
 interface ImportRequest {
-  repoRoot: string;
+  /** Host-supplied absolute working directory; preserve native subdirectory and symlink spelling. */
+  destinationCwd: string;
   target: TargetProfile;
   selection: SelectionInput;
   onlyAgent: AgentId | null;
@@ -839,6 +851,8 @@ Changes that require **only this module** to change:
   extension.
 
 ## Constraints and Invariants
+
+- **Destination is request-scoped, not host-scoped.** A long-lived host may serve different directories. Neither adapter factories nor repository reader construction supply an import cwd.
 
 - **This module holds no rule of requirement sections C to I** (FR-60). It constructs and starts;
   it does not decide what crosses over.

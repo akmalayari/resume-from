@@ -19,9 +19,9 @@ test("T-REP-15 — the FR-38 scenario end to end", async () => {
   const dir = await initRepo();
   const sessionCommit = await commitFile(dir, "session");
   await commitSeries(dir, 14);
-  const reader = createRepoReader(dir);
+  const reader = createRepoReader();
 
-  expect(await reader.distanceFrom(sessionCommit.slice(0, 7))).toEqual({
+  expect(await reader.distanceFrom(dir, sessionCommit.slice(0, 7))).toEqual({
     known: true,
     ahead: 14,
     behind: 0,
@@ -33,7 +33,7 @@ test("T-REP-16 — a session from another repository", async () => {
   const here = await repoWithOneCommit("resume-from-here-");
   const elsewhere = await repoWithOneCommit("resume-from-elsewhere-");
 
-  const distance = await createRepoReader(here.dir).distanceFrom(elsewhere.head);
+  const distance = await createRepoReader().distanceFrom(here.dir, elsewhere.head);
 
   expect(distance).toEqual({ known: false, ahead: 0, behind: 0 });
 });

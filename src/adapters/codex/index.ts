@@ -14,7 +14,6 @@ import { type CodexSerializeDeps, serializeCodex, validateCodex } from "./write.
 const CODEX_WINDOW_TOKENS = 258_400;
 
 const DEFAULT_DEPS: CodexSerializeDeps = {
-  cwd: () => process.cwd(),
   newSessionId: () => randomUUID(),
 };
 
@@ -41,7 +40,8 @@ export const codexAdapterFactory: CodexAdapterFactory = {
       capabilities: codexCapabilities,
       listSessions: listCodexSessions,
       loadSession: loadCodexSession,
-      serialize: (session, target, marker) => serializeCodex(session, target, marker, deps),
+      serialize: (session, target, marker, context) =>
+        serializeCodex(session, target, marker, context, deps),
       validate: validateCodex,
       readBack: readBackCodex,
       switchTo: switchToCodex,

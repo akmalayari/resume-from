@@ -110,7 +110,8 @@ interface ImportPipeline {
 ```ts
 /** What to preview, and later what to commit (FR-16, FR-20). */
 interface ImportRequest {
-  repoRoot: string;
+  /** Host-supplied absolute working directory; preserve native subdirectory and symlink spelling. */
+  destinationCwd: string;
   target: TargetProfile;
   selection: SelectionInput;
   onlyAgent: AgentId | null;
@@ -388,6 +389,8 @@ Changing what crosses over touches `src/import/transfer/`. Changing the preview 
 `src/import/preview/`.
 
 ## Constraints and Invariants
+
+- **Requests have one destination: `destinationCwd`.** Hosts preserve its absolute native spelling for import writes. Canonical destination and Git common-directory identity bind preview confirmation; source provenance never carries destination data.
 
 - **The source is never modified.** No module in this tree opens a source session file for writing
   (NG-1, AC-4). The only write path in the system is `src/platform/store/`.

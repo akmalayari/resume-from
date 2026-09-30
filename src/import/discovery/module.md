@@ -372,6 +372,8 @@ Changes that require **only this module** to change:
 
 ## Constraints and Invariants
 
+- **The pipeline derives `SearchScope.repoRoot` from request `destinationCwd`.** It is an internal search scope, not a second caller-supplied import destination. Exact canonical-directory filtering remains in effect; Git identity-based cross-directory discovery is not yet enabled.
+
 - **This module never writes anything**, to any home or any repository (NG-1, AC-4).
 - **This module never calls a model** (FR-8). A listing works when the source agent is stopped or out
   of quota, because everything comes from disk.

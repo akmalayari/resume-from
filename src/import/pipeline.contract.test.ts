@@ -38,7 +38,7 @@ async function newWorld(...args: Parameters<typeof createWorld>): Promise<World>
 
 function listRequest(world: World, target: AgentId): ListRequest {
   return {
-    repoRoot: world.repoRoot,
+    destinationCwd: world.repoRoot,
     target: world.targetFor(target),
     onlyAgent: null,
     onlyHome: null,

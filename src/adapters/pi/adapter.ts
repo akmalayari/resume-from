@@ -18,6 +18,7 @@ import type {
   HomePath,
   PiSwitchContext,
   ProvenanceMarker,
+  SerializationContext,
   SerializedSession,
   SessionDescriptor,
   SessionId,
@@ -52,7 +53,6 @@ export interface PiAdapterDeps extends PiSerializeDeps {
 }
 
 const DEFAULT_DEPS: PiAdapterDeps = {
-  cwd: () => process.cwd(),
   now: () => new Date(),
   newSessionId: () => randomUUID(),
   newEntryId: () => randomUUID().slice(0, 8),
@@ -221,8 +221,9 @@ export function createPiAdapter(overrides: Partial<PiAdapterDeps> = {}): AgentAd
       session: CanonicalSession,
       target: TargetProfile,
       marker: ProvenanceMarker,
+      context: SerializationContext,
     ): SerializedSession {
-      return serializeSession(session, target, marker, deps);
+      return serializeSession(session, target, marker, context, deps);
     },
 
     validate(serialized: SerializedSession): ValidationDefect[] {

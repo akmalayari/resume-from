@@ -62,7 +62,7 @@ async function bench(config: ImportConfig = testConfig()): Promise<Bench> {
   const fixtureHome = `${root}/fixture-agent`;
   homes.set(FIXTURE_AGENT_ID, fixtureHome);
   const fixtureEntry: AgentEntry = {
-    create: () => createFixtureAgentAdapter({ defaultHome: fixtureHome, cwd: REPO_ROOT }),
+    create: () => createFixtureAgentAdapter({ defaultHome: fixtureHome }),
     family: "generic",
   };
 
@@ -77,7 +77,7 @@ async function bench(config: ImportConfig = testConfig()): Promise<Bench> {
     const agent = adapter.capabilities().agent;
     const home = adapter.capabilities().defaultHome;
     homes.set(agent, home);
-    seeded.set(agent, await seedSession(adapter, home, REFERENCE_SESSION));
+    seeded.set(agent, await seedSession(adapter, home, REFERENCE_SESSION, { cwd: REPO_ROOT }));
   }
 
   return { root, host, homes, seeded, guard };
@@ -151,7 +151,7 @@ describe("T-HOS-18 — adding an agent costs one folder and one line", () => {
       const profile = scene.host.profiles().build(targetAgent, null, scene.host.config());
       const pipeline = await scene.host.pipelineFor(profile);
       const request = {
-        repoRoot: REPO_ROOT,
+        destinationCwd: REPO_ROOT,
         target: profile,
         selection: { by: "session-id" as const, id: sourceId ?? "" },
         onlyAgent: sourceAgent,
@@ -263,7 +263,7 @@ describe("T-HOS-20 — two homes of one agent are two targets", () => {
     ] as const) {
       const pipeline = await scene.host.pipelineFor(profile);
       const request = {
-        repoRoot: REPO_ROOT,
+        destinationCwd: REPO_ROOT,
         target: profile,
         selection: { by: "session-id" as const, id: sourceId },
         onlyAgent: sourceAgent,

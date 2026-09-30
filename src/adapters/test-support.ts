@@ -623,7 +623,9 @@ export async function seedSource(
 ): Promise<{ home: string; sessionId: string; filePath: string }> {
   const adapter = source.create();
   const home = options.home ?? (await throwawayHome(`src-${source.id}`));
-  const serialized = adapter.serialize(session, targetProfile(adapter, home), markerFor(session));
+  const serialized = adapter.serialize(session, targetProfile(adapter, home), markerFor(session), {
+    cwd: "/repo",
+  });
   const planted: string[] = [];
   const files = serialized.files.map((file, index) => {
     if (index !== 0) return file;
@@ -685,6 +687,7 @@ export async function runDirection(
     loaded,
     targetProfile(targetAdapter, targetHome),
     markerFor(loaded),
+    { cwd: "/repo" },
   );
   const defects = targetAdapter.validate(serialized);
   if (defects.length > 0) {

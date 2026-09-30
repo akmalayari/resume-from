@@ -37,5 +37,5 @@ export interface RepoReaderOptions {
 export interface RepoReader {
   identify(cwd: string): Promise<RepoIdentity>;
   /** Compares HEAD with a commit of a source session (FR-37). */
-  distanceFrom(sourceCommit: string): Promise<CommitDistance>;
+  distanceFrom(cwd: string, sourceCommit: string): Promise<CommitDistance>;
 }

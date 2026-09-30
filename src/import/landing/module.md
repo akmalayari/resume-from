@@ -342,6 +342,15 @@ interface SwitchOutcome {
 }
 ```
 
+
+<!-- contract: SerializationContext — restated from src/adapters/module.md -->
+```ts
+/** The host-supplied absolute destination, preserving native subdirectory and symlink spelling. */
+interface SerializationContext {
+  cwd: string;
+}
+```
+
 <!-- contract: AgentAdapter — restated from src/adapters/module.md (subset: omits the source-role methods listSessions and loadSession) -->
 ```ts
 /** What every agent adapter provides. One folder per agent implements it (FR-57). */
@@ -353,6 +362,7 @@ interface AgentAdapter {
     session: CanonicalSession,
     target: TargetProfile,
     marker: ProvenanceMarker,
+    context: SerializationContext,
   ): SerializedSession;
   /** Target role. Checks the structure before placement. Empty means valid (FR-50). */
   validate(serialized: SerializedSession): ValidationDefect[];
@@ -418,6 +428,7 @@ interface SessionLander {
     committer: FileCommitter,
     runtime: AgentRuntime,
     importedAt: string,
+    context: SerializationContext,
   ): Promise<LandingResult>;
 }
 ```
@@ -481,6 +492,8 @@ Changes that require **only this module** to change:
 None of these touch a rule, a preview, or an adapter.
 
 ## Constraints and Invariants
+
+- **Serialization context is required.** Pass its host-supplied absolute cwd unchanged to the target writer, including native symlink and subdirectory spelling. Neither source provenance nor process/factory cwd supplies the destination.
 
 - **Nothing that existed before landing is ever rewritten or removed** (FR-49). Every path in a
   `SerializedSession` is new and the committer refuses if any exists.

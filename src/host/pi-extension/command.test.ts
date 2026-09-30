@@ -342,7 +342,7 @@ describe("T-PIX-6 — the target is the Pi home the user is in", () => {
       home: "/Users/me/.pi-work",
       windowTokens: PI_WINDOW,
     });
-    expect(request?.repoRoot).toBe("/work/repo");
+    expect(request?.destinationCwd).toBe("/work/repo");
     expect(pipeline.commitCalls[0]?.request.target.home).toBe("/Users/me/.pi-work");
   });
 });

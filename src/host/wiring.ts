@@ -48,7 +48,7 @@ export interface HostDeps {
   createEstimators?: () => EstimatorFactory;
   createRepo?: () => RepoReader;
   createCommitter?: () => FileCommitter;
-  /** The directory the command runs in. The repository reader reads git state from it (FR-13). */
+  /** Host invocation directory. Each pipeline request independently supplies its destination. */
   cwd?: string;
   /** The import time written into the marker (FR-47). Injected so a preview and a commit agree. */
   now?: () => string;
@@ -71,9 +71,8 @@ export async function createHost(deps: HostDeps = {}): Promise<Host> {
   const config = await (deps.configLoader ?? createConfigLoader()).load();
 
   // Step 2.
-  const cwd = deps.cwd ?? process.cwd();
   const estimators = (deps.createEstimators ?? (() => estimatorFactory))();
-  const repo = (deps.createRepo ?? (() => createRepoReader(cwd)))();
+  const repo = (deps.createRepo ?? createRepoReader)();
   const committer = (deps.createCommitter ?? createFileCommitter)();
 
   // Step 3. The list is the only place that knows which implementations exist. Each adapter

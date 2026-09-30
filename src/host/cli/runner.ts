@@ -54,7 +54,7 @@ async function run(
 
   if (selection === null) {
     const request: ListRequest = {
-      repoRoot: invocation.cwd,
+      destinationCwd: invocation.cwd,
       target,
       onlyAgent,
       onlyHome,
@@ -75,7 +75,7 @@ async function run(
   }
 
   const request: ImportRequest = {
-    repoRoot: invocation.cwd,
+    destinationCwd: invocation.cwd,
     target,
     selection,
     onlyAgent,

@@ -341,6 +341,7 @@ describe("unit", () => {
       createFsCommitter(log),
       RUNTIME,
       IMPORTED_AT,
+      { cwd: "/repo" },
     );
 
     expect(log.filter((call) => STAGE_CALLS.includes(call))).toEqual(STAGE_CALLS);
@@ -358,6 +359,7 @@ describe("unit", () => {
       createFsCommitter(),
       RUNTIME,
       IMPORTED_AT,
+      { cwd: "/repo" },
     );
 
     expect(marker.sourceAgent).toBe("codex");
@@ -390,6 +392,7 @@ describe("unit", () => {
       createFsCommitter(),
       RUNTIME,
       fixed,
+      { cwd: "/repo" },
     );
     expect(marker.importedAt).toBe(fixed);
   });
@@ -405,6 +408,7 @@ describe("unit", () => {
       createFsCommitter(log),
       RUNTIME,
       IMPORTED_AT,
+      { cwd: "/repo" },
     );
 
     expect(result.switched).toBe(true);
@@ -420,6 +424,7 @@ describe("unit", () => {
       createFsCommitter(log),
       RUNTIME,
       IMPORTED_AT,
+      { cwd: "/repo" },
     );
 
     expect(log).not.toContain("switchTo");
@@ -435,6 +440,7 @@ describe("unit", () => {
       createFsCommitter(),
       RUNTIME,
       IMPORTED_AT,
+      { cwd: "/repo" },
     );
 
     expect(result.itemsSent).toBe(24);
@@ -555,6 +561,7 @@ describe("integration contract", () => {
         createFsCommitter(log),
         RUNTIME,
         IMPORTED_AT,
+        { cwd: "/repo" },
       ),
     );
 
@@ -576,6 +583,7 @@ describe("integration contract", () => {
         createFsCommitter(),
         RUNTIME,
         IMPORTED_AT,
+        { cwd: "/repo" },
       ),
     );
 
@@ -598,6 +606,7 @@ describe("integration contract", () => {
         createFsCommitter(),
         RUNTIME,
         IMPORTED_AT,
+        { cwd: "/repo" },
       ),
     );
 
@@ -620,6 +629,7 @@ describe("integration contract", () => {
         createFsCommitter(),
         RUNTIME,
         IMPORTED_AT,
+        { cwd: "/repo" },
       ),
     );
 
@@ -646,6 +656,7 @@ describe("integration contract", () => {
         committer,
         RUNTIME,
         IMPORTED_AT,
+        { cwd: "/repo" },
       ),
     );
 
@@ -672,6 +683,7 @@ describe("integration contract", () => {
         createRefusingCommitter(error),
         RUNTIME,
         IMPORTED_AT,
+        { cwd: "/repo" },
       ),
     );
 
@@ -687,7 +699,9 @@ describe("integration contract", () => {
       const { plan, adapter, committer } = build(home);
 
       const failure = await failureOf(
-        createSessionLander().land(plan, adapter, committer, RUNTIME, IMPORTED_AT),
+        createSessionLander().land(plan, adapter, committer, RUNTIME, IMPORTED_AT, {
+          cwd: "/repo",
+        }),
       );
 
       expect(failure.stage).toBe(stage);
@@ -717,6 +731,7 @@ describe("boundary", () => {
         createFsCommitter(log),
         RUNTIME,
         IMPORTED_AT,
+        { cwd: "/repo" },
       ),
     );
 
@@ -732,7 +747,9 @@ describe("boundary", () => {
     expect(before.filter((line) => line.startsWith("f "))).toHaveLength(50);
 
     const { plan, adapter, committer } = kase.build(home);
-    await failureOf(createSessionLander().land(plan, adapter, committer, RUNTIME, IMPORTED_AT));
+    await failureOf(
+      createSessionLander().land(plan, adapter, committer, RUNTIME, IMPORTED_AT, { cwd: "/repo" }),
+    );
 
     const after = await snapshot(home);
     // Nothing that existed was rewritten or removed (FR-49).
@@ -754,6 +771,7 @@ describe("boundary", () => {
       createFsCommitter(),
       RUNTIME,
       IMPORTED_AT,
+      { cwd: "/repo" },
     );
 
     expect(result.switched).toBe(false);
@@ -774,6 +792,7 @@ describe("boundary", () => {
         createFsCommitter(),
         RUNTIME,
         IMPORTED_AT,
+        { cwd: "/repo" },
       ),
     );
 
@@ -792,6 +811,7 @@ describe("boundary", () => {
         createFsCommitter(),
         RUNTIME,
         IMPORTED_AT,
+        { cwd: "/repo" },
       ),
     );
 
@@ -832,6 +852,7 @@ describe("boundary", () => {
         createFsCommitter(),
         RUNTIME,
         IMPORTED_AT,
+        { cwd: "/repo" },
       );
     } finally {
       globalThis.Date = realDate;
@@ -869,6 +890,7 @@ describe("boundary", () => {
           createFsCommitter(log),
           RUNTIME,
           IMPORTED_AT,
+          { cwd: "/repo" },
         );
 
         const switches = landing === "create-and-switch";
@@ -903,6 +925,7 @@ describe("behavior", () => {
       createFsCommitter(log),
       RUNTIME,
       IMPORTED_AT,
+      { cwd: "/repo" },
     );
 
     const allowed = new Set(["capabilities", ...STAGE_CALLS]);
@@ -926,6 +949,7 @@ describe("behavior", () => {
         createFsCommitter(log),
         RUNTIME,
         IMPORTED_AT,
+        { cwd: "/repo" },
       );
 
       // The marker is always handed to the adapter and always returned to the
@@ -941,7 +965,9 @@ describe("behavior", () => {
     const adapter = createAdapter([]);
 
     // Complete: the one committed file holds exactly the bytes that were sent.
-    await createSessionLander().land(plan, adapter, createFsCommitter(), RUNTIME, IMPORTED_AT);
+    await createSessionLander().land(plan, adapter, createFsCommitter(), RUNTIME, IMPORTED_AT, {
+      cwd: "/repo",
+    });
     const [sent] = filesFor(home, SESSION_ID, 1);
     expect(sent).toBeDefined();
     if (sent !== undefined) expect(await readFile(sent.absolutePath)).toEqual(sent.bytes);
@@ -957,6 +983,7 @@ describe("behavior", () => {
         createFsCommitter(log),
         RUNTIME,
         IMPORTED_AT,
+        { cwd: "/repo" },
       ),
     );
 
@@ -979,6 +1006,7 @@ describe("behavior", () => {
         createFsCommitter(log),
         RUNTIME,
         IMPORTED_AT,
+        { cwd: "/repo" },
       ),
     );
 
@@ -1000,6 +1028,7 @@ describe("behavior", () => {
       createFsCommitter(),
       RUNTIME,
       IMPORTED_AT,
+      { cwd: "/repo" },
     );
 
     expect(result.handover).toEqual({

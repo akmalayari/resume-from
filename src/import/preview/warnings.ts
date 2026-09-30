@@ -33,25 +33,18 @@ function describeGap({ ahead, behind }: CommitDistance): string {
 }
 
 /**
- * Compares the source commit with the current HEAD (FR-37, FR-38). A repository that
- * cannot be read, or a commit this tree does not have, is said to be unknown — never
- * guessed and never left out (FR-36). None of these block (FR-39).
+ * Compares the source commit with the destination HEAD (FR-37, FR-38). Returned
+ * unresolved identities and unavailable commits produce non-blocking unknown-state
+ * warnings (FR-36, FR-39). Rejected operational lookups, including cancellation,
+ * propagate so the pipeline stops before any import write.
  */
 export async function repoWarning(
   plan: TransferPlan,
   repo: RepoReader,
   cwd: string,
+  identified?: RepoIdentity,
 ): Promise<PreviewWarning | null> {
-  const unreadable = repoState(
-    `${GLYPH} The repository state could not be read, so the source commit is ${NOT_KNOWN}.`,
-  );
-
-  let identity: RepoIdentity;
-  try {
-    identity = await repo.identify(cwd);
-  } catch {
-    return unreadable;
-  }
+  const identity = identified ?? (await repo.identify(cwd));
 
   const sourceCommit = plan.provenance.repo.commit;
   if (sourceCommit === null || sourceCommit.trim() === "") {
@@ -63,7 +56,7 @@ export async function repoWarning(
   const source = shortCommit(sourceCommit);
   if (identity.root === null) {
     return repoState(
-      `${GLYPH} Source ran at ${source}. This directory is not a repository, so the repository state is ${NOT_KNOWN}.`,
+      `${GLYPH} Source ran at ${source}. This directory's repository identity is unresolved, so the repository state is ${NOT_KNOWN}.`,
     );
   }
   if (identity.head === null) {
@@ -74,12 +67,7 @@ export async function repoWarning(
   if (sameCommit(sourceCommit, identity.head)) return null;
 
   const head = shortCommit(identity.head);
-  let distance: CommitDistance;
-  try {
-    distance = await repo.distanceFrom(sourceCommit);
-  } catch {
-    return unreadable;
-  }
+  const distance = await repo.distanceFrom(cwd, sourceCommit);
   if (!distance.known) {
     return repoState(
       `${GLYPH} Source ran at ${source}, which is ${NOT_KNOWN}. The tree is now at ${head}.`,

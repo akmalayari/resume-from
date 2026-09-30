@@ -1,3 +1,4 @@
+import { realpath } from "node:fs/promises";
 // T-IMP-20 to T-IMP-26: what the user gets, and what never crosses over.
 
 import { readFile } from "node:fs/promises";
@@ -41,7 +42,7 @@ async function newWorld(...args: Parameters<typeof createWorld>): Promise<World>
 
 function listRequest(world: World, target: AgentId): ListRequest {
   return {
-    repoRoot: world.repoRoot,
+    destinationCwd: world.repoRoot,
     target: world.targetFor(target),
     onlyAgent: null,
     onlyHome: null,
@@ -257,9 +258,11 @@ describe("T-IMP-23 — the nine directions cannot be told apart", () => {
       world.calls.length = 0;
       await pipeline.commit(importRequest(world, target), null, report.confirmationToken);
 
+      const canonicalDestination = await realpath(world.repoRoot);
       const anonymous = report.lines.map((line) =>
         line
           .replaceAll(world.homeOf(source), "HOME")
+          .replaceAll(canonicalDestination, "DESTINATION")
           .replaceAll(world.targetHomeOf(target), "HOME")
           .replaceAll(source, "AGENT")
           .replaceAll(target, "AGENT"),

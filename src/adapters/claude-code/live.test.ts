@@ -138,7 +138,6 @@ describe.skipIf(!live)("T-CC-16 — live: the default home and the per-project l
       // The declared default home is the one Claude Code itself used.
       const adapter = createClaudeCodeAdapter({
         env: { ...process.env, CLAUDE_CONFIG_DIR: home },
-        cwd: repo,
       });
       expect(adapter.capabilities().defaultHome).toBe(home);
 
@@ -168,11 +167,12 @@ describe.skipIf(!live)("live: the C-9 scenario", () => {
     if (!ready.ready) return;
     home = ready.home;
     repo = await makeRepo();
-    const adapter = createClaudeCodeAdapter({ cwd: repo });
+    const adapter = createClaudeCodeAdapter();
     serialized = adapter.serialize(
       TWO_TURN_SESSION,
       { agent: "claude-code", home, windowTokens: adapter.capabilities().defaultWindowTokens },
       MARKER,
+      { cwd: repo },
     );
     expect(adapter.validate(serialized)).toEqual([]);
     homeBefore = await checksumTree(home);
@@ -217,7 +217,7 @@ describe.skipIf(!live)("live: the C-9 scenario", () => {
       expect(after).toContain("make the auth token refresh work");
       expect(after).toContain("I'll look at how the token is stored first.");
 
-      const adapter = createClaudeCodeAdapter({ cwd: repo });
+      const adapter = createClaudeCodeAdapter();
       const facts = await adapter.readBack(home, serialized.sessionId);
       expect(facts.openable).toBe(true);
       expect(facts.itemCount).toBeGreaterThanOrEqual(serialized.itemCount);

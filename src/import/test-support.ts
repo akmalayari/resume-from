@@ -46,6 +46,7 @@ import type {
   ProvenanceMarker,
   ProvenanceSupport,
   SelectionLevel,
+  SerializationContext,
   SerializedSession,
   SessionDescriptor,
   SessionId,
@@ -340,6 +341,7 @@ export function createStubAdapter(options: StubAdapterOptions): AgentAdapter {
       session: CanonicalSession,
       target: TargetProfile,
       marker: ProvenanceMarker,
+      context: SerializationContext,
     ): SerializedSession {
       record("serialize");
       if (failAt.has("serialize"))
@@ -348,6 +350,7 @@ export function createStubAdapter(options: StubAdapterOptions): AgentAdapter {
       const payload = {
         sessionId,
         marker: marker.lines,
+        cwd: context.cwd,
         provenance: session.provenance,
         turns: session.turns,
       };
@@ -460,7 +463,7 @@ export function createStaticRepoReader(options: StaticRepoOptions = {}): RepoRea
         options.identity ?? { root: cwd, commonDir: null, isBare: false, head: null, branch: null }
       );
     },
-    async distanceFrom(_sourceCommit: string): Promise<CommitDistance> {
+    async distanceFrom(_cwd: string, _sourceCommit: string): Promise<CommitDistance> {
       if (options.fail) throw new Error("git is not available");
       return options.distance ?? { known: false, ahead: 0, behind: 0 };
     },
@@ -590,7 +593,10 @@ export function recordingStages(overrides: Partial<PipelineStages> = {}): StageR
         return plan;
       },
     },
-    previewFor(_repoRoot: string): PreviewBuilder {
+    async destinationFor(cwd) {
+      return { cwd, canonicalCwd: cwd, identity: await createStaticRepoReader().identify(cwd) };
+    },
+    previewFor(): PreviewBuilder {
       return {
         async build(plan: TransferPlan) {
           calls.push("preview.build");
@@ -643,9 +649,9 @@ export function recordingStages(overrides: Partial<PipelineStages> = {}): StageR
 /** Wraps a lander so a test can see the plan the pipeline handed it. */
 export function recordingLander(inner: SessionLander, seen: TransferPlan[]): SessionLander {
   return {
-    land: (plan, adapter, committer, runtime, importedAt) => {
+    land: (plan, adapter, committer, runtime, importedAt, context) => {
       seen.push(plan);
-      return inner.land(plan, adapter, committer, runtime, importedAt);
+      return inner.land(plan, adapter, committer, runtime, importedAt, context);
     },
   };
 }
@@ -799,8 +805,8 @@ export function instrument(deps: ImportPipelineDeps): Instrumented {
       },
       plans,
     ),
-    previewFor: (repoRoot: string) => {
-      const builder = stages.previewFor(repoRoot);
+    previewFor: (destination) => {
+      const builder = stages.previewFor(destination);
       return {
         build: (plan) => {
           order.push("preview.build");
@@ -810,9 +816,9 @@ export function instrument(deps: ImportPipelineDeps): Instrumented {
     },
     lander: recordingLander(
       {
-        land: (plan, adapter, committer, runtime, importedAt) => {
+        land: (plan, adapter, committer, runtime, importedAt, context) => {
           order.push("lander.land");
-          return stages.lander.land(plan, adapter, committer, runtime, importedAt);
+          return stages.lander.land(plan, adapter, committer, runtime, importedAt, context);
         },
       },
       landed,

@@ -288,6 +288,15 @@ interface SwitchOutcome {
 }
 ```
 
+
+<!-- contract: SerializationContext — restated from src/adapters/module.md -->
+```ts
+/** The host-supplied absolute destination, preserving native subdirectory and symlink spelling. */
+interface SerializationContext {
+  cwd: string;
+}
+```
+
 <!-- contract: AgentAdapter — restated from src/adapters/module.md -->
 ```ts
 /** What every agent adapter provides. One folder per agent implements it (FR-57). */
@@ -304,6 +313,7 @@ interface AgentAdapter {
     session: CanonicalSession,
     target: TargetProfile,
     marker: ProvenanceMarker,
+    context: SerializationContext,
   ): SerializedSession;
   /** Target role. Checks the structure before placement. Empty means valid (FR-50). */
   validate(serialized: SerializedSession): ValidationDefect[];
@@ -324,8 +334,6 @@ The two blocks below are the normative home of the types they define.
 ```ts
 /** The injectable seam that keeps serialize pure (no ambient process state). */
 interface CodexSerializeDeps {
-  /** Where the user is when the import runs. `codex resume` filters the picker by cwd. */
-  cwd(): string;
   /** Produces the new thread's UUID. Injected so two calls with the same deps are byte-equal. */
   newSessionId(): string;
 }
@@ -380,6 +388,8 @@ Changes that require **only this module** to change:
 None of these touch a rule, a preview, another adapter, or the host.
 
 ## Constraints and Invariants
+
+- **The required serialization context supplies `session_meta.cwd`.** Preserve its native absolute subdirectory and symlink spelling. Rollout placement remains under the target profile’s dated sessions directory; factory deps supply IDs, never cwd.
 
 - **`serialize` writes `event_msg` entries.** A thread without them is invisible to `thread/list` and
   shows zero turns on resume (C-7). Writing only model-history items is the failure C-7 measured, and
@@ -538,9 +548,9 @@ says Codex fails silently, so nothing here may be inferred from the absence of a
   is reasoning and result bodies never crosses.
 
 **T-COD-20 — serialize is deterministic and never reads the clock**
-- Scenario (a): serialize is called twice with identical fixed deps (`cwd` and `newSessionId`).
+- Scenario (a): serialize is called twice with identical serialization context (`cwd`) and fixed deps (`newSessionId`).
   Expected: the two output buffers are byte-equal and the paths match.
-- Scenario (b): `cwd` is injected as `/fixed/repo`. Expected: `session_meta.cwd === "/fixed/repo"`,
+- Scenario (b): serialization context `cwd` is supplied as `/fixed/repo`. Expected: `session_meta.cwd === "/fixed/repo"`,
   not whatever `process.cwd()` returns.
 - Scenario (fallback): `marker.importedAt` is not a valid date string, but
   `session.provenance.updatedAt` is. Expected: the stamp in the rollout equals

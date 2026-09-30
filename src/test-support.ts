@@ -991,6 +991,7 @@ export async function seedSession(
   adapter: AgentAdapter,
   home: HomePath,
   session: CanonicalSession,
+  context: { cwd: string },
 ): Promise<SessionId> {
   const capabilities = adapter.capabilities();
   const target: TargetProfile = {
@@ -998,7 +999,7 @@ export async function seedSession(
     home,
     windowTokens: capabilities.defaultWindowTokens,
   };
-  const serialized = adapter.serialize(session, target, markerFor(session));
+  const serialized = adapter.serialize(session, target, markerFor(session), context);
   for (const file of serialized.files) {
     await mkdir(dirname(file.absolutePath), { recursive: true });
     await writeFile(file.absolutePath, file.bytes, { flag: "wx" });
@@ -1113,7 +1114,6 @@ export async function bench(options: BenchOptions = {}): Promise<Bench> {
           create: () =>
             createFixtureAgentAdapter({
               defaultHome: fixtureHome,
-              cwd: REPO_ROOT,
             }),
           family: "generic",
         },
@@ -1132,7 +1132,7 @@ export async function bench(options: BenchOptions = {}): Promise<Bench> {
       const home = adapter.capabilities().defaultHome;
       seeded.set(
         agentOf(adapter),
-        await seedSession(adapter, home, options.session ?? REFERENCE_SESSION),
+        await seedSession(adapter, home, options.session ?? REFERENCE_SESSION, { cwd: REPO_ROOT }),
       );
     }
   }
@@ -1146,14 +1146,14 @@ export function importRequest(
   source: AgentId,
   target: TargetProfile,
 ): {
-  repoRoot: string;
+  destinationCwd: string;
   target: TargetProfile;
   selection: { by: "session-id"; id: SessionId };
   onlyAgent: AgentId;
   onlyHome: HomePath | null;
 } {
   return {
-    repoRoot: REPO_ROOT,
+    destinationCwd: REPO_ROOT,
     target,
     selection: { by: "session-id", id: scene.seeded.get(source) ?? "" },
     onlyAgent: source,

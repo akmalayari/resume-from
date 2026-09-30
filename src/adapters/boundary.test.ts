@@ -66,6 +66,7 @@ describe.each(cases)("T-ADA-13 — %s: no adapter writes a file", (_id, entry) =
         REFERENCE_SESSION,
         targetProfile(adapter, seeded.home),
         markerFor(REFERENCE_SESSION),
+        { cwd: "/repo" },
       );
       expect(adapter.validate(serialized)).toEqual([]);
     }
@@ -84,7 +85,12 @@ describe.each(cases)("T-ADA-15 — %s: no adapter opens a network connection", (
     const session = await adapter.loadSession(descriptor);
 
     const home = await throwawayHome(`net-${entry.id}`);
-    const serialized = adapter.serialize(session, targetProfile(adapter, home), markerFor(session));
+    const serialized = adapter.serialize(
+      session,
+      targetProfile(adapter, home),
+      markerFor(session),
+      { cwd: "/repo" },
+    );
     expect(adapter.validate(serialized)).toEqual([]);
     await commit(serialized.files);
     await adapter.readBack(home, serialized.sessionId);
@@ -103,6 +109,7 @@ async function serializeInto(
     REFERENCE_SESSION,
     targetProfile(adapter, home),
     markerFor(REFERENCE_SESSION),
+    { cwd: "/repo" },
   );
   return { home, serialized };
 }
@@ -122,6 +129,7 @@ describe.each(cases)("T-ADA-16 — %s: validation catches a missing required fie
         REFERENCE_SESSION,
         targetProfile(adapter, home),
         markerFor(REFERENCE_SESSION),
+        { cwd: "/repo" },
       ),
       1,
     );
@@ -162,7 +170,7 @@ describe.each(cases)("T-ADA-18 — %s: a minted session ID does not collide", (_
 
     const existing: PendingFile[] = [];
     for (let n = 0; n < 100; n++) {
-      const files = adapter.serialize(REFERENCE_SESSION, profile, marker).files;
+      const files = adapter.serialize(REFERENCE_SESSION, profile, marker, { cwd: "/repo" }).files;
       expect(files).toHaveLength(1);
       existing.push(...files);
       await commit(files);
@@ -172,7 +180,7 @@ describe.each(cases)("T-ADA-18 — %s: a minted session ID does not collide", (_
     const minted = new Set<string>();
     const ids = new Set<string>();
     for (let n = 0; n < 1000; n++) {
-      const serialized = adapter.serialize(REFERENCE_SESSION, profile, marker);
+      const serialized = adapter.serialize(REFERENCE_SESSION, profile, marker, { cwd: "/repo" });
       ids.add(serialized.sessionId);
       for (const file of serialized.files) {
         expect(taken.has(file.absolutePath)).toBe(false);
@@ -196,6 +204,7 @@ describe.each(cases)(
         REFERENCE_SESSION,
         targetProfile(adapter, home),
         markerFor(REFERENCE_SESSION),
+        { cwd: "/repo" },
       );
       const whole = serialized.files[0];
       if (whole === undefined) throw new Error("nothing to cut");

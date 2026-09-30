@@ -18,6 +18,7 @@ import type {
   CanonicalTurn,
   PendingFile,
   ProvenanceMarker,
+  SerializationContext,
   SerializedSession,
   TargetProfile,
 } from "./contract.js";
@@ -37,8 +38,6 @@ import {
 } from "./format.js";
 
 export interface PiSerializeDeps {
-  /** The repository the new session belongs to. Pi buckets its sessions by it. */
-  cwd(): string;
   now(): Date;
   newSessionId(): string;
   newEntryId(): string;
@@ -56,9 +55,10 @@ export function serializeSession(
   session: CanonicalSession,
   target: TargetProfile,
   marker: ProvenanceMarker,
+  context: SerializationContext,
   deps: PiSerializeDeps,
 ): SerializedSession {
-  const cwd = deps.cwd();
+  const cwd = context.cwd;
   const sessionId = deps.newSessionId();
   const createdAt = deps.now().toISOString();
   const fallbackTime = toIsoUtc(session.provenance.updatedAt) ?? createdAt;

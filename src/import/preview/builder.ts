@@ -2,6 +2,7 @@ import type {
   PreviewBuilder,
   PreviewContent,
   PreviewWarning,
+  RepoIdentity,
   RepoReader,
   TransferPlan,
 } from "./contract.js";
@@ -16,12 +17,13 @@ const UNTITLED = "(untitled)";
 // Each blockedReason now carries its own cause-specific advice (FR-33, FR-56), so no
 // single fallback string is accurate for all block causes.
 
-function headerLines(plan: TransferPlan): string[] {
+function headerLines(plan: TransferPlan, canonicalCwd: string): string[] {
   const source = plan.provenance.ref;
   const title = oneLine(plan.provenance.title) || UNTITLED;
   return [
     `Source: ${source.agent} — ${title} (${oneLine(source.home, MAX_PATH_LENGTH)})`,
     `Target: ${plan.target.agent} (${oneLine(plan.target.home, MAX_PATH_LENGTH)})`,
+    `Destination: ${oneLine(canonicalCwd, Number.POSITIVE_INFINITY)}`,
     countLine(plan),
   ];
 }
@@ -60,15 +62,20 @@ function blockedLines(blockedReason: string | null): string[] {
  * Builds the preview from a plan and the repository state read at the moment of the call.
  * It writes nothing (FR-16) and renders one shape for every direction (FR-21).
  */
-export function createPreviewBuilder(repo: RepoReader, cwd: string): PreviewBuilder {
+export function createPreviewBuilder(
+  repo: RepoReader,
+  cwd: string,
+  canonicalCwd: string = cwd,
+  identity?: RepoIdentity,
+): PreviewBuilder {
   return {
     async build(plan: TransferPlan): Promise<PreviewContent> {
       const collected: PreviewWarning[] = planWarnings(plan);
-      const fromRepo = await repoWarning(plan, repo, cwd);
+      const fromRepo = await repoWarning(plan, repo, cwd, identity);
       if (fromRepo !== null) collected.push(fromRepo);
       const warnings = sortWarnings(collected);
 
-      const header = headerLines(plan);
+      const header = headerLines(plan, canonicalCwd);
       const budgetLine = `Budget: ${formatTokens(plan.estimatedTokens)} tokens of a ${formatTokens(plan.target.windowTokens)} window`;
       const drops = dropLines(plan);
       const blocked = plan.blockedReason !== null;

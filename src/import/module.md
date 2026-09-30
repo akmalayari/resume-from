@@ -265,6 +265,15 @@ interface SwitchOutcome {
 }
 ```
 
+
+<!-- contract: SerializationContext — restated from src/adapters/module.md -->
+```ts
+/** The host-supplied absolute destination, preserving native subdirectory and symlink spelling. */
+interface SerializationContext {
+  cwd: string;
+}
+```
+
 <!-- contract: AgentAdapter — restated from src/adapters/module.md -->
 ```ts
 /** What every agent adapter provides. One folder per agent implements it (FR-57). */
@@ -281,6 +290,7 @@ interface AgentAdapter {
     session: CanonicalSession,
     target: TargetProfile,
     marker: ProvenanceMarker,
+    context: SerializationContext,
   ): SerializedSession;
   /** Target role. Checks the structure before placement. Empty means valid (FR-50). */
   validate(serialized: SerializedSession): ValidationDefect[];
@@ -599,6 +609,7 @@ interface SessionLander {
     committer: FileCommitter,
     runtime: AgentRuntime,
     importedAt: string,
+    context: SerializationContext,
   ): Promise<LandingResult>;
 }
 ```
@@ -608,7 +619,8 @@ The blocks below are the normative home of the types they define.
 ```ts
 /** What to list (FR-10, FR-15). */
 interface ListRequest {
-  repoRoot: string;
+  /** Host-supplied absolute working directory; preserve native subdirectory and symlink spelling. */
+  destinationCwd: string;
   target: TargetProfile;
   onlyAgent: AgentId | null;
   onlyHome: HomePath | null;
@@ -616,7 +628,8 @@ interface ListRequest {
 
 /** What to preview, and later what to commit (FR-16, FR-20). */
 interface ImportRequest {
-  repoRoot: string;
+  /** Host-supplied absolute working directory; preserve native subdirectory and symlink spelling. */
+  destinationCwd: string;
   target: TargetProfile;
   selection: SelectionInput;
   onlyAgent: AgentId | null;
@@ -733,7 +746,8 @@ writes. A blocked plan still produces a report — the user is told why the impo
 
 **`commit(request, runtime, confirmationToken)`** repeats the whole of `preview`, refuses unless the
 token matches that exact recomputed selection, plan, and report, then refuses if the plan is blocked.
-Only then does it call `SessionLander.land` with the target adapter, committer, and runtime handle.
+Only then does it call `SessionLander.land` with the target adapter, committer, runtime handle, and
+the destination context produced by that same recomputation.
 
 ### Why `commit` recomputes instead of receiving a plan
 
@@ -743,8 +757,10 @@ between processes, and serializing it into a temporary file would create a secon
 opposite of what FR-49 and C-3 ask for.
 
 Recomputation is safe because `TransferRules.apply` is pure. A versioned SHA-256 confirmation token
-binds the resolved descriptor, full transfer plan, and preview report. A row reorder, source change,
-configuration change, target change, or warning change therefore refuses before serialization. The
+binds the resolved descriptor, full transfer plan, preview report, canonical destination cwd, and
+canonical Git common-directory identity. Symlink aliases of a destination share a token, but different
+worktrees do not, even at identical HEAD and branch. A row reorder, source change,
+configuration change, destination/identity change, target change, or warning change therefore refuses before serialization. The
 descriptor timestamp check remains as an additional diagnostic. The user then previews again.
 
 ### Where each adapter is chosen
@@ -776,6 +792,8 @@ Changes that require **only this module** to change:
 Adding an agent does not change this module. Changing a rule does not change this module.
 
 ## Constraints and Invariants
+
+- **One request destination drives discovery, preview, distance, and landing.** Derive `SearchScope.repoRoot` from `destinationCwd`, not from the checkout root. Resolve canonical cwd and repository identity afresh for each request. Refuse bare repositories with advice to use a linked worktree; destination filesystem and Git operational failures stop the request before writing. `commit` uses its existing `compute()` result, passing the native cwd through landing as required serialization context.
 
 - **`list` and `preview` never write** (FR-16). Only `commit` reaches `SessionLander`, which is the
   only path to `FileCommitter`.

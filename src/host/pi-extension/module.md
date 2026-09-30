@@ -244,7 +244,8 @@ interface LandingResult {
 ```ts
 /** What to list (FR-10, FR-15). */
 interface ListRequest {
-  repoRoot: string;
+  /** Host-supplied absolute working directory; preserve native subdirectory and symlink spelling. */
+  destinationCwd: string;
   target: TargetProfile;
   onlyAgent: AgentId | null;
   onlyHome: HomePath | null;
@@ -252,7 +253,8 @@ interface ListRequest {
 
 /** What to preview, and later what to commit (FR-16, FR-20). */
 interface ImportRequest {
-  repoRoot: string;
+  /** Host-supplied absolute working directory; preserve native subdirectory and symlink spelling. */
+  destinationCwd: string;
   target: TargetProfile;
   selection: SelectionInput;
   onlyAgent: AgentId | null;
@@ -369,6 +371,8 @@ Changes that require **only this module** to change:
 Pi's **session file** changing does not touch this module — that is `src/adapters/pi/`.
 
 ## Constraints and Invariants
+
+- **`destinationCwd` comes from command-context cwd**, not process cwd or host creation cwd. The same value follows listing, preview and confirmation.
 
 - **`switchSession` is called only from a command handler** (C-10). `PiResumeFromCommand.run` is that
   handler, and no other code path in this module reaches the switch. The untested deadlock claim

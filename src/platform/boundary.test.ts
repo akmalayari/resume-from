@@ -160,7 +160,7 @@ describe("T-PLA-8 no service holds shared mutable state", () => {
     // One instance of each service, shared by both runs — the composition root builds one set.
     const services: PlatformServices = {
       config: createConfigLoader({ configPath }),
-      repo: createRepoReader(first),
+      repo: createRepoReader(),
       tokens: createEstimatorFactory(),
       store: createFileCommitter(),
     };

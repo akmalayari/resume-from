@@ -46,11 +46,9 @@ function target(home: string): TargetProfile {
 }
 
 function serializeInto(home: string): SerializedSession {
-  return createPiAdapter({ cwd: () => CWD }).serialize(
-    REFERENCE_SESSION,
-    target(home),
-    markerFixture(),
-  );
+  return createPiAdapter().serialize(REFERENCE_SESSION, target(home), markerFixture(), {
+    cwd: CWD,
+  });
 }
 
 describe("T-PI-8 — read-back reports what Pi holds", () => {
@@ -97,7 +95,7 @@ describe("T-PI-19 — Pi to Pi across homes", () => {
   it("leaves both sessions in place and carries no tool result body", async () => {
     const sourceHome = throwawayHome();
     const targetHome = throwawayHome();
-    const adapter = createPiAdapter({ cwd: () => CWD });
+    const adapter = createPiAdapter();
     const source = writeFixtureSession(sourceHome, CWD, [
       piUserDraft("make the auth token refresh work"),
       piAssistantTextDraft("Looking at the token store."),
@@ -108,7 +106,9 @@ describe("T-PI-19 — Pi to Pi across homes", () => {
     const [descriptor] = await adapter.listSessions(sourceHome);
     if (!descriptor) throw new Error("no descriptor listed");
     const canonical = await adapter.loadSession(descriptor);
-    const serialized = adapter.serialize(canonical, target(targetHome), markerFixture());
+    const serialized = adapter.serialize(canonical, target(targetHome), markerFixture(), {
+      cwd: CWD,
+    });
     expect(adapter.validate(serialized)).toEqual([]);
     commit(serialized.files);
 
@@ -128,13 +128,15 @@ describe("T-PI-19 — Pi to Pi across homes", () => {
   it("gives the target home its own session id", async () => {
     const sourceHome = throwawayHome();
     const targetHome = throwawayHome();
-    const adapter = createPiAdapter({ cwd: () => CWD });
+    const adapter = createPiAdapter();
     const source = writeFixtureSession(sourceHome, CWD, [piUserDraft("hello")]);
 
     const [descriptor] = await adapter.listSessions(sourceHome);
     if (!descriptor) throw new Error("no descriptor listed");
     const canonical = await adapter.loadSession(descriptor);
-    const serialized = adapter.serialize(canonical, target(targetHome), markerFixture());
+    const serialized = adapter.serialize(canonical, target(targetHome), markerFixture(), {
+      cwd: CWD,
+    });
 
     expect(serialized.sessionId).not.toBe(source.sessionId);
   });

@@ -258,6 +258,11 @@ interface ValidationDefect {
   message: string;
 }
 
+/** The host-supplied absolute destination, preserving native subdirectory and symlink spelling. */
+interface SerializationContext {
+  cwd: string;
+}
+
 /** What serializing a canonical session into the target format produced. */
 interface SerializedSession {
   sessionId: SessionId;
@@ -299,6 +304,7 @@ interface AgentAdapter {
     session: CanonicalSession,
     target: TargetProfile,
     marker: ProvenanceMarker,
+    context: SerializationContext,
   ): SerializedSession;
   /** Target role. Checks the structure before placement. Empty means valid (FR-50). */
   validate(serialized: SerializedSession): ValidationDefect[];
@@ -372,7 +378,7 @@ list and picks.
    choose the selection level; `src/import/` uses it to build the target profile.
 2. `listSessions(home)` — once per home, for every adapter with the `source` role.
 3. `loadSession(descriptor)` — once, on the session the user chose.
-4. `serialize(session, target, marker)` — once, on the target adapter, after the rules have run and
+4. `serialize(session, target, marker, context)` — once, on the target adapter, after the rules have run and
    the user has confirmed.
 5. `validate(serialized)` — immediately after, before any byte reaches the disk (FR-50).
 6. `readBack(home, sessionId)` — after the commit, to compare item counts (FR-52).
@@ -423,6 +429,8 @@ module.
 
 ## Constraints and Invariants
 
+- **Import serialization requires `SerializationContext`.** Its absolute `cwd` is the destination agent’s native working directory, including subdirectory and symlink spelling. Writers must not fall back to process cwd, factory cwd, a checkout root, or source provenance.
+
 - **An adapter never creates, renames, or removes a file.** `serialize` returns `PendingFile` values
   and `src/import/landing/` commits them through `src/platform/store/` (FR-49, FR-53, C-3).
 - **An adapter never opens a source file for writing** (NG-1, AC-4). Every source session file is
@@ -448,7 +456,7 @@ module.
   `src/adapters/boundary.test.ts`; a fix in one copy must be applied to all three.
 - **`capabilities()` is pure and synchronous** and returns the same value every time. The rules read
   it more than once per import.
-- **`serialize` is deterministic given the same session, target and marker**, except for the session
+- **`serialize` is deterministic given the same session, target, marker and serialization context**, except for the session
   ID it mints. The preview and the commit of one request must agree on everything the user was shown.
 - **`serialize` mints a session ID that does not exist in the target home.** A collision is a
   refusal, never an overwrite (FR-49).

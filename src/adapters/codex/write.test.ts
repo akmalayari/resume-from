@@ -44,7 +44,7 @@ function serializeReference(): {
   itemCount: number;
   sessionId: string;
 } {
-  const serialized = adapter.serialize(REFERENCE_SESSION, TARGET, MARKER);
+  const serialized = adapter.serialize(REFERENCE_SESSION, TARGET, MARKER, { cwd: "/repo/demo" });
   expect(serialized.files).toHaveLength(1);
   const file = serialized.files[0];
   if (file === undefined) throw new Error("no file");
@@ -147,7 +147,7 @@ describe("T-COD-5 picker metadata", () => {
   });
 
   it("writes the file under the target home's sessions directory", () => {
-    const serialized = adapter.serialize(REFERENCE_SESSION, TARGET, MARKER);
+    const serialized = adapter.serialize(REFERENCE_SESSION, TARGET, MARKER, { cwd: "/repo/demo" });
     const file = serialized.files[0];
     if (file === undefined) throw new Error("no file");
     expect(file.absolutePath.startsWith(`${TARGET.home}/sessions/`)).toBe(true);
@@ -155,9 +155,9 @@ describe("T-COD-5 picker metadata", () => {
     expect(file.absolutePath.endsWith(".jsonl")).toBe(true);
   });
 
-  it("takes cwd from the injected dep, not from process.cwd() (b)", () => {
-    const fixed = codexAdapterFactory.create({ cwd: () => "/fixed/repo" });
-    const serialized = fixed.serialize(REFERENCE_SESSION, TARGET, MARKER);
+  it("takes cwd from the required serialization context, not from process.cwd() (b)", () => {
+    const fixed = codexAdapterFactory.create();
+    const serialized = fixed.serialize(REFERENCE_SESSION, TARGET, MARKER, { cwd: "/fixed/repo" });
     const file = serialized.files[0];
     if (file === undefined) throw new Error("no file");
     const entries = entriesOf(file.bytes);
@@ -181,7 +181,7 @@ describe("T-COD-6 no response_item entries", () => {
       expect(entry.payload.type).not.toBe("agent_reasoning");
       expect(entry.payload).not.toHaveProperty("encrypted_content");
     }
-    const serialized = adapter.serialize(REFERENCE_SESSION, TARGET, MARKER);
+    const serialized = adapter.serialize(REFERENCE_SESSION, TARGET, MARKER, { cwd: "/fixed/repo" });
     expect(serialized.files[0]?.bytes.toString("utf8")).not.toContain("encrypted_content");
   });
 });
@@ -190,12 +190,12 @@ describe("T-COD-6 no response_item entries", () => {
  *  importedAt is unparsable — never reads the clock. */
 describe("T-COD-20 deterministic serialize", () => {
   const FIXED_ID = "00000000-0000-4000-8000-000000000001";
-  const fixedDeps = { cwd: () => "/fixed/repo", newSessionId: () => FIXED_ID };
+  const fixedDeps = { newSessionId: () => FIXED_ID };
 
   it("produces byte-equal output on two calls with the same deps (a)", () => {
     const fixed = codexAdapterFactory.create(fixedDeps);
-    const first = fixed.serialize(REFERENCE_SESSION, TARGET, MARKER);
-    const second = fixed.serialize(REFERENCE_SESSION, TARGET, MARKER);
+    const first = fixed.serialize(REFERENCE_SESSION, TARGET, MARKER, { cwd: "/fixed/repo" });
+    const second = fixed.serialize(REFERENCE_SESSION, TARGET, MARKER, { cwd: "/fixed/repo" });
     expect(first.files[0]?.bytes).toEqual(second.files[0]?.bytes);
     expect(first.files[0]?.absolutePath).toBe(second.files[0]?.absolutePath);
     expect(first.sessionId).toBe(second.sessionId);
@@ -205,7 +205,9 @@ describe("T-COD-20 deterministic serialize", () => {
     const badMarker: ProvenanceMarker = { ...MARKER, importedAt: "not-a-date" };
     const updatedAt = REFERENCE_SESSION.provenance.updatedAt;
     const fixed = codexAdapterFactory.create(fixedDeps);
-    const serialized = fixed.serialize(REFERENCE_SESSION, TARGET, badMarker);
+    const serialized = fixed.serialize(REFERENCE_SESSION, TARGET, badMarker, {
+      cwd: "/fixed/repo",
+    });
     const file = serialized.files[0];
     if (file === undefined) throw new Error("no file");
     const entries = entriesOf(file.bytes);
@@ -226,7 +228,7 @@ describe("T-COD-20 deterministic serialize", () => {
       },
     };
     const fixed = codexAdapterFactory.create(fixedDeps);
-    const serialized = fixed.serialize(badSession, TARGET, badMarker);
+    const serialized = fixed.serialize(badSession, TARGET, badMarker, { cwd: "/fixed/repo" });
     const file = serialized.files[0];
     if (file === undefined) throw new Error("no file");
     const entries = entriesOf(file.bytes);
@@ -239,7 +241,7 @@ describe("T-COD-20 deterministic serialize", () => {
 /** FR-50: validate is the gate before placement. */
 describe("validate", () => {
   it("passes a freshly serialized session", () => {
-    const serialized = adapter.serialize(REFERENCE_SESSION, TARGET, MARKER);
+    const serialized = adapter.serialize(REFERENCE_SESSION, TARGET, MARKER, { cwd: "/fixed/repo" });
     expect(adapter.validate(serialized)).toEqual([]);
   });
 
@@ -251,6 +253,7 @@ describe("validate", () => {
       },
       TARGET,
       MARKER,
+      { cwd: "/fixed/repo" },
     );
     const defects = adapter.validate(serialized);
     expect(defects.length).toBeGreaterThan(0);
@@ -258,7 +261,7 @@ describe("validate", () => {
   });
 
   it("reports a mismatch between itemCount and the entries written (FR-52)", () => {
-    const serialized = adapter.serialize(REFERENCE_SESSION, TARGET, MARKER);
+    const serialized = adapter.serialize(REFERENCE_SESSION, TARGET, MARKER, { cwd: "/fixed/repo" });
     const defects = adapter.validate({
       ...serialized,
       itemCount: serialized.itemCount + 1,
@@ -267,7 +270,7 @@ describe("validate", () => {
   });
 
   it("reports a rollout with no session metadata", () => {
-    const serialized = adapter.serialize(REFERENCE_SESSION, TARGET, MARKER);
+    const serialized = adapter.serialize(REFERENCE_SESSION, TARGET, MARKER, { cwd: "/fixed/repo" });
     const file = serialized.files[0];
     if (file === undefined) throw new Error("no file");
     const withoutMeta = file.bytes
@@ -289,7 +292,7 @@ describe("validate", () => {
   });
 
   it("reports a mismatch in either metadata id field", () => {
-    const serialized = adapter.serialize(REFERENCE_SESSION, TARGET, MARKER);
+    const serialized = adapter.serialize(REFERENCE_SESSION, TARGET, MARKER, { cwd: "/fixed/repo" });
     const file = serialized.files[0];
     if (file === undefined) throw new Error("no file");
     const entries = entriesOf(file.bytes);
@@ -305,7 +308,7 @@ describe("validate", () => {
   });
 
   it("reports a rollout filename that names another session", () => {
-    const serialized = adapter.serialize(REFERENCE_SESSION, TARGET, MARKER);
+    const serialized = adapter.serialize(REFERENCE_SESSION, TARGET, MARKER, { cwd: "/fixed/repo" });
     const file = serialized.files[0];
     if (file === undefined) throw new Error("no file");
     const wrongId = "00000000-0000-4000-8000-000000000000";

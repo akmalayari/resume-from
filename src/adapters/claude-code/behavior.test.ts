@@ -49,12 +49,12 @@ describe("T-CC-19 — a work profile import", () => {
     ]);
 
     const personalBefore = await checksumTree(personal);
-    const adapter = createClaudeCodeAdapter({ cwd: REPO });
+    const adapter = createClaudeCodeAdapter();
     const target: TargetProfile = { agent: "claude-code", home: work, windowTokens: 200_000 };
 
     const listed = await adapter.listSessions(personal);
     const session = await adapter.loadSession(listed[0] as never);
-    const serialized = adapter.serialize(session, target, MARKER);
+    const serialized = adapter.serialize(session, target, MARKER, { cwd: REPO });
     expect(adapter.validate(serialized)).toEqual([]);
     await commitPendingFiles(serialized.files);
 
@@ -96,7 +96,7 @@ describe("T-CC-20 — a file changed after the source session", () => {
     // The file changes after the session was recorded.
     await writeFile(workfile, "NEW-CONTENT after the session", "utf8");
 
-    const adapter = createClaudeCodeAdapter({ cwd: REPO });
+    const adapter = createClaudeCodeAdapter();
     const targetHome = await makeThrowawayHome(".claude-target");
     const listed = await adapter.listSessions(home);
     const session = await adapter.loadSession(listed[0] as never);
@@ -109,6 +109,7 @@ describe("T-CC-20 — a file changed after the source session", () => {
       session,
       { agent: "claude-code", home: targetHome, windowTokens: 200_000 },
       MARKER,
+      { cwd: REPO },
     );
     await commitPendingFiles(serialized.files);
     const committed = await readFile(serialized.files[0]?.absolutePath as string, "utf8");

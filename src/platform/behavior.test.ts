@@ -100,7 +100,7 @@ beforeAll(async () => {
 
   real = {
     config: createConfigLoader({ configPath }),
-    repo: createRepoReader(repository),
+    repo: createRepoReader(),
     tokens: createEstimatorFactory(),
     store: createFileCommitter(),
   };

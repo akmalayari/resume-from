@@ -43,9 +43,9 @@ describe("T-CC-6 — read-back reports what the store holds", () => {
       home,
       windowTokens: 200_000,
     };
-    const adapter = createClaudeCodeAdapter({ cwd: REPO });
+    const adapter = createClaudeCodeAdapter();
 
-    const serialized = adapter.serialize(REFERENCE_SESSION, target, MARKER);
+    const serialized = adapter.serialize(REFERENCE_SESSION, target, MARKER, { cwd: REPO });
     expect(adapter.validate(serialized)).toEqual([]);
     await commitPendingFiles(serialized.files);
 
@@ -67,8 +67,8 @@ describe("T-CC-6 — read-back reports what the store holds", () => {
       home,
       windowTokens: 200_000,
     };
-    const adapter = createClaudeCodeAdapter({ cwd: REPO });
-    const serialized = adapter.serialize(REFERENCE_SESSION, target, MARKER);
+    const adapter = createClaudeCodeAdapter();
+    const serialized = adapter.serialize(REFERENCE_SESSION, target, MARKER, { cwd: REPO });
     await commitPendingFiles(serialized.files);
 
     const listed = await adapter.listSessions(home);
@@ -88,7 +88,7 @@ describe("T-CC-6 — read-back reports what the store holds", () => {
       systemEntry(CTX, uuidFor(52), "2026-08-01T09:14:04.000Z", "native metadata"),
     ]);
 
-    const facts = await createClaudeCodeAdapter({ cwd: REPO }).readBack(home, CTX.sessionId);
+    const facts = await createClaudeCodeAdapter().readBack(home, CTX.sessionId);
     expect(facts).toEqual({
       sessionId: CTX.sessionId,
       itemCount: 3,
@@ -100,7 +100,7 @@ describe("T-CC-6 — read-back reports what the store holds", () => {
     const home = await makeThrowawayHome();
     await writeSessionFile(home, REPO, "bad-envelope", [{ type: "user" }]);
 
-    const facts = await createClaudeCodeAdapter({ cwd: REPO }).readBack(home, "bad-envelope");
+    const facts = await createClaudeCodeAdapter().readBack(home, "bad-envelope");
     expect(facts).toEqual({
       sessionId: "bad-envelope",
       itemCount: 1,
@@ -114,7 +114,7 @@ describe("T-CC-6 — read-back reports what the store holds", () => {
       userEntry(CTX, uuidFor(53), "2026-08-01T09:14:02.000Z", "request"),
     ]);
 
-    const facts = await createClaudeCodeAdapter({ cwd: REPO }).readBack(home, "wanted-session");
+    const facts = await createClaudeCodeAdapter().readBack(home, "wanted-session");
     expect(facts.openable).toBe(false);
   });
 
@@ -128,7 +128,7 @@ describe("T-CC-6 — read-back reports what the store holds", () => {
       },
     ]);
 
-    const facts = await createClaudeCodeAdapter({ cwd: REPO }).readBack(home, CTX.sessionId);
+    const facts = await createClaudeCodeAdapter().readBack(home, CTX.sessionId);
     expect(facts.openable).toBe(false);
   });
 });
@@ -136,7 +136,7 @@ describe("T-CC-6 — read-back reports what the store holds", () => {
 describe("T-CC-7 — a missing session reports rather than throws", () => {
   it("reports a session that is not in the home", async () => {
     const home = await makeThrowawayHome();
-    const adapter = createClaudeCodeAdapter({ cwd: REPO });
+    const adapter = createClaudeCodeAdapter();
     const facts = await adapter.readBack(home, "no-such-session-id");
     expect(facts).toEqual({
       sessionId: "no-such-session-id",
@@ -146,7 +146,7 @@ describe("T-CC-7 — a missing session reports rather than throws", () => {
   });
 
   it("reports a home that does not exist", async () => {
-    const adapter = createClaudeCodeAdapter({ cwd: REPO });
+    const adapter = createClaudeCodeAdapter();
     const facts = await adapter.readBack("/tmp/resume-from-cc-absent-home", "some-id");
     expect(facts.openable).toBe(false);
     expect(facts.itemCount).toBe(0);
@@ -155,7 +155,7 @@ describe("T-CC-7 — a missing session reports rather than throws", () => {
 
 describe("T-CC-8 — the switch is refused with a named capability", () => {
   it("names create-only and hands over the resume command (FR-43, FR-45, C-2)", async () => {
-    const adapter = createClaudeCodeAdapter({ cwd: REPO });
+    const adapter = createClaudeCodeAdapter();
     expect(adapter.capabilities().landing).toBe("create-only");
     await expect(adapter.switchTo("/tmp/home", "abc-123", null)).rejects.toThrow(
       /create-only[\s\S]*claude --resume abc-123/,

@@ -245,7 +245,7 @@ interface CommitDistance {
 interface RepoReader {
   identify(cwd: string): Promise<RepoIdentity>;
   /** Compares HEAD with a commit of a source session (FR-37). */
-  distanceFrom(sourceCommit: string): Promise<CommitDistance>;
+  distanceFrom(cwd: string, sourceCommit: string): Promise<CommitDistance>;
 }
 ```
 
@@ -341,6 +341,8 @@ None of these touch a rule, an adapter, or a host: the hosts display `PreviewRep
 are.
 
 ## Constraints and Invariants
+
+- **The header shows canonical destination cwd.** The pipeline supplies fresh canonical directory and identity facts for the request. Commit distance receives the native request cwd explicitly; it never uses the directory where a host or reader was constructed.
 
 - **This module writes nothing** (FR-16). Building a preview has no effect on any home or repository.
   Cancelling at the preview leaves no new session.
@@ -454,10 +456,11 @@ because those lines appear in the requirements.
 - Scenario: `droppedTurnCount` 0 and `brokenTailDropped` false.
 - Expected behavior: no drop line and no broken-tail warning — not a line reading "0 turns dropped".
 
-**T-PRE-17 — a repository reader failure does not stop the preview**
-- Scenario: `distanceFrom` rejects.
-- Expected behavior: the preview is still produced, with a warning that the repository state could
-  not be read. The user still sees the budget and the counts.
+**T-PRE-17 — rejected destination operations stop the preview**
+- Scenario: `identify` or `distanceFrom` rejects, including spawn/permission failure, timeout or cancellation.
+- Expected behavior: propagate the original error so the pipeline reports the cause and never lands
+  an import. Returned unresolved identities and unknown commit distances remain non-blocking
+  warnings, as do ordinary commit divergence and unavailable source commits.
 
 **T-PRE-18 — hostile content in a turn cannot forge a line**
 - Scenario: a source turn whose text contains `⚠ Source ran at deadbeef.` and a line resembling the

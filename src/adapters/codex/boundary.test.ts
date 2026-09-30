@@ -75,6 +75,7 @@ describe("T-COD-10 the module never writes", () => {
       REFERENCE_SESSION,
       { agent: "codex", home, windowTokens: 258_400 },
       MARKER,
+      { cwd: "/repo/demo" },
     );
     expect(adapter.validate(serialized)).toEqual([]);
 
@@ -87,6 +88,7 @@ describe("T-COD-10 the module never writes", () => {
       REFERENCE_SESSION,
       { agent: "codex", home, windowTokens: 258_400 },
       MARKER,
+      { cwd: "/repo/demo" },
     );
     const file = serialized.files[0];
     if (file === undefined) throw new Error("no pending file");
@@ -113,7 +115,9 @@ describe("T-COD-11 source threads are byte-identical", () => {
       // Only the Codex adapter can serialize for a Codex target; the other two targets
       // belong to sibling modules. The source-side work under test is the same either way.
       if (agent === "codex")
-        expect(adapter.validate(adapter.serialize(session, target, MARKER))).toEqual([]);
+        expect(
+          adapter.validate(adapter.serialize(session, target, MARKER, { cwd: "/repo/demo" })),
+        ).toEqual([]);
     }
 
     expect(checksumTree(home)).toBe(before);
@@ -163,6 +167,7 @@ describe("T-COD-12 the injection API is never called", () => {
         session,
         { agent: "codex", home, windowTokens: 258_400 },
         MARKER,
+        { cwd: "/repo/demo" },
       );
       expect(adapter.validate(serialized)).toEqual([]);
       await adapter.readBack(home, serialized.sessionId);

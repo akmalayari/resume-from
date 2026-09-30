@@ -166,13 +166,13 @@ Contract sources to check for changed declarations and embedded copies:
 `src/adapters/module.md`, `src/adapters/claude-code/module.md`,
 `src/adapters/codex/module.md`, and `src/adapters/pi/module.md`.
 
-- [ ] Rename request `repoRoot` to `destinationCwd` in `ListRequest` and `ImportRequest`; update CLI/Pi callers and the affected contract sources listed above. Derive search scope from this one value; do not add a competing destination field.
-- [ ] Reject a bare-repository destination with an actionable diagnostic before preview/commit can create an import. Continue accepting its linked working trees. Add regression tests for the refusal and successful linked-worktree destination.
-- [ ] Make commit-distance lookup use the request destination, including when a long-lived host was created in another directory. Remove host-creation cwd as the effective input for this check.
-- [ ] Add a required serialization context and pass request cwd through pipeline and landing to Claude, Codex, and Pi writers. Preserve native absolute cwd/subdirectory spelling and remove implicit process/factory cwd fallbacks for import writes.
-- [ ] Display canonical destination cwd in preview and include it plus common-directory identity in the confirmation token. Reuse commit's existing `compute()` and pass its computed context to landing; keep existing source and target-profile freshness checks.
-- [ ] Add tests with process cwd, host-creation cwd, and request cwd deliberately different. Verify each writer's file location and stored cwd, request-based commit distance, no files after a destination-token mismatch, identical-HEAD worktrees, symlink aliases, and identity changes between preview and confirmation.
-- [ ] Update affected contracts, fixture adapters, and test helpers together. Run focused host, pipeline, preview, landing, adapter, and repo tests, then the per-task gates below. Cross-directory discovery remains disabled until Task 4.
+- [x] Rename request `repoRoot` to `destinationCwd` in `ListRequest` and `ImportRequest`; update CLI/Pi callers and the affected contract sources listed above. Derive search scope from this one value; do not add a competing destination field.
+- [x] Reject a bare-repository destination with an actionable diagnostic before preview/commit can create an import. Continue accepting its linked working trees. Add regression tests for the refusal and successful linked-worktree destination.
+- [x] Make commit-distance lookup use the request destination, including when a long-lived host was created in another directory. Remove host-creation cwd as the effective input for this check.
+- [x] Add a required serialization context and pass request cwd through pipeline and landing to Claude, Codex, and Pi writers. Preserve native absolute cwd/subdirectory spelling and remove implicit process/factory cwd fallbacks for import writes.
+- [x] Display canonical destination cwd in preview and include it plus common-directory identity in the confirmation token. Reuse commit's existing `compute()` and pass its computed context to landing; keep existing source and target-profile freshness checks.
+- [x] Add tests with process cwd, host-creation cwd, and request cwd deliberately different. Verify each writer's file location and stored cwd, request-based commit distance, no files after a destination-token mismatch, identical-HEAD worktrees, symlink aliases, and identity changes between preview and confirmation.
+- [x] Update affected contracts, fixture adapters, and test helpers together. Run focused host, pipeline, preview, landing, adapter, and repo tests, then the per-task gates below. Cross-directory discovery remains disabled until Task 4.
 
 ### Task 3: Preserve active session directory candidates
 

@@ -11,8 +11,9 @@ export function confirmationToken(
   descriptor: SessionDescriptor,
   plan: TransferPlan,
   report: PreviewContent,
+  destination: { canonicalCwd: string; commonDir: string | null },
 ): string {
-  const payload = stableJson({ descriptor, plan, report });
+  const payload = stableJson({ descriptor, plan, report, destination });
   return `${TOKEN_PREFIX}${createHash("sha256").update(payload).digest("hex")}`;
 }
 

@@ -21,7 +21,7 @@ describe("registration", () => {
     };
     const pipeline: ImportPipeline = {
       async list(request) {
-        listed.push(request.repoRoot);
+        listed.push(request.destinationCwd);
         return { rows: [], failures: [] };
       },
       async preview() {

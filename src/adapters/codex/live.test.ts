@@ -87,6 +87,7 @@ describe.skipIf(!live)("live: Codex", () => {
       SESSION,
       { agent: "codex", home, windowTokens: 258_400 },
       MARKER,
+      { cwd: "/repo/demo" },
     );
     expect(adapter.validate(serialized)).toEqual([]);
     // The landing commits in production (FR-49, FR-53). Here, the test does it.

@@ -350,7 +350,7 @@ describe("T-ROO-16 — AC-3: a stale file is read again, not edited blind", () =
       .build(agentOf(target), join(scene.root, "stale-into"), scene.host.config());
     const pipeline = await scene.host.pipelineFor(profile);
     const request = {
-      repoRoot: REPO_ROOT,
+      destinationCwd: REPO_ROOT,
       target: profile,
       selection: { by: "session-id" as const, id: THREAD },
       onlyAgent: FIXTURE_AGENT_ID,
@@ -532,7 +532,7 @@ describe("T-ROO-21 — nothing is written before confirmation, anywhere", () => 
       for (const source of scene.host.registry().sources().map(agentOf)) {
         const request = importRequest(scene, source, profile);
         await pipeline.list({
-          repoRoot: REPO_ROOT,
+          destinationCwd: REPO_ROOT,
           target: profile,
           onlyAgent: source,
           onlyHome: scene.homes.get(source) ?? null,
@@ -709,7 +709,7 @@ describe("T-ROO-22 — a platform service can be replaced without touching a con
         const request = importRequest(scene, source, profile);
 
         const listing = await pipeline.list({
-          repoRoot: REPO_ROOT,
+          destinationCwd: REPO_ROOT,
           target: profile,
           onlyAgent: source,
           onlyHome: scene.homes.get(source) ?? null,

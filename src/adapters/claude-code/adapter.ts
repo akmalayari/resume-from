@@ -11,6 +11,7 @@ import type {
   ClaudeCodeAdapterFactory,
   HomePath,
   ProvenanceMarker,
+  SerializationContext,
   SerializedSession,
   SessionDescriptor,
   SessionId,
@@ -30,11 +31,6 @@ export const DEFAULT_WINDOW_TOKENS = 200_000;
 export const HANDOVER_COMMAND = "claude --resume";
 
 export interface ClaudeCodeAdapterDeps {
-  /**
-   * The repository the import runs in. Claude Code keys a session to a repository, and no
-   * argument of the port names one, so the working directory is the signal.
-   */
-  cwd: string;
   env: Record<string, string | undefined>;
   homeDir: string;
 }
@@ -44,7 +40,6 @@ export interface ClaudeCodeAdapterDeps {
  * passes the real process values.
  */
 export function createClaudeCodeAdapter(deps: Partial<ClaudeCodeAdapterDeps> = {}): AgentAdapter {
-  const cwd = deps.cwd ?? process.cwd();
   const env = deps.env ?? process.env;
 
   // Resolved once: capabilities() is pure, synchronous, and equal on every call.
@@ -76,8 +71,9 @@ export function createClaudeCodeAdapter(deps: Partial<ClaudeCodeAdapterDeps> = {
       session: CanonicalSession,
       target: TargetProfile,
       marker: ProvenanceMarker,
+      context: SerializationContext,
     ): SerializedSession {
-      return serialize(session, target, marker, { cwd });
+      return serialize(session, target, marker, context);
     },
 
     validate(serialized: SerializedSession): ValidationDefect[] {

@@ -23,7 +23,7 @@ const moduleDir = dirname(fileURLToPath(import.meta.url));
 
 test("T-REP-11 — a hostile revision string is safe", async () => {
   const { dir } = await repoWithOneCommit();
-  const reader = createRepoReader(dir);
+  const reader = createRepoReader();
 
   const hostile = [
     { name: "a shell fragment", revision: "; rm -rf /" },
@@ -36,7 +36,7 @@ test("T-REP-11 — a hostile revision string is safe", async () => {
   ];
 
   for (const { name, revision } of hostile) {
-    const distance = await reader.distanceFrom(revision);
+    const distance = await reader.distanceFrom(dir, revision);
     expect(distance, name).toEqual({ known: false, ahead: 0, behind: 0 });
   }
 
@@ -52,15 +52,15 @@ test("T-REP-12 — the repository is never modified", async () => {
   await commitSeries(dir, 2);
   const nested = await makeDir(dir, "nested");
   const outside = await tempDir("resume-from-plain-");
-  const reader = createRepoReader(dir);
+  const reader = createRepoReader();
 
   const calls: Array<[string, () => Promise<unknown>]> = [
     ["identify(root)", () => reader.identify(dir)],
     ["identify(nested)", () => reader.identify(nested)],
     ["identify(outside)", () => reader.identify(outside)],
-    ["distanceFrom(known)", () => reader.distanceFrom(source)],
-    ["distanceFrom(unknown)", () => reader.distanceFrom("1".repeat(40))],
-    ["distanceFrom(hostile)", () => reader.distanceFrom("; touch pwned")],
+    ["distanceFrom(known)", () => reader.distanceFrom(dir, source)],
+    ["distanceFrom(unknown)", () => reader.distanceFrom(dir, "1".repeat(40))],
+    ["distanceFrom(hostile)", () => reader.distanceFrom(dir, "; touch pwned")],
   ];
 
   for (const [name, call] of calls) {
@@ -72,7 +72,7 @@ test("T-REP-12 — the repository is never modified", async () => {
 
 test("T-REP-13 — no caching between calls", async () => {
   const { dir, head } = await repoWithOneCommit();
-  const reader = createRepoReader(dir);
+  const reader = createRepoReader();
 
   expect((await reader.identify(dir)).head).toBe(head);
 
@@ -119,15 +119,13 @@ test("the reader factory passes an AbortSignal to every git subprocess", async (
   const controller = new AbortController();
   controller.abort();
 
-  await expect(createRepoReader(dir, { signal: controller.signal }).identify(dir)).rejects.toThrow(
+  await expect(createRepoReader({ signal: controller.signal }).identify(dir)).rejects.toThrow(
     "aborted",
   );
 });
 
-test("the reader factory rejects an unbounded timeout", async () => {
-  const dir = await tempDir("resume-from-git-invalid-timeout-");
-
-  expect(() => createRepoReader(dir, { timeoutMs: Number.POSITIVE_INFINITY })).toThrow(
+test("the reader factory rejects an unbounded timeout", () => {
+  expect(() => createRepoReader({ timeoutMs: Number.POSITIVE_INFINITY })).toThrow(
     "timeoutMs must be a positive, finite integer",
   );
 });

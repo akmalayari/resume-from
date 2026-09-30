@@ -30,6 +30,7 @@ import type {
   CanonicalTurn,
   HomePath,
   ProvenanceMarker,
+  SerializationContext,
   SerializedSession,
   SessionDescriptor,
   SessionId,
@@ -92,8 +93,6 @@ export interface FixtureAgentOptions {
   /** Defaults to both roles. `["source"]` is what T-ADA-22 uses. */
   roles?: AdapterRole[];
   defaultHome?: HomePath;
-  /** The repository a serialized thread belongs to. */
-  cwd?: string;
 }
 
 export function fixtureThreadPath(home: HomePath, id: SessionId): string {
@@ -217,7 +216,6 @@ export function createFixtureAgentAdapter(options: FixtureAgentOptions = {}): Ag
     defaultHome: options.defaultHome ?? path.resolve(path.sep, "fixture-agent-home"),
     defaultWindowTokens: FIXTURE_WINDOW_TOKENS,
   });
-  const cwd = options.cwd ?? process.cwd();
   const has = (role: AdapterRole): boolean => roles.includes(role);
 
   return {
@@ -297,6 +295,7 @@ export function createFixtureAgentAdapter(options: FixtureAgentOptions = {}): Ag
       session: CanonicalSession,
       target: TargetProfile,
       marker: ProvenanceMarker,
+      context: SerializationContext,
     ): SerializedSession {
       if (!has("target")) throw missingRole("target");
       const id = mintThreadId(target.home);
@@ -307,7 +306,7 @@ export function createFixtureAgentAdapter(options: FixtureAgentOptions = {}): Ag
         topic: session.provenance.title,
         opened: session.provenance.startedAt,
         touched: session.provenance.updatedAt,
-        workspace: cwd,
+        workspace: context.cwd,
         vcs: {
           commit: session.provenance.repo.commit,
           branch: session.provenance.repo.branch,

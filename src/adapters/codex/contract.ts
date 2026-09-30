@@ -12,6 +12,7 @@ import type {
   PendingFile,
   ProvenanceSupport,
   SelectionLevel,
+  SerializationContext,
   SerializedSession,
   StoredSessionFacts,
   SwitchOutcome,
@@ -28,6 +29,7 @@ export type {
   PendingFile,
   ProvenanceSupport,
   SelectionLevel,
+  SerializationContext,
   SerializedSession,
   StoredSessionFacts,
   SwitchOutcome,
@@ -72,8 +74,6 @@ export type {
 
 /** The injectable seam that keeps serialize pure (no ambient process state). */
 export interface CodexSerializeDeps {
-  /** Where the user is when the import runs. `codex resume` filters the picker by cwd. */
-  cwd(): string;
   /** Produces the new thread's UUID. Injected so two calls with the same deps are byte-equal. */
   newSessionId(): string;
 }

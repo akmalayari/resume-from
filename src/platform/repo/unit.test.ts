@@ -19,7 +19,7 @@ describe("identify", () => {
   test("T-REP-1 — a repository is identified", async () => {
     const { dir, head } = await repoWithOneCommit();
 
-    const identity = await createRepoReader(dir).identify(dir);
+    const identity = await createRepoReader().identify(dir);
 
     expect(identity).toEqual({
       root: dir,
@@ -34,7 +34,7 @@ describe("identify", () => {
     const { dir } = await repoWithOneCommit();
     const nested = await makeDir(dir, "a", "b", "c");
 
-    const identity = await createRepoReader(dir).identify(nested);
+    const identity = await createRepoReader().identify(nested);
 
     expect(identity.root).toBe(dir);
   });
@@ -42,7 +42,7 @@ describe("identify", () => {
   test("T-REP-3 — a directory outside a repository", async () => {
     const dir = await tempDir("resume-from-plain-");
 
-    const identity = await createRepoReader(dir).identify(dir);
+    const identity = await createRepoReader().identify(dir);
 
     expect(identity).toEqual({
       root: null,
@@ -56,7 +56,7 @@ describe("identify", () => {
   test("T-REP-4 — a repository with no commits", async () => {
     const dir = await initRepo();
 
-    const identity = await createRepoReader(dir).identify(dir);
+    const identity = await createRepoReader().identify(dir);
 
     expect(identity.root).toBe(dir);
     expect(identity.head).toBeNull();
@@ -69,7 +69,7 @@ describe("distanceFrom", () => {
     const source = await commitFile(dir, "source");
     await commitSeries(dir, 14);
 
-    const distance = await createRepoReader(dir).distanceFrom(source);
+    const distance = await createRepoReader().distanceFrom(dir, source);
 
     expect(distance).toEqual({ known: true, ahead: 14, behind: 0 });
   });
@@ -94,7 +94,7 @@ describe("distanceFrom", () => {
       await git(dir, ["checkout", "--quiet", "main"]);
       await commitSeries(dir, onMain, "main");
 
-      const distance = await createRepoReader(dir).distanceFrom(source);
+      const distance = await createRepoReader().distanceFrom(dir, source);
 
       expect(distance).toEqual({ known: true, ahead, behind });
     },
@@ -103,7 +103,7 @@ describe("distanceFrom", () => {
   test("T-REP-7 — the same commit", async () => {
     const { dir, head } = await repoWithOneCommit();
 
-    const distance = await createRepoReader(dir).distanceFrom(head);
+    const distance = await createRepoReader().distanceFrom(dir, head);
 
     expect(distance).toEqual({ known: true, ahead: 0, behind: 0 });
   });

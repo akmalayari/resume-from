@@ -12,6 +12,7 @@ import type {
   CanonicalSession,
   CanonicalTurn,
   ProvenanceMarker,
+  SerializationContext,
   SerializedSession,
   SourceProvenance,
   TargetProfile,
@@ -43,13 +44,14 @@ export function serializeCodex(
   session: CanonicalSession,
   target: TargetProfile,
   marker: ProvenanceMarker,
+  context: SerializationContext,
   deps: CodexSerializeDeps,
 ): SerializedSession {
   const importedAt = resolveStamp(marker.importedAt, session.provenance);
   const sessionId = deps.newSessionId();
   const stamp = importedAt.toISOString();
 
-  const entries: RolloutEntry[] = [sessionMetaEntry(sessionId, stamp, deps.cwd(), session)];
+  const entries: RolloutEntry[] = [sessionMetaEntry(sessionId, stamp, context.cwd, session)];
   // Codex has no verified durable, out-of-context transcript entry. Do not encode
   // provenance as an agent message: that would make imported metadata look like
   // conversation and could send it back to the model on resume.

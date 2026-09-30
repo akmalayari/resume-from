@@ -10,6 +10,7 @@ import type {
   LandingLevel,
   ProvenanceSupport,
   SelectionLevel,
+  SerializationContext,
   SerializedSession,
   StoredSessionFacts,
   SwitchOutcome,
@@ -24,6 +25,7 @@ export type {
   LandingLevel,
   ProvenanceSupport,
   SelectionLevel,
+  SerializationContext,
   SerializedSession,
   StoredSessionFacts,
   SwitchOutcome,
@@ -129,7 +131,8 @@ export type {
 
 /** What to list (FR-10, FR-15). */
 export interface ListRequest {
-  repoRoot: string;
+  /** Host-supplied absolute working directory; preserve native subdirectory and symlink spelling. */
+  destinationCwd: string;
   target: TargetProfile;
   onlyAgent: AgentId | null;
   onlyHome: HomePath | null;
@@ -137,7 +140,8 @@ export interface ListRequest {
 
 /** What to preview, and later what to commit (FR-16, FR-20). */
 export interface ImportRequest {
-  repoRoot: string;
+  /** Host-supplied absolute working directory; preserve native subdirectory and symlink spelling. */
+  destinationCwd: string;
   target: TargetProfile;
   selection: SelectionInput;
   onlyAgent: AgentId | null;

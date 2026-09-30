@@ -74,8 +74,10 @@ function target(home: string): TargetProfile {
 
 /** Serialize the reference session and place it, the way `src/import/landing/` would. */
 function importInto(home: string) {
-  const adapter = createPiAdapter({ cwd: () => REPO });
-  const serialized = adapter.serialize(REFERENCE_SESSION, target(home), markerFixture());
+  const adapter = createPiAdapter();
+  const serialized = adapter.serialize(REFERENCE_SESSION, target(home), markerFixture(), {
+    cwd: REPO,
+  });
   expect(adapter.validate(serialized)).toEqual([]);
   for (const file of serialized.files) {
     mkdirSync(dirname(file.absolutePath), { recursive: true });

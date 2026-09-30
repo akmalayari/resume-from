@@ -76,13 +76,13 @@ describe("T-CC-10 — the module never writes", () => {
     const home = await populatedHome();
     const before = await checksumTree(home);
 
-    const adapter = createClaudeCodeAdapter({ cwd: REPO });
+    const adapter = createClaudeCodeAdapter();
     const target: TargetProfile = {
       agent: "claude-code",
       home,
       windowTokens: 200_000,
     };
-    const serialized = adapter.serialize(REFERENCE_SESSION, target, MARKER);
+    const serialized = adapter.serialize(REFERENCE_SESSION, target, MARKER, { cwd: REPO });
     expect(adapter.validate(serialized)).toEqual([]);
 
     expect(await checksumTree(home)).toEqual(before);
@@ -94,7 +94,7 @@ describe("T-CC-11 — nothing that exists is opened for writing", () => {
     const home = await populatedHome();
     const before = await checksumTree(home);
 
-    const adapter = createClaudeCodeAdapter({ cwd: REPO });
+    const adapter = createClaudeCodeAdapter();
     const target: TargetProfile = {
       agent: "claude-code",
       home,
@@ -104,7 +104,7 @@ describe("T-CC-11 — nothing that exists is opened for writing", () => {
     const listed = await adapter.listSessions(home);
     expect(listed).toHaveLength(50);
     const source = await adapter.loadSession(listed[0] as never);
-    const serialized = adapter.serialize(source, target, MARKER);
+    const serialized = adapter.serialize(source, target, MARKER, { cwd: REPO });
     expect(adapter.validate(serialized)).toEqual([]);
     await commitPendingFiles(serialized.files);
     const facts = await adapter.readBack(home, serialized.sessionId);
@@ -126,15 +126,17 @@ describe("T-CC-12 — an import that would need to modify an existing file is re
     await writeFileIn(indexFile, JSON.stringify({ sessions: ["existing-000"] }));
     const before = await checksumTree(home);
 
-    const adapter = createClaudeCodeAdapter({ cwd: REPO });
+    const adapter = createClaudeCodeAdapter();
     const target: TargetProfile = {
       agent: "claude-code",
       home,
       windowTokens: 200_000,
     };
 
-    expect(() => adapter.serialize(REFERENCE_SESSION, target, MARKER)).toThrow(/index\.json/);
-    expect(() => adapter.serialize(REFERENCE_SESSION, target, MARKER)).toThrow(
+    expect(() => adapter.serialize(REFERENCE_SESSION, target, MARKER, { cwd: REPO })).toThrow(
+      /index\.json/,
+    );
+    expect(() => adapter.serialize(REFERENCE_SESSION, target, MARKER, { cwd: REPO })).toThrow(
       /only ever creates new paths/,
     );
     expect(await checksumTree(home)).toEqual(before);
@@ -143,38 +145,40 @@ describe("T-CC-12 — an import that would need to modify an existing file is re
   it("still serves a repository whose record holds only session files", async () => {
     const home = await populatedHome();
     await writeFileIn(path.join(projectDir(home, REPO), "index.json"), "{}");
-    const adapter = createClaudeCodeAdapter({ cwd: SECOND_REPO });
+    const adapter = createClaudeCodeAdapter();
     const target: TargetProfile = {
       agent: "claude-code",
       home,
       windowTokens: 200_000,
     };
-    expect(() => adapter.serialize(REFERENCE_SESSION, target, MARKER)).not.toThrow();
+    expect(() =>
+      adapter.serialize(REFERENCE_SESSION, target, MARKER, { cwd: SECOND_REPO }),
+    ).not.toThrow();
   });
 
   it("accepts the per-session sidecar directory Claude Code creates beside a session", async () => {
     const home = await populatedHome();
-    const adapter = createClaudeCodeAdapter({ cwd: REPO });
+    const adapter = createClaudeCodeAdapter();
     const target: TargetProfile = {
       agent: "claude-code",
       home,
       windowTokens: 200_000,
     };
     // The sidecar directory of populatedHome() sits in this repository's record.
-    expect(() => adapter.serialize(REFERENCE_SESSION, target, MARKER)).not.toThrow();
+    expect(() => adapter.serialize(REFERENCE_SESSION, target, MARKER, { cwd: REPO })).not.toThrow();
   });
 
   it("accepts current inert project records without modifying them", async () => {
     const home = await populatedHome();
     const before = await checksumTree(home);
-    const adapter = createClaudeCodeAdapter({ cwd: REPO });
+    const adapter = createClaudeCodeAdapter();
     const target: TargetProfile = {
       agent: "claude-code",
       home,
       windowTokens: 200_000,
     };
 
-    expect(() => adapter.serialize(REFERENCE_SESSION, target, MARKER)).not.toThrow();
+    expect(() => adapter.serialize(REFERENCE_SESSION, target, MARKER, { cwd: REPO })).not.toThrow();
     expect(await checksumTree(home)).toEqual(before);
   });
 });
@@ -192,7 +196,7 @@ describe("T-CC-13 — source sessions are byte-identical", () => {
     );
     const before = await checksumTree(sourceHome);
 
-    const adapter = createClaudeCodeAdapter({ cwd: REPO });
+    const adapter = createClaudeCodeAdapter();
     const listed = await adapter.listSessions(sourceHome);
     const session = await adapter.loadSession(listed[0] as never);
 
@@ -205,6 +209,7 @@ describe("T-CC-13 — source sessions are byte-identical", () => {
         session,
         { agent, home: targetHome, windowTokens: 200_000 },
         MARKER,
+        { cwd: REPO },
       );
       await commitPendingFiles(serialized.files);
     }
@@ -214,7 +219,7 @@ describe("T-CC-13 — source sessions are byte-identical", () => {
 
   it("never mints a session id that collides with the home (FR-49)", async () => {
     const home = await populatedHome();
-    const adapter = createClaudeCodeAdapter({ cwd: REPO });
+    const adapter = createClaudeCodeAdapter();
     const target: TargetProfile = {
       agent: "claude-code",
       home,
@@ -223,7 +228,7 @@ describe("T-CC-13 — source sessions are byte-identical", () => {
     const ids = new Set<string>();
     const paths = new Set<string>();
     for (let i = 0; i < 200; i++) {
-      const serialized = adapter.serialize(REFERENCE_SESSION, target, MARKER);
+      const serialized = adapter.serialize(REFERENCE_SESSION, target, MARKER, { cwd: REPO });
       ids.add(serialized.sessionId);
       paths.add(serialized.files[0]?.absolutePath as string);
     }
@@ -237,26 +242,26 @@ describe("T-CC-13 — source sessions are byte-identical", () => {
 
   it("refuses a session id whose file already exists", async () => {
     const home = await makeThrowawayHome();
-    const adapter = createClaudeCodeAdapter({ cwd: REPO });
+    const adapter = createClaudeCodeAdapter();
     const target: TargetProfile = {
       agent: "claude-code",
       home,
       windowTokens: 200_000,
     };
-    const serialized = adapter.serialize(REFERENCE_SESSION, target, MARKER);
+    const serialized = adapter.serialize(REFERENCE_SESSION, target, MARKER, { cwd: REPO });
     await commitPendingFiles(serialized.files);
     await expect(commitPendingFiles(serialized.files)).rejects.toThrow(/refusing to overwrite/);
   });
 
   it("keeps a session written for one repository out of another (FR-13)", async () => {
     const home = await makeThrowawayHome();
-    const adapter = createClaudeCodeAdapter({ cwd: REPO });
+    const adapter = createClaudeCodeAdapter();
     const target: TargetProfile = {
       agent: "claude-code",
       home,
       windowTokens: 200_000,
     };
-    const serialized = adapter.serialize(REFERENCE_SESSION, target, MARKER);
+    const serialized = adapter.serialize(REFERENCE_SESSION, target, MARKER, { cwd: REPO });
     await commitPendingFiles(serialized.files);
 
     await writeSessionFile(home, SECOND_REPO, "other-1", [

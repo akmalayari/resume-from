@@ -30,7 +30,7 @@ async function newWorld(...args: Parameters<typeof createWorld>): Promise<World>
 
 function listRequest(world: World, target: AgentId): ListRequest {
   return {
-    repoRoot: world.repoRoot,
+    destinationCwd: world.repoRoot,
     target: world.targetFor(target),
     onlyAgent: null,
     onlyHome: null,
@@ -52,7 +52,7 @@ describe("T-IMP-1 — list touches only discovery", () => {
     const pipeline = createPipelineFromStages(stages);
 
     await pipeline.list({
-      repoRoot: "/repo",
+      destinationCwd: "/repo",
       target: { agent: "pi", home: "/homes/pi", windowTokens: 200_000 },
       onlyAgent: null,
       onlyHome: null,
@@ -68,7 +68,7 @@ describe("T-IMP-2 — preview runs four steps in order", () => {
     const pipeline = createPipelineFromStages(stages);
 
     await pipeline.preview({
-      repoRoot: "/repo",
+      destinationCwd: "/repo",
       target: { agent: "pi", home: "/homes/pi", windowTokens: 200_000 },
       selection: { by: "row", row: 1 },
       onlyAgent: null,
@@ -85,7 +85,7 @@ describe("T-IMP-3 — commit repeats the preview then lands", () => {
     const { calls, stages, plans, landed } = recordingStages();
     const pipeline = createPipelineFromStages(stages);
     const request = {
-      repoRoot: "/repo",
+      destinationCwd: "/repo",
       target: {
         agent: "pi" as const,
         home: "/homes/pi",

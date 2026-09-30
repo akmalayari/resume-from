@@ -85,7 +85,7 @@ export interface StubRepoOptions {
 
 export interface StubRepo extends RepoReader {
   identifyCalls: string[];
-  distanceCalls: string[];
+  distanceCalls: { cwd: string; sourceCommit: string }[];
 }
 
 /** A repository reader that answers from fixed values. It touches no repository. */
@@ -99,7 +99,7 @@ export function stubRepo(options: StubRepoOptions = {}): StubRepo {
   };
   const distance = options.distance ?? { known: true, ahead: 14, behind: 0 };
   const identifyCalls: string[] = [];
-  const distanceCalls: string[] = [];
+  const distanceCalls: { cwd: string; sourceCommit: string }[] = [];
 
   return {
     identifyCalls,
@@ -109,8 +109,8 @@ export function stubRepo(options: StubRepoOptions = {}): StubRepo {
       if (identity instanceof Error) throw identity;
       return identity;
     },
-    async distanceFrom(sourceCommit: string): Promise<CommitDistance> {
-      distanceCalls.push(sourceCommit);
+    async distanceFrom(cwd: string, sourceCommit: string): Promise<CommitDistance> {
+      distanceCalls.push({ cwd, sourceCommit });
       if (distance instanceof Error) throw distance;
       return distance;
     },

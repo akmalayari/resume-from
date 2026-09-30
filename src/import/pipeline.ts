@@ -2,6 +2,7 @@
 // Nothing here knows an agent: the source adapter comes from the chosen session and the
 // target adapter from the target profile (FR-6, FR-60).
 
+import type { RepoIdentity } from "../platform/repo/contract.js";
 import { confirmationMatches, confirmationToken } from "./confirmation.js";
 import type {
   AgentAdapter,
@@ -35,12 +36,21 @@ const TARGET_ROLE = "target";
 const PREVIEW_AGAIN = "Preview it again, then confirm.";
 const IMPORT_AGAIN = "Fix the cause, then run the import again.";
 
+/** Fresh destination facts for one request; native spelling stays distinct from canonical identity. */
+export interface DestinationContext {
+  cwd: string;
+  canonicalCwd: string;
+  identity: RepoIdentity;
+}
+
 /** The four stages, and the services they are driven with. `wiring.ts` builds them. */
 export interface PipelineStages {
   finder: SessionFinder;
   rules: TransferRules;
+  /** Resolve fresh destination facts, without replacing the host's native cwd spelling. */
+  destinationFor(cwd: string): Promise<DestinationContext>;
   /** A preview builder that reads the repository the request names. */
-  previewFor(repoRoot: string): PreviewBuilder;
+  previewFor(destination: DestinationContext): PreviewBuilder;
   lander: SessionLander;
   /** Every adapter the composition root constructed. This module only looks one up. */
   adapters: readonly AgentAdapter[];
@@ -54,13 +64,14 @@ export interface PipelineStages {
 /** What one recompute of the preview produced. */
 interface Computed {
   descriptor: SessionDescriptor;
+  destination: DestinationContext;
   plan: TransferPlan;
   report: PreviewReport;
 }
 
 function scopeOf(request: ListRequest | ImportRequest): SearchScope {
   return {
-    repoRoot: request.repoRoot,
+    repoRoot: request.destinationCwd,
     onlyAgent: request.onlyAgent,
     onlyHome: request.onlyHome,
   };
@@ -94,6 +105,24 @@ function isLandingError(cause: unknown): cause is LandingError & Error {
 }
 
 export function createPipelineFromStages(stages: PipelineStages): ImportPipeline {
+  async function destinationFor(cwd: string): Promise<DestinationContext> {
+    try {
+      const destination = await stages.destinationFor(cwd);
+      if (destination.identity.isBare) {
+        throw new Error(
+          "A bare repository cannot be an import destination. Run the import from a linked worktree instead.",
+        );
+      }
+      return destination;
+    } catch (cause) {
+      throw new ImportFailure(
+        "preview",
+        `The destination ${cwd} could not be used: ${reasonOf(cause)} Nothing was written. Check the destination directory and preview again.`,
+        { cause },
+      );
+    }
+  }
+
   async function resolve(request: ImportRequest): Promise<SessionDescriptor> {
     try {
       return await stages.finder.resolve(scopeOf(request), request.selection);
@@ -122,6 +151,7 @@ export function createPipelineFromStages(stages: PipelineStages): ImportPipeline
    * processes, and a plan cannot travel between them.
    */
   async function compute(request: ImportRequest): Promise<Computed> {
+    const destination = await destinationFor(request.destinationCwd);
     const descriptor = await resolve(request);
     const session = await load(descriptor);
 
@@ -138,7 +168,7 @@ export function createPipelineFromStages(stages: PipelineStages): ImportPipeline
 
     let report: PreviewContent;
     try {
-      report = await stages.previewFor(request.repoRoot).build(plan);
+      report = await stages.previewFor(destination).build(plan);
     } catch (cause) {
       throw new ImportFailure(
         "preview",
@@ -147,9 +177,13 @@ export function createPipelineFromStages(stages: PipelineStages): ImportPipeline
       );
     }
 
-    const token = confirmationToken(descriptor, plan, report);
+    const token = confirmationToken(descriptor, plan, report, {
+      canonicalCwd: destination.canonicalCwd,
+      commonDir: destination.identity.commonDir,
+    });
     return {
       descriptor,
+      destination,
       plan,
       report: { ...report, confirmationToken: token },
     };
@@ -158,11 +192,12 @@ export function createPipelineFromStages(stages: PipelineStages): ImportPipeline
   return {
     async list(request: ListRequest): Promise<Listing> {
       try {
+        await destinationFor(request.destinationCwd);
         return await stages.finder.list(scopeOf(request));
       } catch (cause) {
         throw new ImportFailure(
           "discovery",
-          `The sessions of this repository could not be listed: ${reasonOf(cause)}. Check that ${request.repoRoot} is readable, then run the list again.`,
+          `The sessions of this repository could not be listed: ${reasonOf(cause)}. Check that ${request.destinationCwd} is readable, then run the list again.`,
           { cause },
         );
       }
@@ -182,12 +217,12 @@ export function createPipelineFromStages(stages: PipelineStages): ImportPipeline
       suppliedToken: string,
     ): Promise<LandingResult> {
       const adapter = targetAdapter(stages.adapters, request.target);
-      const { descriptor, plan, report } = await compute(request);
+      const { descriptor, destination, plan, report } = await compute(request);
 
       if (!confirmationMatches(report.confirmationToken, suppliedToken)) {
         throw new ImportFailure(
           "confirmation",
-          `The source session or preview changed after confirmation. Nothing was written to ${request.target.home}. ${PREVIEW_AGAIN}`,
+          `The source session, destination, or preview changed after confirmation. Nothing was written to ${request.target.home}. ${PREVIEW_AGAIN}`,
         );
       }
 
@@ -211,7 +246,14 @@ export function createPipelineFromStages(stages: PipelineStages): ImportPipeline
       }
 
       try {
-        return await stages.lander.land(plan, adapter, stages.committer, runtime, stages.now());
+        return await stages.lander.land(
+          plan,
+          adapter,
+          stages.committer,
+          runtime,
+          stages.now(),
+          destination,
+        );
       } catch (cause) {
         // The landing states what failed and what to do next for every one of its stages;
         // anything else reaching here is a defect and gets the generic next step (FR-56).

@@ -333,6 +333,7 @@ describe("T-COD-3 tool outputs become one outcome line", () => {
         droppedSummary: "tool result bodies",
         lines: ["Imported session"],
       },
+      { cwd: "/repo/demo" },
     );
     const bytes = serialized.files
       .map((file) => Buffer.from(file.bytes).toString("utf8"))

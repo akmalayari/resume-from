@@ -101,27 +101,30 @@ describe("boundary", () => {
     expect(report.headerLines).toContain("34 turns cross over");
   });
 
-  it("T-PRE-17: a repository reader failure does not stop the preview", async () => {
-    const repo = stubRepo({ distance: new Error("git exited with 128") });
-    const plan = makePlan({ droppedTurnCount: 12, drops: makeDrops(12, "budget") });
-    const report = await createPreviewBuilder(repo, CWD).build(plan);
-
-    const warning = report.warnings.find((w) => w.kind === "repo-state");
-    expect(warning?.line).toContain("could not be read");
-    expect(report.budgetLine).toBe("Budget: 34k tokens of a 200k window");
-    expect(report.headerLines).toContain("34 turns cross over, 12 dropped");
-    expect(report.blocked).toBe(false);
+  it("passes the request cwd and source commit explicitly to distance lookup", async () => {
+    const repo = stubRepo();
+    await createPreviewBuilder(repo, CWD).build(makePlan());
+    expect(repo.distanceCalls).toEqual([{ cwd: CWD, sourceCommit: SOURCE_COMMIT }]);
   });
 
-  it("T-PRE-17: an unreadable repository identity does not stop the preview", async () => {
-    const repo = stubRepo({ identity: new Error("not a repository") });
-    const report = await createPreviewBuilder(repo, CWD).build(makePlan());
+  it.each(["identity", "distance"] as const)(
+    "T-PRE-17: rejected %s operations stop the preview",
+    async (lookup) => {
+      const failure = new Error("git could not run: spawn EACCES");
+      const repo = stubRepo({ [lookup]: failure });
+      await expect(createPreviewBuilder(repo, CWD).build(makePlan())).rejects.toBe(failure);
+    },
+  );
 
-    expect(report.warnings.find((w) => w.kind === "repo-state")?.line).toContain(
-      "could not be read",
-    );
-    expect(report.budgetLine).toBe("Budget: 34k tokens of a 200k window");
-  });
+  it.each(["git command timed out after 10 ms", "git command aborted"])(
+    "T-PRE-17: %s stops the preview",
+    async (message) => {
+      const failure = new Error(message);
+      await expect(
+        createPreviewBuilder(stubRepo({ distance: failure }), CWD).build(makePlan()),
+      ).rejects.toBe(failure);
+    },
+  );
 
   it("T-PRE-18: hostile content in a turn cannot forge a line", async () => {
     const forgedWarning =

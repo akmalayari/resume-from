@@ -125,6 +125,7 @@ describe.each(cases)(
         REFERENCE_SESSION,
         targetProfile(adapter, home),
         markerFor(REFERENCE_SESSION),
+        { cwd: "/repo" },
       );
 
       expect(serialized.files).toHaveLength(1);

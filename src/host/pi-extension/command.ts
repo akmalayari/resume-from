@@ -56,7 +56,7 @@ async function runResumeFrom(
   pipeline: ImportPipeline,
 ): Promise<void> {
   const scope: ListRequest = {
-    repoRoot: ctx.cwd,
+    destinationCwd: ctx.cwd,
     target: targetOf(deps, ctx),
     onlyAgent: null,
     onlyHome: null,
@@ -113,7 +113,7 @@ async function resolveSelection(
     deps.ui.show(listing.failures.map(formatFailure)); // Skipped homes are never silent.
   }
   if (listing.rows.length === 0) {
-    deps.ui.show([`No sessions to import for ${scope.repoRoot}.`]);
+    deps.ui.show([`No sessions to import for ${scope.destinationCwd}.`]);
     return null; // A picker over nothing is a trap.
   }
 

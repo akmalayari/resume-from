@@ -43,7 +43,7 @@ describe("T-PI-12 — source files are byte-identical", () => {
     ]);
     const before = checksumTree(sourceHome);
     expect(before.size).toBeGreaterThan(0);
-    const adapter = createPiAdapter({ cwd: () => CWD });
+    const adapter = createPiAdapter();
 
     for (const agent of AGENTS) {
       // The source role is the same work whatever the target is: list, load, and — when the
@@ -56,7 +56,7 @@ describe("T-PI-12 — source files are byte-identical", () => {
         home: throwawayHome(),
         windowTokens: 200_000,
       };
-      if (agent === "pi") adapter.serialize(canonical, target, markerFixture());
+      if (agent === "pi") adapter.serialize(canonical, target, markerFixture(), { cwd: CWD });
     }
 
     expect([...checksumTree(sourceHome).entries()]).toEqual([...before.entries()]);
@@ -66,7 +66,7 @@ describe("T-PI-12 — source files are byte-identical", () => {
     const sourceHome = throwawayHome();
     const written = writeFixtureSession(sourceHome, CWD, [piUserDraft("hi")]);
     const before = statSync(written.filePath).mtimeMs;
-    const adapter = createPiAdapter({ cwd: () => CWD });
+    const adapter = createPiAdapter();
 
     const [descriptor] = await adapter.listSessions(sourceHome);
     if (!descriptor) throw new Error("no descriptor listed");

@@ -10,6 +10,7 @@ import type {
   LandingLevel,
   ProvenanceSupport,
   SelectionLevel,
+  SerializationContext,
   SerializedSession,
   StoredSessionFacts,
   SwitchOutcome,
@@ -24,6 +25,7 @@ export type {
   LandingLevel,
   ProvenanceSupport,
   SelectionLevel,
+  SerializationContext,
   SerializedSession,
   StoredSessionFacts,
   SwitchOutcome,
@@ -129,5 +131,6 @@ export interface SessionLander {
     committer: FileCommitter,
     runtime: AgentRuntime,
     importedAt: string,
+    context: SerializationContext,
   ): Promise<LandingResult>;
 }

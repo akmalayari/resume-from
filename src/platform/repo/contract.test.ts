@@ -21,7 +21,7 @@ const ABSENT_COMMIT = "1234567890abcdef1234567890abcdef12345678";
 test("T-REP-8 — an unknown revision is reported, not thrown", async () => {
   const { dir } = await repoWithOneCommit();
 
-  const distance = await createRepoReader(dir).distanceFrom(ABSENT_COMMIT);
+  const distance = await createRepoReader().distanceFrom(dir, ABSENT_COMMIT);
 
   expect(distance).toEqual({ known: false, ahead: 0, behind: 0 });
 });
@@ -42,7 +42,7 @@ test("T-REP-9 — `known: false` implies zero counts", async () => {
   ];
 
   for (const { name, cwd, revision } of cases) {
-    const distance = await createRepoReader(cwd).distanceFrom(revision);
+    const distance = await createRepoReader().distanceFrom(cwd, revision);
     expect(distance, name).toEqual({ known: false, ahead: 0, behind: 0 });
   }
 });
@@ -58,7 +58,7 @@ test("T-REP-10 — the root is fully resolved", async () => {
   await commitFile(real, "first");
   await makeDir(real, "nested");
 
-  const reader = createRepoReader(link);
+  const reader = createRepoReader();
 
   expect((await reader.identify(link)).root).toBe(real);
   expect((await reader.identify(join(link, "nested"))).root).toBe(real);

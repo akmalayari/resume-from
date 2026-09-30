@@ -223,7 +223,8 @@ interface LandingResult {
 ```ts
 /** What to list (FR-10, FR-15). */
 interface ListRequest {
-  repoRoot: string;
+  /** Host-supplied absolute working directory; preserve native subdirectory and symlink spelling. */
+  destinationCwd: string;
   target: TargetProfile;
   onlyAgent: AgentId | null;
   onlyHome: HomePath | null;
@@ -231,7 +232,8 @@ interface ListRequest {
 
 /** What to preview, and later what to commit (FR-16, FR-20). */
 interface ImportRequest {
-  repoRoot: string;
+  /** Host-supplied absolute working directory; preserve native subdirectory and symlink spelling. */
+  destinationCwd: string;
   target: TargetProfile;
   selection: SelectionInput;
   onlyAgent: AgentId | null;
@@ -326,6 +328,8 @@ A new agent that also cannot host a picker needs **no change here**: it gets the
 because its adapter declares `selection: "numbered-list"` (FR-58).
 
 ## Constraints and Invariants
+
+- **`destinationCwd` comes from invocation cwd**, unchanged, including subdirectories and symlink spelling. It is the sole destination input on both list and import requests.
 
 - **This module holds no rule of requirement sections C to I** (FR-60). It parses, calls, and prints.
   Any decision it appears to make is a decision the pipeline already made.

@@ -86,7 +86,7 @@ interface RepoReaderOptions {
 interface RepoReader {
   identify(cwd: string): Promise<RepoIdentity>;
   /** Compares HEAD with a commit of a source session (FR-37). */
-  distanceFrom(sourceCommit: string): Promise<CommitDistance>;
+  distanceFrom(cwd: string, sourceCommit: string): Promise<CommitDistance>;
 }
 ```
 
@@ -105,6 +105,8 @@ Changes that require **only this module** to change:
 - The distance calculation changes, for example to use the merge base explicitly.
 
 ## Constraints and Invariants
+
+- **Every lookup names its directory explicitly.** `distanceFrom(cwd, sourceCommit)` compares against that directory’s HEAD. `createRepoReader` takes process options only, with no ambient or factory-bound cwd.
 
 - **This module never writes to the repository.** No commit, no checkout, no stash, no index change,
   no configuration write. It is read-only against the user's work (AC-4 in spirit: the tool touches
@@ -213,7 +215,7 @@ user's repository.
 
 **T-REP-15 — the FR-38 scenario end to end**
 - Scenario: a session ran at commit `3f2a1bc`; the tree is now at `9d81e04`, 14 commits later.
-- Expected behavior: `distanceFrom("3f2a1bc")` gives `known` true, `ahead` 14, `behind` 0 — exactly
+- Expected behavior: `distanceFrom(cwd, "3f2a1bc")` gives `known` true, `ahead` 14, `behind` 0 — exactly
   the facts the requirement's example warning states.
 
 **T-REP-16 — a session from another repository**

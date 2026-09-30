@@ -6,10 +6,10 @@ import { safeText } from "./presentation.js";
 
 const COLUMN_GAP = "  ";
 
-export function renderListing(listing: Listing, repoRoot: string): string[] {
+export function renderListing(listing: Listing, destinationCwd: string): string[] {
   const lines: string[] =
     listing.rows.length === 0
-      ? [`No session of ${safeText(repoRoot)} was found.`]
+      ? [`No session of ${safeText(destinationCwd)} was found.`]
       : renderRows(listing.rows);
 
   // Homes that could not be read are printed, never hidden.

@@ -17,6 +17,7 @@ import type {
   CanonicalSession,
   CanonicalTurn,
   ProvenanceMarker,
+  SerializationContext,
   SerializedSession,
   SessionId,
   TargetProfile,
@@ -198,9 +199,9 @@ export function serialize(
   session: CanonicalSession,
   target: TargetProfile,
   marker: ProvenanceMarker,
-  context: { cwd: string },
+  context: SerializationContext,
 ): SerializedSession {
-  const repoPath = path.resolve(context.cwd);
+  const repoPath = context.cwd;
   refuseUnrecognisedProjectRecord(target.home, repoPath);
 
   const sessionId = mintSessionId(target.home, repoPath);
