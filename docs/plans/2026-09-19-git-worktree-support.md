@@ -199,11 +199,11 @@ error presentation where needed.
 
 Depends on Task 4. Scope: host/CLI/Pi integration tests and fixture support.
 
-- [ ] Exercise CLI list, preview, and token-confirmed import using disposable Claude source and target profile homes, real transcripts, and main-to-worktree, worktree-to-main, and sibling-worktree paths. Cover nested, sibling, and arbitrary external placement across focused tests rather than a full Cartesian product.
-- [ ] Read back native imports to verify destination cwd and target profile placement; assert the source transcript and repository files are unchanged. Include a destination subdirectory and process/host cwd differing from request cwd.
-- [ ] Exercise Pi command-context cwd through the common discovery/pipeline path and native writer, with request context differing from process cwd; mock only the UI/runtime switch boundary. Verify Codex writer destination behavior is covered by Task 2 or add it here.
-- [ ] Test source/destination identity changes and confirmation in a different worktree at the same HEAD, asserting no import files are written on rejection. Confirm a missing worktree with surviving recorded metadata can reach preview and import.
-- [ ] Run `pnpm exec vitest run src/host src/import test/fixtures`, then the per-task gates below. Record any environment-gated live tests that remain skipped; fixture readback is required.
+- [x] Exercise CLI list, preview, and token-confirmed import using disposable Claude source and target profile homes, real transcripts, and main-to-worktree, worktree-to-main, and sibling-worktree paths. Cover nested, sibling, and arbitrary external placement across focused tests rather than a full Cartesian product.
+- [x] Read back native imports to verify destination cwd and target profile placement; assert the source transcript and repository files are unchanged. Include a destination subdirectory and process/host cwd differing from request cwd.
+- [x] Exercise Pi command-context cwd through the common discovery/pipeline path and native writer, with request context differing from process cwd; mock only the UI/runtime switch boundary. Verify Codex writer destination behavior is covered by Task 2 or add it here.
+- [x] Test source/destination identity changes and confirmation in a different worktree at the same HEAD, asserting no import files are written on rejection. Confirm a missing worktree with surviving recorded metadata can reach preview and import.
+- [x] Run `pnpm exec vitest run src/host src/import test/fixtures`, then the per-task gates below. Record any environment-gated live tests that remain skipped; fixture readback is required.
 
 ### Task 6: Update packaged instructions and complete validation
 
