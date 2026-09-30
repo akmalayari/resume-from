@@ -21,6 +21,11 @@ The target-agent guide owns installation and landing instructions. The shared ge
 - [Configuration](configuration.md) — extra agent homes, context budget, pinned turns, and context-window overrides.
 - [Troubleshooting](troubleshooting.md) — missing commands, missing sessions, blocked previews, and landing problems.
 
+## Releases
+
+- [v0.3.1](releases/v0.3.1.md) — dependency and release-tooling updates.
+- [v0.3.0](releases/v0.3.0.md) — transfers across linked Git worktrees and API migration steps.
+
 ## Maintain the project
 
 - [Requirements](requirements.md) — normative product behavior and acceptance criteria.

@@ -21,6 +21,18 @@ here immediately.
 | **Lint + format**   | Biome      | One tool for both, no plugin stack.                                                                                                                     |
 | **Build**           | `tsc`      | Emits to `dist/`; `.gitignore` already excludes `dist/` and `*.tsbuildinfo`.                                                                            |
 
+## Development toolchain
+
+Use Node 24 LTS and the pnpm version pinned in `package.json`.
+TypeScript 7 builds and type-checks the project. The `typescript-compiler-api` alias
+stays on TypeScript 6.0.3 because the boundary tests use its JavaScript compiler API,
+which TypeScript 7 does not ship. Node type declarations stay on the Node 24 line.
+Vitest 5 runs the test suite; Biome and ESLint check source and configuration.
+
+The tokenizer uses the ESM `gpt-tokenizer/encoding/o200k_base` entry point. The
+Claude Code package bundles it with esbuild and includes its license notices;
+package smoke checks run the bundle outside the repository without `node_modules`.
+
 ## Delivery shape
 
 Decided in the design (`src/module.md`, Decision 4) and recorded here because it constrains the

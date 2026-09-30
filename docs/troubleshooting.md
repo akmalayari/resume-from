@@ -14,6 +14,23 @@ pi list
 For Claude Code or Codex, open the plugin manager and make sure that
 `resume-from` is enabled.
 
+## A new release is not available on npm
+
+A successful GitHub release does not mean that npm has made the packages available.
+npm scans new versions before publication; scanning can delay availability or require
+manual review. A pinned installation can return `404` during that time.
+
+Check the core package version before retrying the install:
+
+```sh
+npm view resume-from@0.3.1 version
+```
+
+Claude Code and Codex also need their matching plugin packages:
+`@alexeiled/resume-from-claude@0.3.1` and `@alexeiled/resume-from-codex@0.3.1`.
+If a version remains unavailable, maintainers should check npm's publication
+notifications before rerunning the release workflow.
+
 ## No sessions are listed
 
 Start the destination agent in the directory whose files you intend to edit.
