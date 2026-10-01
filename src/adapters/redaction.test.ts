@@ -163,6 +163,10 @@ describe.each(IMPLEMENTATIONS)("%s credential redaction", (_name, redaction) => 
     ["a colon-joined pair", `token: ${"a".repeat(200)}:${"b".repeat(200)}`],
     ["an encoded character early", `refresh_token: ${"A".repeat(20)}%2F${"B".repeat(300)}`],
     ["a 4200-character token", `token: ${"A".repeat(4200)}`],
+    // A pass that replaces part of a value must not hide the rest from this one.
+    ["a vendor token with a tilde inside", `token: sk-${"A1".repeat(150)}~${"TAIL".repeat(25)}`],
+    ["a sensitive key inside the value", `token: ${"Q".repeat(60)}secret:${"z".repeat(119)}9`],
+    ["a vendor token with a dot inside", `password: ghp_${"A".repeat(150)}.${"B".repeat(100)}`],
   ])("redacts a long unquoted value under a sensitive key: %s (C-RED-2)", (_label, text) => {
     const redacted = redaction.redactSensitiveText(text);
     expect(redacted).toContain(redaction.REDACTED_VALUE);

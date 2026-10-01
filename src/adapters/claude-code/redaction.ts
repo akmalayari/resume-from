@@ -56,9 +56,10 @@ const URI_USERINFO_PATTERN = /\b([a-z][a-z0-9+.-]*:\/\/)([^\s/:@]+):([^\s/@]+)@/
 // forward until it finds a delimiter: a separator-dense line made every `key:` on it scan the rest
 // of the line (measured: 1.3 MB of `x`-and-`:` runs took over 30 s; bounded, it takes about 1 s). A
 // bounded scan cannot decide a long value, and a partial match would leave most of a credential in
-// place. `redactLongValues` answers that instead: it looks for one whole token after a *sensitive*
-// key only, so a long value is taken to its end (the kubeconfig `token: eyJhbGciOi…` case) without
-// giving every `key:` on a long line a longer scan, and without a length limit of its own.
+// place. `redactLongValues` answers that instead: it runs before the passes below and looks for one
+// whole token after a *sensitive* key only, so a long value is taken to its end (the kubeconfig
+// `token: eyJhbGciOi…` case) without giving every `key:` on a long line a longer scan, without a
+// length limit of its own, and without measuring a value another pass has already shortened.
 //
 // An unquoted value requires a structural delimiter or line/string end following it, OR a digit
 // somewhere in the token (C-RED-1: "token: expired" is plain English and stays, while
@@ -141,7 +142,10 @@ export function redactSensitiveStructure(value: unknown): unknown {
 
 /** Redact recognizable credentials from shell commands, headers, and unstructured arguments. */
 export function redactSensitiveText(text: string): string {
-  const redacted = text
+  // The long-value pass runs first, so the token it measures is the one that was recorded: every
+  // later pass replaces part of a long value with the marker, and a length test after that would see
+  // only the remainder and skip it (C-RED-2).
+  return redactLongValues(text)
     .replace(PRIVATE_KEY_PATTERN, REDACTED_VALUE)
     .replace(AUTHORIZATION_PATTERN, `$1${REDACTED_VALUE}`)
     .replace(API_HEADER_PATTERN, `$1${REDACTED_VALUE}`)
@@ -168,8 +172,6 @@ export function redactSensitiveText(text: string): string {
       },
     )
     .replace(CREDENTIAL_PATTERN, REDACTED_VALUE);
-  // After the bounded passes: a long unquoted value under a sensitive key, taken whole.
-  return redactLongValues(redacted);
 }
 
 /** One `key:separator` occurrence, without its value (C-RED-2). */

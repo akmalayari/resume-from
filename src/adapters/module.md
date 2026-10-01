@@ -468,15 +468,18 @@ module.
   50 KB of one word took 11.8 s and 100 KB never finished, which hung the listing and the import on a
   pasted blob or a long unbroken line. A bare key name is matched up to 64 characters, and the two
   unquoted value alternatives up to 128, because each of them also scans forward until it finds a
-  delimiter: a separator-dense line made every `key:` on it scan the rest of the line. Measured after
-  the bounds: 1.2 MB of one word redacts in 0.28 s, and 650 KB of `x`-runs and colons in 0.77 s.
+  delimiter: a separator-dense line made every `key:` on it scan the rest of the line. Measured over
+  190,756 real recorded texts (1.28 GB), the bounded passes redact in 181 s in total with a worst
+  single text of 1.15 s, where the unbounded pattern took 139 s in total and 9.8 s on its worst text.
   Nothing is hidden that the unbounded pattern found: 32,236 real recorded texts (77.9 MB) redact
   byte-for-byte as before, a longer bare run still matches through its last 64 characters, a quoted
   key is matched whole, and `isSensitiveKey` decides by the name's tail as well. A long unquoted
-  value cannot be decided by a bounded scan, so a second pass (`redactLongValues`) takes a whole
-  token after a *sensitive* key only: the kubeconfig `token: eyJhbGciOi…` case, URL-encoded and
-  `~`-bearing tokens included, and with no length limit of its own. Asking "which keys are
-  sensitive" and "where does that token end" separately is what keeps the cost at one token scan per
+  value cannot be decided by a bounded scan, so `redactLongValues` runs *first* and takes a whole
+  token after a *sensitive* key only: the kubeconfig `token: eyJhbGciOi…` case, URL-encoded,
+  `~`-bearing and 4200-character tokens included, with no length limit of its own. Running before the
+  other passes is what makes it correct — each of them replaces part of a long value with the marker,
+  and a length test afterwards would measure the remainder and skip it. Asking "which keys are
+  sensitive" and "where does that token end" separately is what keeps its cost at one token scan per
   sensitive key instead of a longer scan per `key:` on the line. Upgrade trigger: a measured
   credential that a >64-character bare key name hides.
 - **`capabilities()` is pure and synchronous** and returns the same value every time. The rules read
