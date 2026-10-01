@@ -23,11 +23,11 @@ manual review. A pinned installation can return `404` during that time.
 Check the core package version before retrying the install:
 
 ```sh
-npm view resume-from@0.3.1 version
+npm view resume-from@0.4.0 version
 ```
 
 Claude Code and Codex also need their matching plugin packages:
-`@alexeiled/resume-from-claude@0.3.1` and `@alexeiled/resume-from-codex@0.3.1`.
+`@alexeiled/resume-from-claude@0.4.0` and `@alexeiled/resume-from-codex@0.4.0`.
 If a version remains unavailable, maintainers should check npm's publication
 notifications before rerunning the release workflow.
 

@@ -23,6 +23,7 @@ The target-agent guide owns installation and landing instructions. The shared ge
 
 ## Releases
 
+- [v0.4.0](releases/v0.4.0.md) — current Codex sessions import, large homes list in seconds, sessions keep their start directory.
 - [v0.3.1](releases/v0.3.1.md) — dependency and release-tooling updates.
 - [v0.3.0](releases/v0.3.0.md) — transfers across linked Git worktrees and API migration steps.
 
