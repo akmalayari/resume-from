@@ -151,6 +151,21 @@ describe.each(IMPLEMENTATIONS)("%s credential redaction", (_name, redaction) => 
     );
   });
 
+  // A bounded scan cannot decide a long value, and a partial match would leave most of a credential
+  // in place: a long unquoted token is taken whole, which is the kubeconfig case (C-RED-2).
+  it.each([
+    ["a service-account JWT", `    token: ${"eyJhbGciOiJSUzI1NiJ9."}${"QQ".repeat(300)}.c2ln`],
+    ["a 200-character secret with no digit", `client_secret: ${"Q".repeat(200)}`],
+    ["letters and a final digit", `token: ${"a".repeat(130)}7`],
+    ["a digit first, then letters", `password: 1${"a".repeat(299)}`],
+  ])("redacts a long unquoted value under a sensitive key: %s (C-RED-2)", (_label, text) => {
+    const redacted = redaction.redactSensitiveText(text);
+    expect(redacted).toContain(redaction.REDACTED_VALUE);
+    // Only the value is replaced: nothing of it may be left after the marker.
+    expect(redacted).toMatch(/\[REDACTED\]$/);
+    expect(redacted).not.toMatch(/a{20}|Q{20}|eyJ/);
+  });
+
   // Every `key:` on a separator-dense line used to scan the rest of the line, so the unquoted value
   // alternatives are bounded and the cost stays linear (C-RED-2).
   it("redacts a separator-dense line without rescanning it per key (C-RED-2)", () => {

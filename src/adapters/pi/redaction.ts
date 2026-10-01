@@ -52,18 +52,21 @@ const URI_USERINFO_PATTERN = /\b([a-z][a-z0-9+.-]*:\/\/)([^\s/:@]+):([^\s/@]+)@/
 // live at its tail; a quoted key needs no bound, because the quote makes every attempt fail in
 // constant time and the quote is the anchor the engine scans for.
 //
-// The two unquoted value alternatives are bounded at 128 characters for the same reason: each of
-// them scans forward until it finds a delimiter, so a separator-dense line made every `key:` on it
-// scan the rest of the line (measured: 1.3 MB of `x`-and-`:` runs took over 30 s; bounded, it takes
-// about 1 s). A quoted value needs no bound, and a credential in a longer unquoted value is still
-// caught by the assignment, flag, header, vendor-token and private-key patterns. Upgrade trigger: a
-// measured credential that only a >128-character unquoted value hides (C-RED-2).
+// The two *short* unquoted value alternatives are bounded at 128 characters for the same reason:
+// each of them scans forward until it finds a delimiter, so a separator-dense line made every `key:`
+// on it scan the rest of the line (measured: 1.3 MB of `x`-and-`:` runs took over 30 s; bounded, it
+// takes about 1 s). A bounded scan cannot decide a long value, though, and a partial match would
+// leave most of a credential in place, so a third alternative takes a long opaque token whole —
+// "as long as it is one token" is checked by a lookahead rather than by a longer scan. That is the
+// kubeconfig case: `token: eyJhbGciOi…` is one ~1 KB token with no delimiter after it beyond the
+// line end. A token longer than the last bound stays in place; upgrade trigger: a measured
+// credential longer than that (C-RED-2).
 //
 // An unquoted value requires a structural delimiter or line/string end following it, OR a digit
 // somewhere in the token (C-RED-1: "token: expired" is plain English and stays, while
 // "password: hunter2 # prod" carries a credential that must not cross even mid-line).
 const JSON_LIKE_PATTERN =
-  /(?:(?<quote>["'])(?<quoted>[A-Za-z_][A-Za-z0-9_-]*)\k<quote>|(?<bare>[A-Za-z_][A-Za-z0-9_-]{0,63}))(\s*:\s*)("[^"\r\n]*"|'[^'\r\n]*'|[^\s,;}]{1,128}(?=[,;}]|[\r\n]|$)|[^\s,;}]{0,128}\d[^\s,;}]{0,128})/g;
+  /(?:(?<quote>["'])(?<quoted>[A-Za-z_][A-Za-z0-9_-]*)\k<quote>|(?<bare>[A-Za-z_][A-Za-z0-9_-]{0,63}))(\s*:\s*)("[^"\r\n]*"|'[^'\r\n]*'|[^\s,;}]{1,128}(?=[,;}]|[\r\n]|$)|[^\s,;}]{0,128}\d[^\s,;}]{0,128}(?![^\s,;}])|[A-Za-z0-9_+/=.-]{129,4096}(?![A-Za-z0-9_+/=.-]))/g;
 
 function normalizedKey(key: string): string {
   return key.toLowerCase().replaceAll(/[^a-z0-9]/g, "");

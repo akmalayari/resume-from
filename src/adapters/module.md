@@ -469,12 +469,14 @@ module.
   pasted blob or a long unbroken line. A bare key name is matched up to 64 characters, and the two
   unquoted value alternatives up to 128, because each of them also scans forward until it finds a
   delimiter: a separator-dense line made every `key:` on it scan the rest of the line. Measured after
-  the bounds: 1.2 MB of one word redacts in 0.28 s, 650 KB of `x`-runs and colons in 0.6 s, and
-  32,236 real recorded texts (77.9 MB) redact byte-for-byte as before. The bounds hide nothing
-  measured: a longer bare run still matches through its last 64 characters, a quoted key is matched
-  whole, and `isSensitiveKey` decides by the name's tail as well. A credential in a longer unquoted
-  value is still caught by the assignment, flag, header, vendor-token and private-key patterns;
-  upgrade trigger: a measured credential that only a >128-character unquoted value hides.
+  the bounds: 1.2 MB of one word redacts in 0.28 s, and 650 KB of `x`-runs and colons in 0.77 s.
+  Nothing is hidden that the unbounded pattern found: 32,236 real recorded texts (77.9 MB) redact
+  byte-for-byte as before, a longer bare run still matches through its last 64 characters, a quoted
+  key is matched whole, and `isSensitiveKey` decides by the name's tail as well. A long unquoted
+  value cannot be decided by a bounded scan, so a third alternative takes a long opaque token whole
+  — the kubeconfig `token: eyJhbGciOi…` case — with a lookahead that refuses to match a prefix, so
+  no credential is left half-redacted. Upgrade trigger: a measured credential that is one unquoted
+  token longer than 4096 characters, or one that a >64-character bare key name hides.
 - **`capabilities()` is pure and synchronous** and returns the same value every time. The rules read
   it more than once per import.
 - **`serialize` is deterministic given the same session, target, marker and serialization context**, except for the session
