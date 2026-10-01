@@ -45,19 +45,20 @@ exists, and the reason this module's `readBack` is not optional.
   `event_msg` entries — `user_message` and `agent_message` — and a thread without them shows zero
   turns even when the model history is full (C-7). Codex has no verified durable entry that is both
   visible and excluded from resumed model context, so provenance is printed by the CLI only.
-- **That there are two dialogue schemas, and a rollout speaks one of them.** The older schema is
-  C-7's: `user_message`/`agent_message` `event_msg` entries carry the dialogue, and
-  `response_item` `function_call`/`custom_tool_call` entries carry the calls. The newer schema is
-  C-12's: every turn — user text, agent text and every tool-like action — is one `item_completed`
-  `event_msg` whose `payload.item.type` says which kind of turn it is, and no
-  `user_message`/`agent_message` entry exists at all. Every measured client writes the newer one,
-  so a reader of the older names alone reads every current session as zero dialogue. The kinds
-  this module carries are `UserMessage`, `AgentMessage`, `CommandExecution`, `FileChange`,
-  `McpToolCall`, `Extension`, `ImageView` and `CollabAgentToolCall`; `Reasoning`,
-  `ContextCompaction` and `SubAgentActivity` are understood and carry no turn. That client repeats
-  the same actions in `response_item` at a coarser granularity — one outer call can run several
-  commands — so when its dialogue is present the `item_completed` stream is the sole source of
-  turns; reading the other as well would cross actions twice.
+- **That there are two dialogue schemas, and one file can carry both.** The older schema is C-7's:
+  `user_message`/`agent_message` `event_msg` entries carry the dialogue, and `response_item`
+  `function_call`/`custom_tool_call` entries carry the calls. The newer schema is C-12's: every turn
+  — user text, agent text and every tool-like action — is one `item_completed` `event_msg` whose
+  `payload.item.type` says which kind of turn it is, and no `user_message`/`agent_message` entry
+  exists at all. Every measured client writes the newer one, so a reader of the older names alone
+  reads every current session as zero dialogue. The kinds this module carries are `UserMessage`,
+  `AgentMessage`, `CommandExecution`, `FileChange`, `McpToolCall`, `Extension`, `ImageView` and
+  `CollabAgentToolCall`; `Reasoning`, `ContextCompaction` and `SubAgentActivity` are understood and
+  carry no turn. That client repeats the same actions in `response_item` at a coarser granularity —
+  one outer call can run several commands — so those repeats are not read as turns. Dialogue is
+  never gated by schema: a thread that a newer client resumed carries the dialogue of both eras, and
+  the calls it made before its first item turn are the only record of that work, so they are read
+  while the calls after it are not.
 - **Which entry type the picker reads.** That `thread/list` shows a thread only when it has session
   metadata **and** a preview, and that the preview comes from an `event_msg` entry. A thread without
   one is invisible even though the file exists (C-7).
@@ -465,11 +466,11 @@ None of these touch a rule, a preview, another adapter, or the host.
   only name the record holds. An `Extension.kind` settles `read-only` only when the kind is a
   measured read (`web.search`); any other kind, and every `McpToolCall` and `CollabAgentToolCall`,
   stays `unknown`, because a kind that does not say cannot be made to say.
-- **When a rollout speaks the `item_completed` schema, that schema is the sole source of turns**
-  (C-12). Its `response_item` stream repeats the same actions at a coarser granularity, so a reader
-  that takes turns from both crosses actions twice. Which schema a rollout speaks is decided from
-  the rollout itself: `item_completed` dialogue selects the newer one, and its absence keeps the
-  older pairing.
+- **Repeated actions are dropped, dialogue never is** (C-12). A rollout that records turns as
+  `item_completed` items repeats them coarsely in `response_item`, so those repeats are not read as
+  turns. The dialogue of both eras is always read, and in a file that mixes them the older calls
+  made before the first item turn are kept: they are not repeats of anything. Which calls to read is
+  decided per file from the file itself (`legacyCallScope`).
 - **A `FileChange` patch is a tool argument, not a result body.** FR-24 protects the result, and the
   older schema's `apply_patch` call already carries the patch text it was given; the newer schema's
   `FileChange` item is the same kind of argument, so its content crosses.

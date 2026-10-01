@@ -137,6 +137,28 @@ describe.each(IMPLEMENTATIONS)("%s credential redaction", (_name, redaction) => 
     expect(redaction.redactSensitiveText(line)).toBe(line);
   });
 
+  // A quoted key is matched whole, so the bound on a bare key cannot hide a value that the pattern
+  // before the bound redacted (C-RED-2).
+  it("redacts the value of a quoted key longer than the bound (C-RED-2)", () => {
+    const longName = `${"x".repeat(58)}_password`;
+
+    // The value's own quotes are part of the match, as they were before the bound was introduced.
+    expect(redaction.redactSensitiveText(`{"${longName}": "hunter2"}`)).toBe(
+      `{"${longName}": ${redaction.REDACTED_VALUE}}`,
+    );
+    expect(redaction.redactSensitiveText(`{'${longName}': 'hunter2'}`)).toBe(
+      `{'${longName}': ${redaction.REDACTED_VALUE}}`,
+    );
+  });
+
+  // Every `key:` on a separator-dense line used to scan the rest of the line, so the unquoted value
+  // alternatives are bounded and the cost stays linear (C-RED-2).
+  it("redacts a separator-dense line without rescanning it per key (C-RED-2)", () => {
+    const line = `${"x".repeat(64)}:`.repeat(4_000);
+
+    expect(redaction.redactSensitiveText(line)).toBe(line);
+  });
+
   // The bound must not hide anything: a longer run still matches through its last 64 characters, and
   // a sensitive name is decided by its tail as well as by its whole text (C-RED-2).
   it("redacts a sensitive key name longer than the bound through its tail (C-RED-2)", () => {

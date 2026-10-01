@@ -99,14 +99,16 @@ export class CodexRolloutUnreadableError extends Error {
 /** Lenient: a file cut mid-entry still yields whatever parsed, with `truncated` set. */
 export async function scanRollout(filePath: string): Promise<CodexRollout> {
   // The same streamed reader the listing uses, so both call a line over the cap damage (C-13): one
-  // reader, one damage rule, and no whole file in memory. Reading stops at the first damage, because
-  // `readRollout` refuses such a file anyway.
-  const state: RolloutStreamState = { truncated: false };
+  // reader, one damage rule, and no whole file in memory. Reading stops at the first damage through
+  // `stop`, which lets the reader end the file on its own terms instead of being abandoned mid-read;
+  // `readRollout` refuses a damaged file anyway, so the rest of it cannot matter.
+  const state: RolloutStreamState = { truncated: false, stop: false };
   const entries: RolloutEntry[] = [];
   for await (const entry of streamRolloutEntries(filePath, state)) {
-    // Keep consuming after the damage so the generator finishes on its own; a consumer that
-    // abandons it mid-read leaves the file's stream open until the process's next tick.
-    if (state.truncated) continue;
+    if (state.truncated) {
+      state.stop = true;
+      continue;
+    }
     entries.push(entry);
   }
 
@@ -157,16 +159,19 @@ export interface RolloutSummary {
  * from the same classifier the loader uses, so a row cannot disagree with the session it opens.
  */
 export async function summarizeRollout(filePath: string): Promise<RolloutSummary> {
-  const state: RolloutStreamState = { truncated: false };
+  // The listing never stops early: every entry decides the row (C-13).
+  const state: RolloutStreamState = { truncated: false, stop: false };
   let meta: CodexSessionMeta | null = null;
   let firstEntryStamp: string | null = null;
   let seenEntry = false;
   let lastStamp: string | null = null;
   let messages = 0;
-  let legacyToolCalls = 0;
   let itemToolCalls = 0;
   let summaryTurns = 0;
-  let itemStream = false;
+  let itemSeen = false;
+  let legacyDialogueBeforeItems = false;
+  let legacyCallsBeforeItems = 0;
+  let legacyCallsAfterItems = 0;
   let title = "";
 
   for await (const entry of streamRolloutEntries(filePath, state)) {
@@ -177,7 +182,8 @@ export async function summarizeRollout(filePath: string): Promise<RolloutSummary
       firstEntryStamp = stamp;
     }
     if (stamp !== null) lastStamp = stamp;
-    if (isItemCompletedTurn(entry)) itemStream = true;
+    const itemTurn = isItemCompletedTurn(entry);
+    if (itemTurn) itemSeen = true;
 
     const turn = classifyEntry(entry);
     switch (turn.kind) {
@@ -186,11 +192,13 @@ export async function summarizeRollout(filePath: string): Promise<RolloutSummary
         break;
       case "message":
         messages += 1;
+        if (!itemSeen && isLegacyMessageTurn(entry)) legacyDialogueBeforeItems = true;
         if (turn.role === "user" && title === "") title = turn.text;
         break;
       case "tool-call":
         if (turn.schema === "item-completed") itemToolCalls += 1;
-        else legacyToolCalls += 1;
+        else if (itemSeen) legacyCallsAfterItems += 1;
+        else legacyCallsBeforeItems += 1;
         break;
       default:
         // "none" and "unknown" contribute no turn.
@@ -206,7 +214,17 @@ export async function summarizeRollout(filePath: string): Promise<RolloutSummary
     title: titleOf(redactSensitiveText(title)),
     startedAt: metaStamp ?? firstEntryStamp,
     updatedAt: lastStamp ?? metaStamp,
-    turnCount: summaryTurns + messages + itemToolCalls + (itemStream ? 0 : legacyToolCalls),
+    // The calls a mixed-era file made before its first item turn are kept; the rest are repeats or
+    // an item-era file's whole `response_item` stream, so they are not counted (C-12).
+    turnCount:
+      summaryTurns +
+      messages +
+      itemToolCalls +
+      (itemSeen
+        ? legacyDialogueBeforeItems
+          ? legacyCallsBeforeItems
+          : 0
+        : legacyCallsBeforeItems + legacyCallsAfterItems),
     truncated: state.truncated,
   };
 }
@@ -300,13 +318,14 @@ function toCanonicalTurns(entries: RolloutEntry[]): {
   skippedEntries: number;
   changedPaths: string[];
 } {
-  const itemStream = entries.some(isItemCompletedTurn);
-  const outputs = itemStream ? new Map<string, string>() : callOutputs(entries);
+  const cut = entries.findIndex(isItemCompletedTurn);
+  const legacyCalls = legacyCallScope(entries, cut);
+  const outputs = legacyCalls === "none" ? new Map<string, string>() : callOutputs(entries);
   const turns: CanonicalTurn[] = [];
   const changed = new Set<string>();
   let skippedEntries = 0;
 
-  for (const entry of entries) {
+  for (const [position, entry] of entries.entries()) {
     const turn = classifyEntry(entry);
     if (turn.kind === "unknown") {
       skippedEntries += 1;
@@ -338,7 +357,7 @@ function toCanonicalTurns(entries: RolloutEntry[]): {
       continue;
     }
     // The newer schema repeats its actions in `response_item`, so those repeats are not turns.
-    if (turn.schema === "legacy" && itemStream) continue;
+    if (turn.schema === "legacy" && !readsLegacyCall(legacyCalls, position, cut)) continue;
     const body =
       turn.schema === "item-completed" ? itemTurn(entry) : legacyCallTurn(entry, outputs);
     if (body === null) continue;
@@ -418,8 +437,9 @@ function itemCompletedTurn(entry: RolloutEntry): EntryTurn {
   if (role !== undefined) {
     const text = itemContentText(item);
     // An item the model sent no text in — an image only, for one — carries no turn, exactly as the
-    // older schema's empty message does. The era is still recognised: `isItemCompletedMessage`
-    // answers from the item type alone.
+    // older schema's empty message does, so a row and the session it opens agree on the count. It
+    // does not mark the file as recording turns as items either: `isItemCompletedTurn` asks the same
+    // question this function answers.
     if (text.trim() === "") return { kind: "none" };
     return { kind: "message", role, text };
   }
@@ -435,6 +455,36 @@ function itemCompletedTurn(entry: RolloutEntry): EntryTurn {
 function isItemCompletedTurn(entry: RolloutEntry): boolean {
   const turn = itemCompletedTurn(entry);
   return turn.kind === "message" || turn.kind === "tool-call";
+}
+
+/** Which older-schema tool calls a rollout still has to offer (C-12). */
+type LegacyCallScope = "all" | "before-items" | "none";
+
+/**
+ * Which older-schema calls a rollout still has to offer (C-12). `response_item` in a file that
+ * records turns as items holds the coarser repeat of those items, so those calls are not read — but
+ * a thread that a newer client resumed keeps the dialogue of both eras, and the calls it made
+ * before the first item turn are the only record of that work. Those are read; the ones after it
+ * are the repeats.
+ */
+function legacyCallScope(entries: RolloutEntry[], cut: number): LegacyCallScope {
+  if (cut === -1) return "all";
+  return entries.slice(0, cut).some(isLegacyMessageTurn) ? "before-items" : "none";
+}
+
+/** True when one older-schema call at this position is read under `scope` (C-12). */
+function readsLegacyCall(scope: LegacyCallScope, position: number, cut: number): boolean {
+  if (scope === "all") return true;
+  return scope === "before-items" && position < cut;
+}
+
+/** True when this entry is an older-schema dialogue message that carries text (C-7). */
+function isLegacyMessageTurn(entry: RolloutEntry): boolean {
+  if (entry.type !== CODEX_ENTRY_EVENT_MSG) return false;
+  const type = payloadType(entry);
+  if (type !== CODEX_EVENT_USER_MESSAGE && type !== CODEX_EVENT_AGENT_MESSAGE) return false;
+  const message = entry.payload.message;
+  return typeof message === "string" && message.trim() !== "";
 }
 
 /** The recorded answers of the older schema's calls, by call id (FR-25, FR-54). */

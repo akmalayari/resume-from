@@ -130,8 +130,13 @@ export function createSessionFinder(deps: DiscoveryDeps): SessionFinder {
         // The start directory is a last resort: it settles the case where no recorded candidate
         // matched at all, and it never overrides a match or a conflict (issue #5).
         const startDirectory = descriptor.startDirectory;
+        // A start directory that is already a recorded candidate adds nothing: the loop above looked
+        // it up with the same rule. Skipping it keeps the fallback from spending a second lookup on
+        // every session it cannot list (adapters whose header directory is their only candidate).
+        const startIsCandidate =
+          startDirectory !== null && descriptor.repoPaths.includes(startDirectory);
         const startEvidence =
-          matchedHere || conflictingGitIdentity || startDirectory === null
+          matchedHere || conflictingGitIdentity || startDirectory === null || startIsCandidate
             ? null
             : await lookup(startDirectory);
         const startedHere = startEvidence !== null && isMatch(startEvidence, destination);

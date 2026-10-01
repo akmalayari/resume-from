@@ -206,9 +206,12 @@ export function stringifyRollout(entries: RolloutEntry[]): string {
  */
 const MAX_ENTRY_LINE_CHARS = 16 * 1024 * 1024;
 
-/** Set by `streamRolloutEntries` when a line could not be read (C-13). */
+/** State a consumer and `streamRolloutEntries` share (C-13). */
 export interface RolloutStreamState {
+  /** Set by the reader when a line could not be read. */
   truncated: boolean;
+  /** Set by the consumer to end the stream at the next line, without abandoning it mid-read. */
+  stop: boolean;
 }
 
 /**
@@ -237,8 +240,12 @@ export async function* streamRolloutEntries(
           continue;
         }
         const entry = line.trim() === "" ? null : parseEntry(line);
-        if (entry !== null) yield entry;
-        else if (line.trim() !== "") state.truncated = true;
+        if (entry !== null) {
+          yield entry;
+          if (state.stop === true) return;
+        } else if (line.trim() !== "") {
+          state.truncated = true;
+        }
       }
       if (pending.length > MAX_ENTRY_LINE_CHARS) {
         pending = "";

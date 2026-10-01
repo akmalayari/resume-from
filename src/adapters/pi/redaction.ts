@@ -45,15 +45,25 @@ const FLAG_PATTERN =
   /(--(?:api[-_]?key|access[-_]?token|auth[-_]?token|token|password|passwd|secret|client[-_]?secret|private[-_]?key))(=|\s+)("[^"\r\n]*"|'[^'\r\n]*'|[^\s;&|]+)/gi;
 const USER_CREDENTIAL_PATTERN = /(^|[\s;&|])(-u|--user)(=|\s+)("[^"\r\n]*"|'[^'\r\n]*'|[^\s;&|]+)/g;
 const URI_USERINFO_PATTERN = /\b([a-z][a-z0-9+.-]*:\/\/)([^\s/:@]+):([^\s/@]+)@/gi;
-// Unquoted value requires a structural delimiter or line/string end following it, OR a digit
+// A quoted key is matched whole, and an unquoted one up to 64 characters: an unbounded identifier
+// run makes the engine backtrack over the whole run at every start position, which is quadratic on
+// a long unbroken line (C-RED-2). A longer unquoted run still matches through its last 64
+// characters, and `isSensitiveKey` decides by the name itself, including the `endsWith` names that
+// live at its tail; a quoted key needs no bound, because the quote makes every attempt fail in
+// constant time and the quote is the anchor the engine scans for.
+//
+// The two unquoted value alternatives are bounded at 128 characters for the same reason: each of
+// them scans forward until it finds a delimiter, so a separator-dense line made every `key:` on it
+// scan the rest of the line (measured: 1.3 MB of `x`-and-`:` runs took over 30 s; bounded, it takes
+// about 1 s). A quoted value needs no bound, and a credential in a longer unquoted value is still
+// caught by the assignment, flag, header, vendor-token and private-key patterns. Upgrade trigger: a
+// measured credential that only a >128-character unquoted value hides (C-RED-2).
+//
+// An unquoted value requires a structural delimiter or line/string end following it, OR a digit
 // somewhere in the token (C-RED-1: "token: expired" is plain English and stays, while
 // "password: hunter2 # prod" carries a credential that must not cross even mid-line).
-// The key name is bounded at 64 characters: an unbounded identifier run makes the engine backtrack
-// over the whole run at every start position, which is quadratic on a long unbroken line (C-RED-2).
-// Nothing is hidden by the bound: a longer run still matches through its last 64 characters, and
-// `isSensitiveKey` decides by the name itself, including the `endsWith` names that live at its tail.
 const JSON_LIKE_PATTERN =
-  /(["']?)([A-Za-z_][A-Za-z0-9_-]{0,63})\1(\s*:\s*)("[^"\r\n]*"|'[^'\r\n]*'|[^\s,;}]+(?=[,;}]|[\r\n]|$)|[^\s,;}]*\d[^\s,;}]*)/g;
+  /(?:(?<quote>["'])(?<quoted>[A-Za-z_][A-Za-z0-9_-]*)\k<quote>|(?<bare>[A-Za-z_][A-Za-z0-9_-]{0,63}))(\s*:\s*)("[^"\r\n]*"|'[^'\r\n]*'|[^\s,;}]{1,128}(?=[,;}]|[\r\n]|$)|[^\s,;}]{0,128}\d[^\s,;}]{0,128})/g;
 
 function normalizedKey(key: string): string {
   return key.toLowerCase().replaceAll(/[^a-z0-9]/g, "");
@@ -140,8 +150,21 @@ export function redactSensitiveText(text: string): string {
     .replace(ASSIGNMENT_PATTERN, (match, key: string, separator: string) =>
       isSensitiveKey(key) ? `${key}${separator}${REDACTED_VALUE}` : match,
     )
-    .replace(JSON_LIKE_PATTERN, (match, quote: string, key: string, separator: string) =>
-      isSensitiveKey(key) ? `${quote}${key}${quote}${separator}${REDACTED_VALUE}` : match,
+    .replace(
+      JSON_LIKE_PATTERN,
+      (
+        match,
+        quote: string | undefined,
+        quoted: string | undefined,
+        bare: string | undefined,
+        separator: string,
+      ) => {
+        const key = quoted ?? bare;
+        if (key === undefined || !isSensitiveKey(key)) return match;
+        // Only the value is replaced; the quoting and the separator stay as they were recorded.
+        const name = quote === undefined ? key : `${quote}${key}${quote}`;
+        return `${name}${separator}${REDACTED_VALUE}`;
+      },
     )
     .replace(CREDENTIAL_PATTERN, REDACTED_VALUE);
 }

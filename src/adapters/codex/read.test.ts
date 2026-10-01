@@ -162,6 +162,19 @@ describe("listSessions", () => {
         turnCount: 3,
       },
       {
+        name: "item_completed items beside their response_item repeats",
+        entries: [
+          metaEntry(id),
+          itemCompletedUserMessage("item request"),
+          itemCompletedCommandExecution(["ls"], "item output\n"),
+          functionCall("exec", '{"command":["ls"]}', "call_repeat"),
+          functionCallOutput("call_repeat", "REPEAT-OUTPUT"),
+          itemCompletedAgentMessage("item answer"),
+        ],
+        title: "item request",
+        turnCount: 3,
+      },
+      {
         name: "item_completed items beside older dialogue",
         entries: [
           metaEntry(id),
@@ -719,10 +732,12 @@ describe("T-COD-21 the item_completed dialogue schema", () => {
     const session = await adapter.loadSession(await loadOnly(home));
 
     // A resumed thread carries the dialogue of both eras and each stays readable. Its actions do
-    // not: once the file records them as items, the coarser `response_item` repeats are not read.
+    // not double: the call it made before the first item turn is the only record of that work and
+    // is read, while the coarser `response_item` repeats of the items are not.
     expect(session.turns.map((turn) => turn.toolCall?.toolName ?? turn.text)).toEqual([
       "old-schema request",
       "old-schema answer",
+      "shell",
       "new-schema request",
       "exec",
       "new-schema answer",

@@ -427,7 +427,8 @@ Changes that require **only this module** to change:
   ancestor or registry heuristics establish membership.
 - **The start directory is a last resort, not a candidate.** It is checked only when no recorded
   candidate matched and none conflicted, so it resolves missing evidence and never overrides a match
-  or a conflict. It never joins `repoPaths`, so it cannot create a conflict either.
+  or a conflict. It never joins `repoPaths`, so it cannot create a conflict either, and a directory
+  already among the candidates is not looked up again.
 - **Lookups are shared only within one listing.** Promise caches keyed by canonical directory share
   repository lookups (including rejections) across sessions/homes and symlink aliases. An additional
   spelling cache shares canonicalization failures and missing paths. The next list or resolve starts
