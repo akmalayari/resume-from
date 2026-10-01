@@ -463,26 +463,24 @@ module.
   behaviour from `src/platform/` would violate T-ROO-7 (cross-module imports must go through
   `/contract.js`, which can export only types). The byte-equality invariant is enforced by
   `src/adapters/boundary.test.ts`; a fix in one copy must be applied to all three.
-- **Redaction is bounded in every scan it makes, so its cost stays linear in the text.** An
-  unbounded identifier run made the key pattern backtrack over the whole run at every start position:
-  50 KB of one word took 11.8 s and 100 KB never finished, which hung the listing and the import on a
-  pasted blob or a long unbroken line. A bare key name is matched up to 64 characters, and the two
-  unquoted value alternatives up to 128, because each of them also scans forward until it finds a
-  delimiter: a separator-dense line made every `key:` on it scan the rest of the line. Measured over
-  190,756 real recorded texts (1.28 GB), the bounded passes redact in 181 s in total with a worst
-  single text of 1.15 s, where the unbounded pattern took 139 s in total and 9.8 s on its worst text.
-  Nothing is hidden that the unbounded pattern found: 32,236 real recorded texts (77.9 MB) redact
-  byte-for-byte as before, a longer bare run still matches through its last 64 characters, a quoted
-  key is matched whole, and `isSensitiveKey` decides by the name's tail as well. A long unquoted
-  value cannot be decided by a bounded scan, so `redactLongValues` runs *first* and takes a whole
-  token after a *sensitive* key only: the kubeconfig `token: eyJhbGciOi…` case, URL-encoded,
-  `~`-bearing and 4200-character tokens included, with no length limit of its own. Running before the
-  other passes is what makes it correct — each of them replaces part of a long value with the marker,
-  and a length test afterwards would measure the remainder and skip it. Asking "which keys are
-  sensitive" and "where does that token end" separately is what keeps its cost at one token scan per
-  sensitive key instead of a longer scan per `key:` on the line. Upgrade trigger: a measured
-  credential that a >64-character bare key name hides.
-- **`capabilities()` is pure and synchronous** and returns the same value every time. The rules read
+- **Redaction takes each value whole, and the key name is bounded.** A key and its value are matched
+  as one span and the value is replaced in full, so no credential is ever left partly in place: a
+  quoted key of any length, a URL-encoded or `~`-bearing token, a 4200-character JWT on a `token:`
+  line, and a value another pass has already shortened all come out whole (FR-28). Bounding the
+  *value* scan instead cost a tail of a credential three times, which review caught each time, so the
+  value is unbounded. The one real hazard was the *name*: an unbounded name made the engine backtrack
+  over the whole run at every start position, so 50 KB of one word took 11.8 s and 100 KB never
+  finished, which hung the listing and the import on a pasted blob or a long unbroken line. A quoted
+  name is matched whole and an unquoted one up to 64 characters; a longer unquoted run still matches
+  through its last 64 characters, and `isSensitiveKey` decides by the name's tail as well as by its
+  whole text, so the verdict matches the unbounded pattern's. Measured over 190,778 real recorded
+  texts (1.28 GB): 65 s in total with a worst single text of 0.29 s, where the unbounded name took
+  84 s with a 4.2 s worst text, and the 32,236 comparable texts (77.9 MB) redact byte-for-byte as
+  before. Short unbroken lines stay cheap (200 KB of one word in 0.05 s) and a separator-dense line
+  costs about a millisecond per 130 KB. Upgrade trigger: a measured credential that a >64-character
+  unquoted key name hides, or whole-file redaction becoming noticeable — both would call for a
+  scanner that visits each position once rather than layered patterns.
+- **`capabilities()` is pure and synchronous**- **`capabilities()` is pure and synchronous** and returns the same value every time. The rules read
   it more than once per import.
 - **`serialize` is deterministic given the same session, target, marker and serialization context**, except for the session
   ID it mints. The preview and the commit of one request must agree on everything the user was shown.

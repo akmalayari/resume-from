@@ -45,27 +45,17 @@ const FLAG_PATTERN =
   /(--(?:api[-_]?key|access[-_]?token|auth[-_]?token|token|password|passwd|secret|client[-_]?secret|private[-_]?key))(=|\s+)("[^"\r\n]*"|'[^'\r\n]*'|[^\s;&|]+)/gi;
 const USER_CREDENTIAL_PATTERN = /(^|[\s;&|])(-u|--user)(=|\s+)("[^"\r\n]*"|'[^'\r\n]*'|[^\s;&|]+)/g;
 const URI_USERINFO_PATTERN = /\b([a-z][a-z0-9+.-]*:\/\/)([^\s/:@]+):([^\s/@]+)@/gi;
-// A quoted key is matched whole, and an unquoted one up to 64 characters: an unbounded identifier
-// run makes the engine backtrack over the whole run at every start position, which is quadratic on
-// a long unbroken line (C-RED-2). A longer unquoted run still matches through its last 64
-// characters, and `isSensitiveKey` decides by the name itself, including the `endsWith` names that
-// live at its tail; a quoted key needs no bound, because the quote makes every attempt fail in
-// constant time and the quote is the anchor the engine scans for.
-//
-// The two unquoted value alternatives are bounded at 128 characters because each of them scans
-// forward until it finds a delimiter: a separator-dense line made every `key:` on it scan the rest
-// of the line (measured: 1.3 MB of `x`-and-`:` runs took over 30 s; bounded, it takes about 1 s). A
-// bounded scan cannot decide a long value, and a partial match would leave most of a credential in
-// place. `redactLongValues` answers that instead: it runs before the passes below and looks for one
-// whole token after a *sensitive* key only, so a long value is taken to its end (the kubeconfig
-// `token: eyJhbGciOi…` case) without giving every `key:` on a long line a longer scan, without a
-// length limit of its own, and without measuring a value another pass has already shortened.
-//
-// An unquoted value requires a structural delimiter or line/string end following it, OR a digit
+// Unquoted value requires a structural delimiter or line/string end following it, OR a digit
 // somewhere in the token (C-RED-1: "token: expired" is plain English and stays, while
-// "password: hunter2 # prod" carries a credential that must not cross even mid-line).
+// "password: hunter2 # prod" carries a credential that must not cross even mid-line). The value is
+// taken whole, however long it is, so a credential can never be left half-redacted (FR-28).
+// A quoted key is matched whole and an unquoted one up to 64 characters: an unbounded identifier run
+// makes the engine backtrack over the whole run at every start position, which is quadratic on a
+// long unbroken line (measured: 50 KB of one word took 11.8 s and 100 KB never finished). A longer
+// unquoted run still matches through its last 64 characters, and `isSensitiveKey` decides by the
+// name's tail as well as by its whole text, so nothing the unbounded name found is hidden.
 const JSON_LIKE_PATTERN =
-  /(?:(?<quote>["'])(?<quoted>[A-Za-z_][A-Za-z0-9_-]*)\k<quote>|(?<bare>[A-Za-z_][A-Za-z0-9_-]{0,63}))(\s*:\s*)("[^"\r\n]*"|'[^'\r\n]*'|[^\s,;}]{1,128}(?=[,;}]|[\r\n]|$)|[^\s,;}]{0,128}\d[^\s,;}]{0,128}(?![^\s,;}]))/g;
+  /(?:(?<quote>["'])(?<quoted>[A-Za-z_][A-Za-z0-9_-]*)\k<quote>|(?<bare>[A-Za-z_][A-Za-z0-9_-]{0,63}))(\s*:\s*)("[^"\r\n]*"|'[^'\r\n]*'|[^\s,;}]+(?=[,;}]|[\r\n]|$)|[^\s,;}]*\d[^\s,;}]*)/g;
 
 function normalizedKey(key: string): string {
   return key.toLowerCase().replaceAll(/[^a-z0-9]/g, "");
@@ -142,10 +132,7 @@ export function redactSensitiveStructure(value: unknown): unknown {
 
 /** Redact recognizable credentials from shell commands, headers, and unstructured arguments. */
 export function redactSensitiveText(text: string): string {
-  // The long-value pass runs first, so the token it measures is the one that was recorded: every
-  // later pass replaces part of a long value with the marker, and a length test after that would see
-  // only the remainder and skip it (C-RED-2).
-  return redactLongValues(text)
+  return text
     .replace(PRIVATE_KEY_PATTERN, REDACTED_VALUE)
     .replace(AUTHORIZATION_PATTERN, `$1${REDACTED_VALUE}`)
     .replace(API_HEADER_PATTERN, `$1${REDACTED_VALUE}`)
@@ -172,39 +159,6 @@ export function redactSensitiveText(text: string): string {
       },
     )
     .replace(CREDENTIAL_PATTERN, REDACTED_VALUE);
-}
-
-/** One `key:separator` occurrence, without its value (C-RED-2). */
-const JSON_LIKE_KEY =
-  /(?:(?<quote>["'])(?<quoted>[A-Za-z_][A-Za-z0-9_-]*)\k<quote>|(?<bare>[A-Za-z_][A-Za-z0-9_-]{0,63}))(\s*:\s*)/g;
-
-/** One whole unquoted token, from wherever the match starts (C-RED-2). */
-const LONG_VALUE = /[^\s,;}]+/y;
-
-/**
- * Redacts a long unquoted value that follows a sensitive key (C-RED-2). A bounded pass cannot decide
- * one without either scanning the rest of the line for every `key:` on it or cutting a credential in
- * half, so this pass asks the two questions separately: which keys are sensitive, and where the
- * token after such a key ends. Cost is one token scan per sensitive key, and the token has no length
- * limit of its own.
- */
-function redactLongValues(text: string): string {
-  let out = "";
-  let cursor = 0;
-  JSON_LIKE_KEY.lastIndex = 0;
-  for (let match = JSON_LIKE_KEY.exec(text); match !== null; match = JSON_LIKE_KEY.exec(text)) {
-    const key = match[2] ?? match[3];
-    if (key === undefined || !isSensitiveKey(key)) continue;
-    const valueStart = match.index + match[0].length;
-    LONG_VALUE.lastIndex = valueStart;
-    const value = LONG_VALUE.exec(text);
-    // A short value is the bounded pass's business; a longer one is taken whole.
-    if (value === null || value[0].length < 129) continue;
-    out += text.slice(cursor, valueStart) + REDACTED_VALUE;
-    cursor = valueStart + value[0].length;
-    JSON_LIKE_KEY.lastIndex = cursor;
-  }
-  return cursor === 0 ? text : out + text.slice(cursor);
 }
 
 /** Redact a source-recorded argument string, preserving valid JSON when it is JSON. */

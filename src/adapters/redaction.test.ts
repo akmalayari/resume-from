@@ -128,21 +128,28 @@ describe.each(IMPLEMENTATIONS)("%s credential redaction", (_name, redaction) => 
     expect(redacted).not.toMatch(/hunter2|abc123/);
   });
 
-  // C-RED-2: an unbounded identifier run made the key pattern backtrack over the whole run at every
-  // start position, so a single long paste cost minutes here and never finished past ~100 KB. The
-  // default test timeout is the guard against a return to that shape.
-  it("redacts a long unbroken line without scanning it quadratically (C-RED-2)", () => {
-    const line = "y".repeat(1_200_000);
+  // A long unbroken line made the *name* pattern backtrack over the whole run at every start
+  // position: 50 KB of one word took 11.8 s and 100 KB never finished (FR-28, security). The name is
+  // bounded now, and this is the shape that must stay cheap.
+  it("redacts a long unbroken line without backtracking over the whole run (FR-28)", () => {
+    const line = "y".repeat(200_000);
 
     expect(redaction.redactSensitiveText(line)).toBe(line);
   });
 
-  // A quoted key is matched whole, so the bound on a bare key cannot hide a value that the pattern
-  // before the bound redacted (C-RED-2).
-  it("redacts the value of a quoted key longer than the bound (C-RED-2)", () => {
+  // Every `key:` on a separator-dense line is a value match attempt, so the value alternatives must
+  // not each scan the rest of the line (FR-28).
+  it("redacts a separator-dense line without rescanning it per key (FR-28)", () => {
+    const line = `${"x".repeat(64)}:`.repeat(4_000);
+
+    expect(redaction.redactSensitiveText(line)).toBe(line);
+  });
+
+  // A quoted key of any length keeps its value redacted (FR-28): the pattern matches it whole.
+  it("redacts the value of a quoted key longer than the bound (FR-28)", () => {
     const longName = `${"x".repeat(58)}_password`;
 
-    // The value's own quotes are part of the match, as they were before the bound was introduced.
+    // The value's own quotes are part of the match.
     expect(redaction.redactSensitiveText(`{"${longName}": "hunter2"}`)).toBe(
       `{"${longName}": ${redaction.REDACTED_VALUE}}`,
     );
@@ -152,7 +159,7 @@ describe.each(IMPLEMENTATIONS)("%s credential redaction", (_name, redaction) => 
   });
 
   // A bounded scan cannot decide a long value, and a partial match would leave most of a credential
-  // in place: a long unquoted token is taken whole, which is the kubeconfig case (C-RED-2).
+  // in place: a long unquoted token is taken whole, which is the kubeconfig case (FR-28).
   it.each([
     ["a service-account JWT", `    token: ${"eyJhbGciOiJSUzI1NiJ9."}${"QQ".repeat(300)}.c2ln`],
     ["a 200-character secret with no digit", `client_secret: ${"Q".repeat(200)}`],
@@ -167,30 +174,11 @@ describe.each(IMPLEMENTATIONS)("%s credential redaction", (_name, redaction) => 
     ["a vendor token with a tilde inside", `token: sk-${"A1".repeat(150)}~${"TAIL".repeat(25)}`],
     ["a sensitive key inside the value", `token: ${"Q".repeat(60)}secret:${"z".repeat(119)}9`],
     ["a vendor token with a dot inside", `password: ghp_${"A".repeat(150)}.${"B".repeat(100)}`],
-  ])("redacts a long unquoted value under a sensitive key: %s (C-RED-2)", (_label, text) => {
+  ])("redacts a long unquoted value under a sensitive key: %s (FR-28)", (_label, text) => {
     const redacted = redaction.redactSensitiveText(text);
     expect(redacted).toContain(redaction.REDACTED_VALUE);
     // The value is taken to its end: no part of it may be left behind the marker.
     expect(redacted).toMatch(/\[REDACTED\]$/);
     expect(redacted).not.toMatch(/a{20}|A{20}|b{20}|B{20}|Q{20}|eyJ|TAIL/);
-  });
-
-  // Every `key:` on a separator-dense line used to scan the rest of the line, so the unquoted value
-  // alternatives are bounded and the cost stays linear (C-RED-2).
-  it("redacts a separator-dense line without rescanning it per key (C-RED-2)", () => {
-    const line = `${"x".repeat(64)}:`.repeat(4_000);
-
-    expect(redaction.redactSensitiveText(line)).toBe(line);
-  });
-
-  // The bound must not hide anything: a longer run still matches through its last 64 characters, and
-  // a sensitive name is decided by its tail as well as by its whole text (C-RED-2).
-  it("redacts a sensitive key name longer than the bound through its tail (C-RED-2)", () => {
-    const longName = `${"x".repeat(58)}password`;
-    expect(longName).toHaveLength(66);
-
-    expect(redaction.redactSensitiveText(`${longName}: hunter2`)).toBe(
-      `${longName}: ${redaction.REDACTED_VALUE}`,
-    );
   });
 });
