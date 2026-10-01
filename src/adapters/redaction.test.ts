@@ -158,12 +158,17 @@ describe.each(IMPLEMENTATIONS)("%s credential redaction", (_name, redaction) => 
     ["a 200-character secret with no digit", `client_secret: ${"Q".repeat(200)}`],
     ["letters and a final digit", `token: ${"a".repeat(130)}7`],
     ["a digit first, then letters", `password: 1${"a".repeat(299)}`],
+    ["a URL-encoded tail", `token: ${"A".repeat(150)}%2B${"TAIL".repeat(40)}`],
+    ["a tilde in the middle", `client_secret: ${"Q".repeat(140)}~${"TAIL".repeat(40)}`],
+    ["a colon-joined pair", `token: ${"a".repeat(200)}:${"b".repeat(200)}`],
+    ["an encoded character early", `refresh_token: ${"A".repeat(20)}%2F${"B".repeat(300)}`],
+    ["a 4200-character token", `token: ${"A".repeat(4200)}`],
   ])("redacts a long unquoted value under a sensitive key: %s (C-RED-2)", (_label, text) => {
     const redacted = redaction.redactSensitiveText(text);
     expect(redacted).toContain(redaction.REDACTED_VALUE);
-    // Only the value is replaced: nothing of it may be left after the marker.
+    // The value is taken to its end: no part of it may be left behind the marker.
     expect(redacted).toMatch(/\[REDACTED\]$/);
-    expect(redacted).not.toMatch(/a{20}|Q{20}|eyJ/);
+    expect(redacted).not.toMatch(/a{20}|A{20}|b{20}|B{20}|Q{20}|eyJ|TAIL/);
   });
 
   // Every `key:` on a separator-dense line used to scan the rest of the line, so the unquoted value

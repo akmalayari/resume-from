@@ -473,10 +473,12 @@ module.
   Nothing is hidden that the unbounded pattern found: 32,236 real recorded texts (77.9 MB) redact
   byte-for-byte as before, a longer bare run still matches through its last 64 characters, a quoted
   key is matched whole, and `isSensitiveKey` decides by the name's tail as well. A long unquoted
-  value cannot be decided by a bounded scan, so a third alternative takes a long opaque token whole
-  — the kubeconfig `token: eyJhbGciOi…` case — with a lookahead that refuses to match a prefix, so
-  no credential is left half-redacted. Upgrade trigger: a measured credential that is one unquoted
-  token longer than 4096 characters, or one that a >64-character bare key name hides.
+  value cannot be decided by a bounded scan, so a second pass (`redactLongValues`) takes a whole
+  token after a *sensitive* key only: the kubeconfig `token: eyJhbGciOi…` case, URL-encoded and
+  `~`-bearing tokens included, and with no length limit of its own. Asking "which keys are
+  sensitive" and "where does that token end" separately is what keeps the cost at one token scan per
+  sensitive key instead of a longer scan per `key:` on the line. Upgrade trigger: a measured
+  credential that a >64-character bare key name hides.
 - **`capabilities()` is pure and synchronous** and returns the same value every time. The rules read
   it more than once per import.
 - **`serialize` is deterministic given the same session, target, marker and serialization context**, except for the session
