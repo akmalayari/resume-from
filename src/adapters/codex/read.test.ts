@@ -545,8 +545,8 @@ describe("T-COD-21 the item_completed dialogue schema", () => {
         "/repo/demo/report.md": { type: "add", content: "# Report\n\nbody text" },
       }),
       itemCompletedMcpToolCall(
-        "context-mode",
-        "ctx_execute",
+        "example_mcp",
+        "execute",
         { language: "javascript", code: "console.log(1)" },
         [{ type: "text", text: "SECRET-MCP-RESULT" }],
       ),
@@ -575,7 +575,7 @@ describe("T-COD-21 the item_completed dialogue schema", () => {
       ["agent", "message", "I'll read the context first."],
       ["agent", "tool-call", "exec"],
       ["agent", "tool-call", "apply_patch"],
-      ["agent", "tool-call", "context-mode.ctx_execute"],
+      ["agent", "tool-call", "example_mcp.execute"],
       ["agent", "tool-call", "wait"],
       ["agent", "tool-call", "web.search"],
       ["agent", "tool-call", "view_image"],
@@ -599,7 +599,7 @@ describe("T-COD-21 the item_completed dialogue schema", () => {
     writeRollout(home, id, newSchemaThread(id));
     const session = await adapter.loadSession(await loadOnly(home));
     const call = session.turns.find(
-      (turn) => turn.toolCall?.toolName === "context-mode.ctx_execute",
+      (turn) => turn.toolCall?.toolName === "example_mcp.execute",
     )?.toolCall;
 
     expect(call?.argumentsText).toContain('"language":"javascript"');
