@@ -81,6 +81,8 @@ Install `resume-from` in the agent that will receive the new session.
 
 ### Pi
 
+See the [Pi guide](docs/agents/pi.md#install) for supported Pi versions.
+
 ```sh
 pi install npm:resume-from
 ```

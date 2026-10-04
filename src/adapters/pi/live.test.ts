@@ -1,5 +1,5 @@
 /**
- * Live tests. They need an installed Pi (0.83.0 or later) and build their own throwaway
+ * Live tests. They need an installed Pi (1.0.2 or later in the 1.x line) and build their own throwaway
  * home; they never read or write a real Pi home (docs/tech-stack.md, C-3).
  *
  *   RESUME_FROM_LIVE=1 pnpm vitest run src/adapters/pi
@@ -9,8 +9,16 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
+import { dirname, join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { REFERENCE_SESSION } from "../../../test/fixtures/reference-session.js";
 import { createPiAdapter } from "./adapter.js";
@@ -20,13 +28,30 @@ import { MARKER_CUSTOM_TYPE } from "./format.js";
 
 const live = process.env.RESUME_FROM_LIVE === "1";
 
-/** The installed Pi package root, found through the `pi` binary on PATH. */
-function findPiPackage(): string | null {
+/** Resolve the package manifest instead of assuming the CLI's directory depth. */
+function findPiPackage(binaryPath?: string): string | null {
   try {
-    const binary = execFileSync("/usr/bin/env", ["which", "pi"], { encoding: "utf8" }).trim();
+    const binary =
+      binaryPath ?? execFileSync("/usr/bin/env", ["which", "pi"], { encoding: "utf8" }).trim();
     if (!binary) return null;
-    // <package>/dist/cli.js
-    return resolve(dirname(realpathSync(binary)), "..");
+    let directory = dirname(realpathSync(binary));
+    while (true) {
+      const manifest = join(directory, "package.json");
+      if (existsSync(manifest)) {
+        const metadata: unknown = JSON.parse(readFileSync(manifest, "utf8"));
+        if (
+          typeof metadata === "object" &&
+          metadata !== null &&
+          "name" in metadata &&
+          metadata.name === "@earendil-works/pi-coding-agent"
+        ) {
+          return directory;
+        }
+      }
+      const parent = dirname(directory);
+      if (parent === directory) return null;
+      directory = parent;
+    }
   } catch {
     return null;
   }
@@ -88,7 +113,33 @@ function importInto(home: string) {
   return { serialized, filePath: file.absolutePath, sessionDir: dirname(file.absolutePath) };
 }
 
-describe.skipIf(!live)("live: Pi 0.83.0 or later", () => {
+describe("Pi package discovery", () => {
+  it.each(["dist/cli.js", "dist/cli/index.js"])("resolves a linked %s executable", (entry) => {
+    const home = throwawayHome();
+    const root = join(home, "package");
+    const binary = join(root, entry);
+    mkdirSync(dirname(binary), { recursive: true });
+    writeFileSync(
+      join(root, "package.json"),
+      JSON.stringify({ name: "@earendil-works/pi-coding-agent" }),
+    );
+    writeFileSync(binary, "");
+    const link = join(home, "pi");
+    symlinkSync(binary, link);
+    expect(findPiPackage(link)).toBe(realpathSync(root));
+  });
+
+  it("rejects an unrelated package and a missing executable", () => {
+    const home = throwawayHome();
+    writeFileSync(join(home, "package.json"), JSON.stringify({ name: "other-package" }));
+    const binary = join(home, "cli.js");
+    writeFileSync(binary, "");
+    expect(findPiPackage(binary)).toBeNull();
+    expect(findPiPackage(join(home, "missing"))).toBeNull();
+  });
+});
+
+describe.skipIf(!live)("live: Pi 1.0.2+", () => {
   const piPackage = findPiPackage();
 
   it("finds the installed Pi", () => {

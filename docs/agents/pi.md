@@ -5,6 +5,9 @@ a restart.
 
 ## Install
 
+Requires Pi 1.x starting at 1.0.2. The extension is tested with Pi 1.0.2.
+Claude Code and Codex transfers do not depend on Pi.
+
 ```sh
 pi install npm:resume-from
 ```

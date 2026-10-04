@@ -9,8 +9,9 @@ const rootManifest = JSON.parse(readFileSync(resolve(repoRoot, "package.json"), 
 const version = rootManifest.version;
 
 const piTui = "@earendil-works/pi-tui";
-if (rootManifest.dependencies?.[piTui] !== undefined || rootManifest.peerDependencies?.[piTui] !== "*") {
-  throw new Error(`${piTui} must be a "*" peer dependency, not a runtime dependency.`);
+const piTuiRange = "^1.0.2";
+if (rootManifest.dependencies?.[piTui] !== undefined || rootManifest.peerDependencies?.[piTui] !== piTuiRange) {
+  throw new Error(`${piTui} must be a "${piTuiRange}" peer dependency, not a runtime dependency.`);
 }
 
 const packages = [
